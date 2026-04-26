@@ -1,0 +1,130 @@
+:root {
+  --color-primary-bg: #F2EDE0;
+  --color-inverted-bg: #0E0C09;
+  --color-specimen-bg: #FAF6E8;
+  --color-text-primary: #0E0C09;
+  --color-text-inverted: #F2EDE0;
+  --color-text-muted: #5A4F3A;
+  --color-accent-gold: #B89968;
+  --color-accent-brown: #7A4A1A;
+  --color-border: #D9CFB0;
+  --color-border-dark: #2A2218;
+
+  --font-serif: var(--font-newsreader), 'Georgia', serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  
+  --border-radius-sm: 2px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-primary-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+}
+
+.serif-text {
+  font-family: var(--font-serif);
+}
+
+.sans-text {
+  font-family: var(--font-sans);
+}
+
+@keyframes rook-glide {
+  0% { transform: translate(-60px, 40px) rotate(-8deg); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+}
+
+@keyframes rook-flap {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(0.85) translateY(-2px); }
+}
+
+@keyframes ink-bleed {
+  0% { stroke-dashoffset: 600; opacity: 0.3; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+
+@keyframes slow-hover {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes fade-up {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-rook-hero { 
+  animation: rook-glide 1.6s ease-out 0.3s both, slow-hover 6s ease-in-out 2s infinite; 
+}
+
+.animate-rook-wing { 
+  transform-origin: center; 
+  animation: rook-flap 4s ease-in-out infinite; 
+}
+
+.animate-ink-line { 
+  stroke-dasharray: 600; 
+  animation: ink-bleed 2.5s ease-out 1s both; 
+}
+
+.animate-fade-1 { animation: fade-up 0.8s ease-out 0.2s both; }
+.animate-fade-2 { animation: fade-up 0.8s ease-out 0.5s both; }
+.animate-fade-3 { animation: fade-up 0.8s ease-out 0.8s both; }
+
+.hover-lift {
+  transition: transform 0.4s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-4px) rotate(-2deg);
+}
+
+.btn-primary {
+  background: var(--color-inverted-bg);
+  color: var(--color-primary-bg);
+  border: none;
+  padding: 18px 32px;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
+
+.btn-inverted {
+  background: var(--color-primary-bg);
+  color: var(--color-inverted-bg);
+  border: none;
+  padding: 22px 40px;
+  font-family: var(--font-sans);
+  font-size: 18px;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-inverted:hover {
+  opacity: 0.9;
+  transform: translateY(-2px);
+}
