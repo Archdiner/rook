@@ -34,72 +34,12 @@ function SmoothScroll({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// --- High-Performance 3D Scene ---
-function VibrantLiquid({ scrollYProgress }: { scrollYProgress: any }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const materialRef = useRef<any>(null);
-  
-  const smoothProgress = useSpring(scrollYProgress, { stiffness: 40, damping: 20 });
-  
-  useFrame((state) => {
-    if (meshRef.current && materialRef.current) {
-      const progress = smoothProgress.get();
-      // Smooth continuous rotation
-      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.2 + progress * Math.PI;
-      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.1 + progress * Math.PI * 0.5;
-      
-      // Morph distortion based on scroll to feel kinetic
-      const baseDistort = 0.4;
-      materialRef.current.distort = THREE.MathUtils.lerp(materialRef.current.distort, baseDistort + (progress * 0.4), 0.1);
-      
-      // Shift colors across a vibrant spring palette
-      const color1 = new THREE.Color("#FF4A5A"); // Coral
-      const color2 = new THREE.Color("#8A2BE2"); // Violet
-      const color3 = new THREE.Color("#00E5FF"); // Cyan
-      
-      let targetColor;
-      if (progress < 0.5) {
-        targetColor = color1.lerp(color2, progress * 2);
-      } else {
-        targetColor = color2.lerp(color3, (progress - 0.5) * 2);
-      }
-      
-      materialRef.current.color.lerp(targetColor, 0.05);
-    }
-  });
-
-  return (
-    <Float speed={2.5} rotationIntensity={1} floatIntensity={1.5}>
-      <Icosahedron args={[2.5, 64]} ref={meshRef} position={[0, 0, -2]}>
-        {/* Swapped Transmission for high-performance Distort */}
-        <MeshDistortMaterial
-          ref={materialRef}
-          color="#FF4A5A"
-          envMapIntensity={1}
-          clearcoat={1}
-          clearcoatRoughness={0.1}
-          metalness={0.1}
-          roughness={0.2}
-          speed={2.5}
-          distort={0.4}
-        />
-      </Icosahedron>
-    </Float>
-  );
-}
-
+// --- Scene Background (Subtle Glow) ---
 function SceneBackground() {
-  const { scrollYProgress } = useScroll();
   return (
     <div className="canvas-container">
-      {/* Locked DPR [1, 1.5] for massive performance gains on Retina/Mobile */}
-      <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 1.5]}>
-        <ambientLight intensity={1.5} />
-        <directionalLight position={[10, 10, 5]} intensity={2} color="#ffffff" />
-        <pointLight position={[-10, -10, -5]} intensity={1.5} color="#00E5FF" />
-        <Environment preset="city" />
-        <VibrantLiquid scrollYProgress={scrollYProgress} />
-      </Canvas>
+      <div style={{ position: 'absolute', top: '-20%', right: '-10%', width: '60vw', height: '60vw', background: 'radial-gradient(circle, rgba(255,74,90,0.03) 0%, rgba(250,250,248,0) 70%)', filter: 'blur(60px)' }} />
+      <div style={{ position: 'absolute', bottom: '-10%', left: '-10%', width: '50vw', height: '50vw', background: 'radial-gradient(circle, rgba(0,229,255,0.03) 0%, rgba(250,250,248,0) 70%)', filter: 'blur(60px)' }} />
     </div>
   );
 }
@@ -149,7 +89,7 @@ function Header() {
       className="px-6 py-6 md:px-12 md:py-8 flex items-center justify-between relative z-10"
     >
       <div className="flex items-center gap-3">
-        <div className="w-6 h-6 rounded-md bg-[linear-gradient(135deg,var(--color-accent-coral),var(--color-accent-violet))]" />
+        <div className="w-6 h-6 rounded-md bg-[#111]" />
         <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Forge</span>
       </div>
       <div className="flex gap-6 md:gap-10 text-sm font-medium text-[#111] items-center sans-text">
@@ -173,7 +113,7 @@ function Hero() {
         className="sans-text h1-fluid font-bold text-[#111] max-w-[900px] mb-8"
       >
         Clarity over<br/>
-        <span className="bg-clip-text text-transparent bg-gradient-to-r from-[var(--color-accent-coral)] to-[var(--color-accent-violet)]">
+        <span className="text-[#6B6B6B]">
           intuition.
         </span>
       </motion.h1>
@@ -238,7 +178,7 @@ function Methodology() {
                 transition={{ type: "spring", stiffness: 80, delay: index * 0.1 }}
                 className={`flex gap-6 md:gap-8 ${index !== 2 ? 'border-b border-[var(--color-glass-border)] pb-10' : ''}`}
               >
-                <div className="sans-text text-sm font-bold text-[var(--color-accent-violet)] mt-2">{item.step}</div>
+                <div className="sans-text text-sm font-bold text-[#111] mt-2">{item.step}</div>
                 <div>
                   <h3 className="sans-text text-2xl font-bold text-[#111] mb-3">{item.title}</h3>
                   <p className="sans-text text-base leading-relaxed text-[#6B6B6B] m-0">{item.desc}</p>
@@ -282,18 +222,13 @@ function Specimen() {
           </h3>
           <div className="sans-text text-lg leading-relaxed text-[#6B6B6B] mb-8">
             Users were bouncing because the tier distinction was buried under a 12-row feature matrix. 
-            <motion.span 
-              style={{ 
-                backgroundImage: "linear-gradient(transparent 60%, rgba(255, 74, 90, 0.3) 60%)",
-                backgroundRepeat: "no-repeat",
-                backgroundSize: useTransform(highlightWidth, (w) => `${w} 100%`),
-                display: "inline",
-                padding: "0 4px",
-                marginLeft: "4px"
-              }}
-            >
-              The primary CTA sat below the fold for 40% of mobile users.
-            </motion.span>
+            <span className="relative inline-block ml-1">
+              <span className="relative z-10 text-[#111]">The primary CTA sat below the fold for 40% of mobile users.</span>
+              <motion.span 
+                style={{ scaleX: highlightWidth, transformOrigin: "left" }}
+                className="absolute bottom-1 left-0 right-0 h-3 bg-[var(--color-accent-coral)] opacity-30 z-0 rounded-sm"
+              />
+            </span>
           </div>
           <div className="p-6 md:p-8 bg-white rounded-2xl border border-[var(--color-glass-border)] shadow-sm">
             <div className="sans-text text-xs text-[var(--color-accent-coral)] font-bold tracking-widest uppercase mb-4">The Intervention</div>
@@ -433,7 +368,7 @@ function Footer() {
   return (
     <div className="px-6 py-12 md:py-16 border-t border-[var(--color-glass-border)] flex flex-col md:flex-row justify-between items-center gap-6 relative z-10 bg-[var(--color-primary-bg)]">
       <div className="flex items-center gap-4">
-        <div className="w-5 h-5 rounded bg-[linear-gradient(135deg,var(--color-accent-coral),var(--color-accent-violet))]" />
+        <div className="w-5 h-5 rounded bg-[#111]" />
         <span className="sans-text font-bold text-[#111]">Forge</span>
       </div>
       <div className="sans-text text-sm font-medium text-[#6B6B6B]">
