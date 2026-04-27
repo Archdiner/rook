@@ -1,49 +1,86 @@
 "use client";
 
-import React, { useRef } from "react";
-import { motion, useScroll, useTransform, useSpring, MotionValue } from "framer-motion";
+import React, { useRef, useEffect, useState } from "react";
+import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { MeshDistortMaterial, Icosahedron, Float, Environment } from "@react-three/drei";
 import * as THREE from "three";
+import Lenis from "lenis";
 
-// --- 3D Scene Component ---
-function FluidMesh({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+// --- Smooth Scrolling Setup ---
+function SmoothScroll({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: "vertical",
+      gestureOrientation: "vertical",
+      smoothWheel: true,
+      wheelMultiplier: 1,
+      touchMultiplier: 2,
+    });
+
+    function raf(time: number) {
+      lenis.raf(time);
+      requestAnimationFrame(raf);
+    }
+    requestAnimationFrame(raf);
+
+    return () => {
+      lenis.destroy();
+    };
+  }, []);
+
+  return <>{children}</>;
+}
+
+// --- High-Performance 3D Scene ---
+function VibrantLiquid({ scrollYProgress }: { scrollYProgress: any }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<any>(null);
   
-  const smoothProgress = useSpring(scrollYProgress, { stiffness: 50, damping: 20 });
+  const smoothProgress = useSpring(scrollYProgress, { stiffness: 40, damping: 20 });
   
-  useFrame((state, delta) => {
+  useFrame((state) => {
     if (meshRef.current && materialRef.current) {
       const progress = smoothProgress.get();
-      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.2 + progress * Math.PI * 2;
-      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.1 + progress * Math.PI;
+      // Smooth continuous rotation
+      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.2 + progress * Math.PI;
+      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.1 + progress * Math.PI * 0.5;
       
-      const baseDistort = 0.3;
-      const scrollDistort = progress * 0.6;
-      materialRef.current.distort = THREE.MathUtils.lerp(materialRef.current.distort, baseDistort + scrollDistort, 0.05);
+      // Morph distortion based on scroll to feel kinetic
+      const baseDistort = 0.4;
+      materialRef.current.distort = THREE.MathUtils.lerp(materialRef.current.distort, baseDistort + (progress * 0.4), 0.1);
       
-      const color = new THREE.Color().lerpColors(
-        new THREE.Color("#FF3366"),
-        new THREE.Color("#00E5FF"),
-        progress
-      );
-      materialRef.current.color = color;
+      // Shift colors across a vibrant spring palette
+      const color1 = new THREE.Color("#FF4A5A"); // Coral
+      const color2 = new THREE.Color("#8A2BE2"); // Violet
+      const color3 = new THREE.Color("#00E5FF"); // Cyan
+      
+      let targetColor;
+      if (progress < 0.5) {
+        targetColor = color1.lerp(color2, progress * 2);
+      } else {
+        targetColor = color2.lerp(color3, (progress - 0.5) * 2);
+      }
+      
+      materialRef.current.color.lerp(targetColor, 0.05);
     }
   });
 
   return (
-    <Float speed={2} rotationIntensity={1} floatIntensity={2}>
-      <Icosahedron args={[2, 64]} ref={meshRef} position={[0, 0, -1]}>
+    <Float speed={2.5} rotationIntensity={1} floatIntensity={1.5}>
+      <Icosahedron args={[2.5, 64]} ref={meshRef} position={[0, 0, -2]}>
+        {/* Swapped Transmission for high-performance Distort */}
         <MeshDistortMaterial
           ref={materialRef}
-          color="#FF3366"
+          color="#FF4A5A"
           envMapIntensity={1}
           clearcoat={1}
           clearcoatRoughness={0.1}
-          metalness={0.8}
+          metalness={0.1}
           roughness={0.2}
-          speed={2}
+          speed={2.5}
           distort={0.4}
         />
       </Icosahedron>
@@ -55,15 +92,49 @@ function SceneBackground() {
   const { scrollYProgress } = useScroll();
   return (
     <div className="canvas-container">
-      <Canvas camera={{ position: [0, 0, 7], fov: 45 }}>
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 5]} intensity={1.5} color="#ffffff" />
-        <pointLight position={[-10, -10, -5]} intensity={1.5} color="#FF3366" />
-        <pointLight position={[0, -5, 10]} intensity={1} color="#00E5FF" />
+      {/* Locked DPR [1, 1.5] for massive performance gains on Retina/Mobile */}
+      <Canvas camera={{ position: [0, 0, 8], fov: 45 }} dpr={[1, 1.5]}>
+        <ambientLight intensity={1.5} />
+        <directionalLight position={[10, 10, 5]} intensity={2} color="#ffffff" />
+        <pointLight position={[-10, -10, -5]} intensity={1.5} color="#00E5FF" />
         <Environment preset="city" />
-        <FluidMesh scrollYProgress={scrollYProgress} />
+        <VibrantLiquid scrollYProgress={scrollYProgress} />
       </Canvas>
     </div>
+  );
+}
+
+// --- Magnetic Button Component ---
+function MagneticButton({ children, className, onClick, type = "button" }: { children: React.ReactNode, className?: string, onClick?: () => void, type?: "button" | "submit" }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+
+  const handleMouse = (e: React.MouseEvent) => {
+    if (!ref.current) return;
+    const { clientX, clientY } = e;
+    const { height, width, left, top } = ref.current.getBoundingClientRect();
+    const middleX = clientX - (left + width / 2);
+    const middleY = clientY - (top + height / 2);
+    setPosition({ x: middleX * 0.2, y: middleY * 0.2 });
+  };
+
+  const reset = () => {
+    setPosition({ x: 0, y: 0 });
+  };
+
+  return (
+    <motion.button
+      type={type}
+      ref={ref}
+      onMouseMove={handleMouse}
+      onMouseLeave={reset}
+      animate={{ x: position.x, y: position.y }}
+      transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }}
+      className={className}
+      onClick={onClick}
+    >
+      {children}
+    </motion.button>
   );
 }
 
@@ -75,18 +146,18 @@ function Header() {
       initial={{ y: -50, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.2 }}
-      style={{ padding: "24px 40px", display: "flex", alignItems: "center", justifyContent: "space-between", position: "relative", zIndex: 10 }}
+      className="px-6 py-6 md:px-12 md:py-8 flex items-center justify-between relative z-10"
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-        <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(135deg, #FF3366, #00E5FF)', boxShadow: '0 0 12px rgba(255, 51, 102, 0.5)' }} />
-        <span style={{ fontSize: "24px", fontWeight: 500, letterSpacing: "-0.02em", color: "var(--color-text-primary)", lineHeight: 1 }} className="serif-text">Forge</span>
+      <div className="flex items-center gap-3">
+        <div className="w-6 h-6 rounded-md bg-[linear-gradient(135deg,var(--color-accent-coral),var(--color-accent-violet))]" />
+        <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Forge</span>
       </div>
-      <div style={{ display: "flex", gap: "36px", fontSize: "14px", color: "var(--color-text-primary)", alignItems: "center", fontWeight: 500 }} className="sans-text">
-        <span style={{ cursor: "pointer", transition: "opacity 0.2s" }} className="hover:opacity-100 opacity-60">Process</span>
-        <span style={{ cursor: "pointer", transition: "opacity 0.2s" }} className="hover:opacity-100 opacity-60">Teardown</span>
-        <button className="btn-primary" onClick={() => alert('Intake form coming soon.')}>
-          Request an audit
-        </button>
+      <div className="flex gap-6 md:gap-10 text-sm font-medium text-[#111] items-center sans-text">
+        <span className="hidden md:inline cursor-pointer hover:opacity-100 opacity-60 transition-opacity">Process</span>
+        <span className="hidden md:inline cursor-pointer hover:opacity-100 opacity-60 transition-opacity">Teardown</span>
+        <MagneticButton className="btn-primary" onClick={() => document.getElementById('intake')?.scrollIntoView({ behavior: 'smooth' })}>
+          Request Audit
+        </MagneticButton>
       </div>
     </motion.div>
   );
@@ -94,38 +165,39 @@ function Header() {
 
 function Hero() {
   return (
-    <div style={{ padding: "120px 40px 160px", maxWidth: "1080px", margin: "0 auto", position: "relative", zIndex: 1 }}>
+    <div className="px-6 py-20 md:py-40 max-w-[1200px] mx-auto relative z-10 flex flex-col items-start">
       <motion.h1 
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.3 }}
-        className="serif-text" 
-        style={{ fontSize: "100px", fontWeight: 400, lineHeight: 0.95, letterSpacing: "-0.04em", margin: "0 0 40px", color: "var(--color-text-primary)", maxWidth: "800px" }}
+        className="sans-text h1-fluid font-bold text-[#111] max-w-[900px] mb-8"
       >
-        Stop guessing why your users <em style={{ fontStyle: "italic", background: "-webkit-linear-gradient(0deg, #FF3366, #00E5FF)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>leave.</em>
+        Clarity over<br/>
+        <span className="bg-clip-text text-transparent bg-gradient-to-r from-[var(--color-accent-coral)] to-[var(--color-accent-violet)]">
+          intuition.
+        </span>
       </motion.h1>
 
       <motion.p 
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.4 }}
-        className="serif-text" 
-        style={{ fontSize: "24px", lineHeight: 1.5, color: "var(--color-text-muted)", margin: "0 0 56px", maxWidth: "700px", fontWeight: 400 }}
+        className="sans-text p-fluid font-normal text-[#6B6B6B] max-w-[720px] mb-12"
       >
-        We analyze 30 days of your PostHog data to find the exact friction points killing your conversion rate. Then, we tell you exactly what to change. No generic A/B tests. Just data-backed interventions.
+        We ingest 30 days of your PostHog data and deliver the exact structural changes required to lift your conversion rate. No generic best practices. Just mathematical certainty.
       </motion.p>
 
       <motion.div 
         initial={{ y: 40, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.5 }}
-        style={{ display: "flex", gap: "24px", alignItems: "center", flexWrap: "wrap" }}
+        className="flex flex-col sm:flex-row items-start sm:items-center gap-6"
       >
-        <button className="btn-inverted" onClick={() => alert('Intake form coming soon.')}>
-          Start the audit →
-        </button>
-        <span className="sans-text" style={{ fontSize: "14px", color: "var(--color-text-muted)", letterSpacing: "0.02em" }}>
-          Free in private beta · Accepting 10 sites this week
+        <MagneticButton className="btn-inverted" onClick={() => document.getElementById('intake')?.scrollIntoView({ behavior: 'smooth' })}>
+          Start the audit
+        </MagneticButton>
+        <span className="sans-text text-sm md:text-base font-medium text-[#6B6B6B] tracking-wide">
+          Accepting 10 sites this week
         </span>
       </motion.div>
     </div>
@@ -134,51 +206,47 @@ function Hero() {
 
 function Methodology() {
   return (
-    <div style={{ padding: "160px 40px", position: "relative", zIndex: 1 }}>
-      <div style={{ maxWidth: "1080px", margin: "0 auto", position: "relative" }}>
-        
+    <div className="px-6 py-24 md:py-40 relative z-10 bg-white/40">
+      <div className="max-w-[1200px] mx-auto relative">
         <motion.div 
           initial={{ opacity: 0, y: 50 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-100px" }}
           transition={{ type: "spring", stiffness: 60 }}
-          className="glass-panel" 
-          style={{ padding: "80px", display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "80px", alignItems: "center" }}
+          className="glass-panel p-8 md:p-16 lg:p-24 flex flex-col lg:flex-row gap-12 lg:gap-24"
         >
-          <div>
-            <h2 className="serif-text" style={{ fontSize: "64px", fontWeight: 400, lineHeight: 1.05, letterSpacing: "-0.025em", margin: "0 0 32px", color: "var(--color-text-primary)" }}>
-              Ingest.<br/>Analyze.<br/>Intervene.
+          <div className="flex-1">
+            <h2 className="sans-text h2-fluid font-bold text-[#111] mb-8">
+              Ingest.<br/>Analyze.<br/><span className="text-[#6B6B6B]">Intervene.</span>
             </h2>
-            <p className="sans-text" style={{ fontSize: "18px", lineHeight: 1.6, color: "var(--color-text-muted)" }}>
+            <p className="sans-text text-lg md:text-xl leading-relaxed text-[#6B6B6B]">
               We don't do design theory. We trace the behavioral footprint of your last 10,000 visitors and fix what is broken.
             </p>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "32px" }}>
+          <div className="flex-1 flex flex-col gap-10 lg:pt-6">
             {[
               { step: '01', title: 'Data Ingestion', desc: 'You provide a URL and a read-only PostHog key. We map the entire journey of your traffic over the last thirty days.' },
               { step: '02', title: 'Friction Analysis', desc: 'We isolate the rage-clicks, the dead scrolls, and the confusing UI patterns that cause visitors to drop off.' },
-              { step: '03', title: 'Direct Intervention', desc: 'We deliver three precise, element-level fixes that will immediately lift your conversion rate. Exact copy, exact placement.' }
+              { step: '03', title: 'Direct Intervention', desc: 'We deliver precise, element-level fixes that will immediately lift your conversion rate. Exact copy, exact placement.' }
             ].map((item, index) => (
               <motion.div 
                 key={item.step}
-                initial={{ opacity: 0, x: 50 }}
+                initial={{ opacity: 0, x: 20 }}
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true, margin: "-50px" }}
                 transition={{ type: "spring", stiffness: 80, delay: index * 0.1 }}
-                className="glass-card"
-                style={{ padding: "32px", display: "flex", gap: "24px" }}
+                className={`flex gap-6 md:gap-8 ${index !== 2 ? 'border-b border-[var(--color-glass-border)] pb-10' : ''}`}
               >
-                <div className="sans-text" style={{ fontSize: "16px", color: "var(--color-accent-spring)", fontWeight: 600 }}>{item.step}</div>
+                <div className="sans-text text-sm font-bold text-[var(--color-accent-violet)] mt-2">{item.step}</div>
                 <div>
-                  <h3 className="serif-text" style={{ fontSize: "24px", fontWeight: 400, margin: "0 0 8px", color: "var(--color-text-primary)" }}>{item.title}</h3>
-                  <p className="sans-text" style={{ fontSize: "15px", lineHeight: 1.6, color: "var(--color-text-muted)", margin: 0 }}>{item.desc}</p>
+                  <h3 className="sans-text text-2xl font-bold text-[#111] mb-3">{item.title}</h3>
+                  <p className="sans-text text-base leading-relaxed text-[#6B6B6B] m-0">{item.desc}</p>
                 </div>
               </motion.div>
             ))}
           </div>
         </motion.div>
-
       </div>
     </div>
   );
@@ -191,142 +259,171 @@ function Specimen() {
     offset: ["start center", "end center"]
   });
 
-  const scale = useTransform(scrollYProgress, [0, 0.5, 1], [0.95, 1, 0.95]);
-  const rotateX = useTransform(scrollYProgress, [0, 0.5, 1], [5, 0, -5]);
-  
-  // Clean text highlight animation instead of the broken SVG
+  const isRevealed = useTransform(scrollYProgress, [0.4, 0.6], [0, 1]);
+  const transformY = useTransform(scrollYProgress, [0.4, 0.6], [20, 0]);
   const highlightWidth = useSpring(useTransform(scrollYProgress, [0.3, 0.6], ["0%", "100%"]), { stiffness: 100, damping: 20 });
 
   return (
-    <div ref={containerRef} style={{ padding: "160px 40px", maxWidth: "1080px", margin: "0 auto", position: "relative", zIndex: 2, perspective: "1000px" }}>
-      <div style={{ textAlign: "center", marginBottom: "80px" }}>
-        <h2 className="serif-text" style={{ fontSize: "56px", fontWeight: 400, lineHeight: 1.05, letterSpacing: "-0.025em", margin: "0 0 24px", color: "var(--color-text-primary)" }}>
-          A Recent Teardown
+    <div ref={containerRef} className="px-6 py-32 md:py-48 max-w-[1200px] mx-auto relative z-10" style={{ perspective: "1000px" }}>
+      <div className="text-center mb-16 md:mb-24">
+        <h2 className="sans-text h2-fluid font-bold text-[#111] mb-6">
+          An Interactive Teardown
         </h2>
+        <p className="sans-text text-lg md:text-xl text-[#6B6B6B] max-w-[600px] mx-auto">
+          Analysis 042: SaaS Pricing Page. 12,450 visits. Projected lift: +4.1%.
+        </p>
       </div>
 
-      <motion.div 
-        style={{ scale, rotateX }}
-        className="glass-panel"
-      >
-        <div style={{ padding: "56px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingBottom: "28px", borderBottom: "1px solid var(--color-glass-border)", marginBottom: "40px" }}>
-            <div>
-              <div className="sans-text" style={{ fontSize: "24px", color: "var(--color-text-primary)", fontWeight: 500 }}>SaaS Pricing Page</div>
-              <div className="serif-text" style={{ fontSize: "15px", color: "var(--color-text-muted)", marginTop: "8px", fontStyle: "italic" }}>Analysis 042 · 12,450 visits over thirty days</div>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <div className="sans-text" style={{ fontSize: "13px", color: "var(--color-accent-cyan)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Projected lift</div>
-              <div className="sans-text" style={{ fontSize: "36px", color: "var(--color-text-primary)", fontWeight: 300, marginTop: "4px" }}>+4.1%</div>
+      <div className="flex flex-col lg:flex-row gap-16 items-center">
+        {/* Text Explainer */}
+        <div className="flex-1">
+          <h3 className="sans-text text-3xl font-bold text-[#111] mb-6 tracking-tight">
+            The hierarchy was inverted.
+          </h3>
+          <div className="sans-text text-lg leading-relaxed text-[#6B6B6B] mb-8">
+            Users were bouncing because the tier distinction was buried under a 12-row feature matrix. 
+            <motion.span 
+              style={{ 
+                backgroundImage: "linear-gradient(transparent 60%, rgba(255, 74, 90, 0.3) 60%)",
+                backgroundRepeat: "no-repeat",
+                backgroundSize: useTransform(highlightWidth, (w) => `${w} 100%`),
+                display: "inline",
+                padding: "0 4px",
+                marginLeft: "4px"
+              }}
+            >
+              The primary CTA sat below the fold for 40% of mobile users.
+            </motion.span>
+          </div>
+          <div className="p-6 md:p-8 bg-white rounded-2xl border border-[var(--color-glass-border)] shadow-sm">
+            <div className="sans-text text-xs text-[var(--color-accent-coral)] font-bold tracking-widest uppercase mb-4">The Intervention</div>
+            <div className="sans-text text-lg md:text-xl text-[#111] font-medium leading-relaxed">
+              Move the billing toggle directly below the $H1. Collapse the feature matrix into an expandable accordion.
             </div>
           </div>
+        </div>
 
-          <div style={{ position: "relative", maxWidth: "800px" }}>
-            <div className="sans-text" style={{ display: "inline-block", background: "var(--color-text-primary)", color: "var(--color-primary-bg)", fontSize: "11px", fontWeight: 600, padding: "6px 14px", borderRadius: "100px", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "24px" }}>Highest Leverage Fix</div>
-            
-            <div style={{ marginBottom: "24px", lineHeight: 1.4 }}>
-              <span className="serif-text" style={{ fontSize: "32px", color: "var(--color-text-primary)", letterSpacing: "-0.01em" }}>
-                Users bounce because the tier distinction is buried in a feature matrix. 
-                <motion.span 
-                  style={{ 
-                    backgroundImage: "linear-gradient(transparent 60%, rgba(255, 51, 102, 0.4) 60%)",
-                    backgroundRepeat: "no-repeat",
-                    backgroundSize: useTransform(highlightWidth, (w) => `${w} 100%`),
-                    display: "inline",
-                    padding: "0 4px",
-                    marginLeft: "8px"
-                  }}
-                >
-                  The primary CTA is sitting below the fold for 40% of mobile users.
-                </motion.span>
-              </span>
-            </div>
-
-            <p className="sans-text" style={{ fontSize: "18px", lineHeight: 1.7, color: "var(--color-text-muted)", margin: "0 0 32px" }}>
-              Rage clicks are concentrated on the disabled 'Pro' toggle. Visitors want to see the higher tier pricing, but the UI requires them to scroll through 12 irrelevant features first. We need to flip the hierarchy.
-            </p>
-            
-            <div className="glass-card" style={{ borderLeft: "4px solid var(--color-accent-spring)", padding: "24px", background: "rgba(255, 51, 102, 0.05)" }}>
-              <div className="sans-text" style={{ fontSize: "12px", color: "var(--color-accent-spring)", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "12px" }}>The Intervention</div>
-              <div className="serif-text" style={{ fontSize: "24px", color: "var(--color-text-primary)", fontStyle: "italic", lineHeight: 1.4 }}>
-                Move the billing toggle directly below the $H1. Collapse the feature matrix into an expandable accordion.
+        {/* Visual DOM Representation - Hidden on very small mobile to prevent layout breaking, visible on md+ */}
+        <div className="flex-1 relative h-[300px] md:h-[400px] w-full hidden sm:block">
+          <motion.div 
+            className="dom-card dom-card-before glass-card absolute w-full h-full p-6 md:p-8 flex flex-col gap-4"
+          >
+            <div className="w-[60%] h-8 bg-gray-200 rounded" />
+            <div className="flex gap-4 flex-1">
+              <div className="flex-1 border border-gray-200 rounded-lg p-4 flex flex-col">
+                <div className="w-[40%] h-4 bg-gray-200 mb-6 rounded" />
+                {[1,2,3,4].map(i => <div key={i} className="w-full h-2 bg-gray-100 mb-3 rounded-sm" />)}
+                <div className="w-full h-8 bg-gray-200 mt-auto rounded" />
+              </div>
+              <div className="flex-1 border border-gray-200 rounded-lg p-4 flex flex-col">
+                <div className="w-[40%] h-4 bg-gray-200 mb-6 rounded" />
+                {[1,2,3,4].map(i => <div key={i} className="w-full h-2 bg-gray-100 mb-3 rounded-sm" />)}
+                <div className="w-full h-8 bg-gray-200 mt-auto rounded" />
               </div>
             </div>
-          </div>
+          </motion.div>
+
+          <motion.div 
+            className="dom-card dom-card-after glass-card absolute w-full h-full p-6 md:p-8 flex flex-col gap-4"
+            style={{ opacity: isRevealed, y: transformY }}
+          >
+            <div className="w-[60%] h-8 bg-[#111] rounded" />
+            <div className="w-[120px] h-6 bg-[var(--color-accent-coral)] rounded-full self-start opacity-90" />
+            <div className="flex gap-4 flex-1">
+              <div className="flex-1 border-2 border-[#111] rounded-lg p-4 flex flex-col">
+                <div className="w-[40%] h-4 bg-[#111] mb-4 rounded" />
+                <div className="w-full h-10 bg-[#111] rounded mt-auto" />
+              </div>
+              <div className="flex-1 border-2 border-[#111] rounded-lg p-4 flex flex-col">
+                <div className="w-[40%] h-4 bg-[#111] mb-4 rounded" />
+                <div className="w-full h-10 bg-[var(--color-accent-coral)] rounded mt-auto" />
+              </div>
+            </div>
+            <div className="w-full h-4 bg-gray-100 rounded mt-2" />
+          </motion.div>
         </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function RoadmapTimeline() {
-  const containerRef = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start center", "end center"]
-  });
-
-  const lineHeight = useSpring(useTransform(scrollYProgress, [0, 0.8], ["0%", "100%"]), { stiffness: 50, damping: 20 });
-
-  const steps = [
-    { phase: 'Today', title: 'We Advise', desc: 'A deep-dive, annotated teardown of your primary funnel delivered in two days.' },
-    { phase: 'Soon', title: 'We Monitor', desc: 'Continuous reading of your PostHog data, with new interventions flagged automatically.' },
-    { phase: 'Later', title: 'We Test', desc: 'Experiments are pushed directly to your PostHog feature flags. We prove the lift before you commit code.' },
-    { phase: 'Eventually', title: 'We Execute', desc: 'Within your guardrails, the winning variants are automatically merged into production.' }
-  ];
-
-  return (
-    <div ref={containerRef} style={{ padding: "160px 40px", maxWidth: "800px", margin: "0 auto", position: "relative", zIndex: 1 }}>
-      <h2 className="serif-text" style={{ fontSize: "56px", fontWeight: 400, lineHeight: 1.05, letterSpacing: "-0.025em", margin: "0 0 80px", color: "var(--color-text-primary)", textAlign: "center" }}>
-        Where this is going
-      </h2>
-
-      <div style={{ position: "relative", paddingLeft: "40px" }}>
-        {/* The Animated Timeline Line */}
-        <div style={{ position: "absolute", left: "0", top: "0", bottom: "0", width: "2px", background: "var(--color-glass-border)" }} />
-        <motion.div 
-          style={{ 
-            position: "absolute", left: "0", top: "0", width: "2px", 
-            background: "linear-gradient(to bottom, #FF3366, #00E5FF)",
-            height: useTransform(lineHeight, (h) => h)
-          }} 
-        />
-
-        {steps.map((item, index) => {
-          // Calculate when this specific step should light up based on scroll
-          const startTrigger = index * 0.25;
-          const isActive = useTransform(scrollYProgress, [startTrigger, startTrigger + 0.1], [0.3, 1]);
-          const scale = useTransform(scrollYProgress, [startTrigger, startTrigger + 0.1], [0.8, 1]);
-
-          return (
-            <motion.div key={item.phase} style={{ position: "relative", marginBottom: "64px", opacity: isActive }}>
-              <motion.div style={{ position: "absolute", left: "-45px", top: "2px", width: "12px", height: "12px", borderRadius: "50%", background: "#00E5FF", scale }} />
-              <div className="sans-text" style={{ fontSize: "14px", color: "var(--color-accent-cyan)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px" }}>{item.phase}</div>
-              <div className="serif-text" style={{ fontSize: "28px", color: "var(--color-text-primary)", lineHeight: 1.3, marginBottom: "12px" }}>{item.title}</div>
-              <div className="sans-text" style={{ fontSize: "16px", color: "var(--color-text-muted)", lineHeight: 1.6, maxWidth: "500px" }}>{item.desc}</div>
-            </motion.div>
-          );
-        })}
       </div>
     </div>
   );
 }
 
-function Note() {
+function IntakeForm() {
+  const [url, setUrl] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!url || !email) return;
+    
+    setStatus("loading");
+    try {
+      const res = await fetch("/api/intake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, email })
+      });
+      
+      if (res.ok) {
+        setStatus("success");
+      } else {
+        setStatus("error");
+      }
+    } catch (err) {
+      setStatus("error");
+    }
+  };
+
   return (
-    <div style={{ padding: "80px 40px 160px", position: "relative", zIndex: 1 }}>
-      <div className="glass-panel" style={{ maxWidth: "800px", margin: "0 auto", padding: "80px" }}>
-        <p className="serif-text" style={{ fontSize: "32px", lineHeight: 1.45, color: "var(--color-text-primary)", margin: "0 0 32px", fontWeight: 400, letterSpacing: "-0.012em", textAlign: "center" }}>
-          Most teams waste months A/B testing button colors while bleeding users from a confusing headline.
+    <div id="intake" className="px-6 py-24 md:py-32 relative z-10">
+      <div className="glass-panel max-w-[700px] mx-auto p-8 md:p-16 text-center">
+        <h2 className="sans-text text-3xl md:text-5xl font-bold text-[#111] mb-6 tracking-tight">
+          Let's smooth the path.
+        </h2>
+        <p className="sans-text text-lg text-[#6B6B6B] mb-12">
+          Drop your URL below. We'll trace the friction and deliver the patch.
         </p>
-        <p className="serif-text" style={{ fontSize: "20px", lineHeight: 1.65, color: "var(--color-text-muted)", margin: "0 0 32px", textAlign: "center" }}>
-          We built Forge to eliminate the guesswork. We find the leak first, and we give you the exact patch.
-        </p>
-        <div style={{ textAlign: "center" }}>
-          <button className="btn-inverted" onClick={() => alert('Intake form coming soon.')}>
-            Start the audit
-          </button>
-        </div>
+
+        {status === "success" ? (
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="p-8 bg-[var(--color-accent-coral)] text-white rounded-2xl font-bold text-xl"
+          >
+            Audit request received. We'll be in touch.
+          </motion.div>
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
+            <div>
+              <label className="block sans-text text-sm font-bold text-[#111] mb-2 px-1">Website URL</label>
+              <input 
+                type="url" 
+                required 
+                placeholder="https://yourstartup.com" 
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                className="input-field"
+                disabled={status === "loading"}
+              />
+            </div>
+            <div>
+              <label className="block sans-text text-sm font-bold text-[#111] mb-2 px-1">Work Email</label>
+              <input 
+                type="email" 
+                required 
+                placeholder="founder@yourstartup.com" 
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="input-field"
+                disabled={status === "loading"}
+              />
+            </div>
+            <MagneticButton type="submit" className="btn-inverted w-full mt-4 flex justify-center items-center">
+              {status === "loading" ? "Submitting..." : "Request Audit"}
+            </MagneticButton>
+            {status === "error" && <p className="text-[var(--color-accent-coral)] text-sm mt-2 text-center">Something went wrong. Please try again.</p>}
+          </form>
+        )}
       </div>
     </div>
   );
@@ -334,13 +431,13 @@ function Note() {
 
 function Footer() {
   return (
-    <div style={{ padding: "48px 40px", borderTop: "1px solid var(--color-glass-border)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "relative", zIndex: 1, background: "var(--color-primary-bg)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-        <div style={{ width: 16, height: 16, borderRadius: '50%', background: 'linear-gradient(135deg, #FF3366, #00E5FF)' }} />
-        <span className="serif-text" style={{ fontSize: "16px", color: "var(--color-text-primary)" }}>Forge</span>
+    <div className="px-6 py-12 md:py-16 border-t border-[var(--color-glass-border)] flex flex-col md:flex-row justify-between items-center gap-6 relative z-10 bg-[var(--color-primary-bg)]">
+      <div className="flex items-center gap-4">
+        <div className="w-5 h-5 rounded bg-[linear-gradient(135deg,var(--color-accent-coral),var(--color-accent-violet))]" />
+        <span className="sans-text font-bold text-[#111]">Forge</span>
       </div>
-      <div className="sans-text" style={{ fontSize: "13px", color: "var(--color-text-muted)" }}>
-        forge.run · data-backed interventions
+      <div className="sans-text text-sm font-medium text-[#6B6B6B]">
+        forge.run · precision over intuition
       </div>
     </div>
   );
@@ -348,15 +445,16 @@ function Footer() {
 
 export default function Home() {
   return (
-    <main style={{ padding: 0, margin: 0, position: "relative" }}>
-      <SceneBackground />
-      <Header />
-      <Hero />
-      <Methodology />
-      <Specimen />
-      <RoadmapTimeline />
-      <Note />
-      <Footer />
-    </main>
+    <SmoothScroll>
+      <main className="p-0 m-0 relative">
+        <SceneBackground />
+        <Header />
+        <Hero />
+        <Methodology />
+        <Specimen />
+        <IntakeForm />
+        <Footer />
+      </main>
+    </SmoothScroll>
   );
 }
