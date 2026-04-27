@@ -437,12 +437,12 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   return (
     <points ref={pointsRef} frustumCulled={false}>
       <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={PARTICLE_COUNT} array={buffers.pos1} itemSize={3} />
-        <bufferAttribute attach="attributes-position1" count={PARTICLE_COUNT} array={buffers.pos1} itemSize={3} />
-        <bufferAttribute attach="attributes-position2" count={PARTICLE_COUNT} array={buffers.pos2} itemSize={3} />
-        <bufferAttribute attach="attributes-position3" count={PARTICLE_COUNT} array={buffers.pos3} itemSize={3} />
-        <bufferAttribute attach="attributes-position4" count={PARTICLE_COUNT} array={buffers.pos4} itemSize={3} />
-        <bufferAttribute attach="attributes-position5" count={PARTICLE_COUNT} array={buffers.pos5} itemSize={3} />
+        <bufferAttribute attach="attributes-position" args={[buffers.pos1, 3]} />
+        <bufferAttribute attach="attributes-position1" args={[buffers.pos1, 3]} />
+        <bufferAttribute attach="attributes-position2" args={[buffers.pos2, 3]} />
+        <bufferAttribute attach="attributes-position3" args={[buffers.pos3, 3]} />
+        <bufferAttribute attach="attributes-position4" args={[buffers.pos4, 3]} />
+        <bufferAttribute attach="attributes-position5" args={[buffers.pos5, 3]} />
       </bufferGeometry>
       <shaderMaterial
         ref={shaderRef}
