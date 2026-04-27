@@ -1,395 +1,528 @@
 "use client";
 
-import React, { useRef, useEffect, useState } from "react";
-import { motion, useScroll, useTransform, useSpring } from "framer-motion";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { MeshDistortMaterial, Icosahedron, Float, Environment } from "@react-three/drei";
+import React, { useRef, useEffect, useState, useMemo } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Environment } from "@react-three/drei";
+import { motion, useScroll } from "framer-motion";
 import * as THREE from "three";
-import Lenis from "lenis";
 
-// --- Smooth Scrolling Setup ---
-function SmoothScroll({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: "vertical",
-      gestureOrientation: "vertical",
-      smoothWheel: true,
-      wheelMultiplier: 1,
-      touchMultiplier: 2,
-    });
+// --- Premium Procedural Geometries (Centered at 0,0,0) ---
 
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
+function randomOnRect(w: number, h: number, z: number, axis: 'x' | 'y' | 'z') {
+  const a = (Math.random() - 0.5) * w;
+  const b = (Math.random() - 0.5) * h;
+  if (axis === 'z') return [a, b, z];
+  if (axis === 'y') return [a, z, b];
+  return [z, a, b];
+}
+
+function getDataCorePoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = Math.random();
+    if (r < 0.4) {
+      // Dense central sphere (core)
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const rad = Math.cbrt(Math.random()) * 1.0; // Scaled down from 1.8
+      points[i*3] = rad * Math.sin(phi) * Math.cos(theta);
+      points[i*3+1] = rad * Math.sin(phi) * Math.sin(theta);
+      points[i*3+2] = rad * Math.cos(phi);
+    } else {
+      // Intricate orbital rings
+      const ringId = Math.floor(Math.random() * 8); // 8 rings
+      const theta = Math.random() * Math.PI * 2;
+      const rad = 1.3 + ringId * 0.25 + (Math.random() * 0.05); // Scaled down from 2.2
+      
+      let bx = Math.cos(theta) * rad;
+      let by = (Math.random() - 0.5) * 0.15; // thick rings
+      let bz = Math.sin(theta) * rad;
+      
+      // Tilt ring
+      const tilt = (ringId / 8) * Math.PI;
+      points[i*3] = bx * Math.cos(tilt) - by * Math.sin(tilt);
+      points[i*3+1] = bx * Math.sin(tilt) + by * Math.cos(tilt);
+      points[i*3+2] = bz;
     }
-    requestAnimationFrame(raf);
-
-    return () => {
-      lenis.destroy();
-    };
-  }, []);
-
-  return <>{children}</>;
+  }
+  return points;
 }
 
-// --- Scene Background (Subtle Glow) ---
-function SceneBackground() {
-  return (
-    <div className="canvas-container">
-      <div style={{ position: 'absolute', top: '-20%', right: '-10%', width: '60vw', height: '60vw', background: 'radial-gradient(circle, rgba(255,74,90,0.03) 0%, rgba(250,250,248,0) 70%)', filter: 'blur(60px)' }} />
-      <div style={{ position: 'absolute', bottom: '-10%', left: '-10%', width: '50vw', height: '50vw', background: 'radial-gradient(circle, rgba(0,229,255,0.03) 0%, rgba(250,250,248,0) 70%)', filter: 'blur(60px)' }} />
-    </div>
-  );
+function getServerGridPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    // 10x10 Cityscape / Server Rack Grid (Tighter, scaled down)
+    const gx = Math.floor(Math.random() * 10) - 5;
+    const gz = Math.floor(Math.random() * 10) - 5;
+    
+    // Gaussian distribution: Taller buildings in the center, lower on the edges
+    const distFromCenter = Math.sqrt(gx*gx + gz*gz);
+    const maxH = 4.0;
+    const height = maxH * Math.exp(-distFromCenter * 0.4) + Math.random() * 0.5;
+    
+    const px = gx * 0.45; // Tight spacing
+    const pz = gz * 0.45;
+    const w = 0.3; // Thinner pillars
+    
+    let x, y, z;
+    const face = Math.random();
+    if (face < 0.2) { x = px + (Math.random()-0.5)*w; y = height; z = pz + (Math.random()-0.5)*w; } // Top
+    else if (face < 0.4) { x = px + (Math.random()-0.5)*w; y = Math.random()*height; z = pz + w/2; } // Front
+    else if (face < 0.6) { x = px + (Math.random()-0.5)*w; y = Math.random()*height; z = pz - w/2; } // Back
+    else if (face < 0.8) { x = px + w/2; y = Math.random()*height; z = pz + (Math.random()-0.5)*w; } // Right
+    else { x = px - w/2; y = Math.random()*height; z = pz + (Math.random()-0.5)*w; } // Left
+    
+    // Isometric tilt
+    const ty = Math.PI / 4;
+    let rx = x * Math.cos(ty) - z * Math.sin(ty);
+    let rz = x * Math.sin(ty) + z * Math.cos(ty);
+    
+    const tx = Math.PI / 6;
+    let ry = y * Math.cos(tx) - rz * Math.sin(tx);
+    rz = y * Math.sin(tx) + rz * Math.cos(tx);
+    
+    points[i*3] = rx;
+    points[i*3+1] = ry;
+    points[i*3+2] = rz;
+  }
+  return points;
 }
 
-// --- Magnetic Button Component ---
-function MagneticButton({ children, className, onClick, type = "button" }: { children: React.ReactNode, className?: string, onClick?: () => void, type?: "button" | "submit" }) {
-  const ref = useRef<HTMLButtonElement>(null);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
+function getJetPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = Math.random();
+    let x = 0, y = 0, z = 0;
+    
+    if (r < 0.35) {
+      // Fuselage: Cylinder with aerodynamic nose and tail cones
+      const theta = Math.random() * Math.PI * 2;
+      const t = Math.random(); // 0 (front) to 1 (back)
+      const length = 7.0;
+      z = (t - 0.5) * length;
+      
+      let radius = 0.4;
+      if (t < 0.15) radius = 0.4 * Math.sin((t / 0.15) * (Math.PI / 2)); // Nose curve
+      else if (t > 0.8) radius = 0.4 * Math.sin(((1.0 - t) / 0.2) * (Math.PI / 2)); // Tail curve
+      
+      x = Math.cos(theta) * radius;
+      y = Math.sin(theta) * radius;
+    } else if (r < 0.65) {
+      // Main Wings: Classic swept-back commercial wings
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const span = Math.random() * 4.0; // wing length
+      const chord = 1.2 * (1.0 - span / 4.0) + Math.random() * 0.4; // tapers at end
+      x = side * (0.3 + span);
+      y = 0;
+      z = -0.5 + span * 0.6 + (Math.random() - 0.5) * chord; // Swept back
+    } else if (r < 0.8) {
+      // Horizontal Stabilizers (Rear small wings)
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const span = Math.random() * 1.5;
+      x = side * (0.2 + span);
+      y = 0;
+      z = 2.8 + span * 0.5 + (Math.random() - 0.5) * 0.6;
+    } else if (r < 0.9) {
+      // Vertical Tail Fin
+      const h = Math.random() * 1.8;
+      x = 0;
+      y = 0.3 + h;
+      z = 2.8 + h * 0.6 + (Math.random() - 0.5) * 0.6;
+    } else {
+      // Under-wing Engines
+      const side = Math.random() > 0.5 ? 1 : -1;
+      const theta = Math.random() * Math.PI * 2;
+      const rad = 0.18;
+      x = side * 1.2 + Math.cos(theta) * rad;
+      y = -0.2 + Math.sin(theta) * rad;
+      z = 0.2 + (Math.random() - 0.5) * 0.8;
+    }
+    
+    // Bank angle
+    const bank = -Math.PI / 10;
+    let bx = x * Math.cos(bank) - y * Math.sin(bank);
+    let by = x * Math.sin(bank) + y * Math.cos(bank);
 
-  const handleMouse = (e: React.MouseEvent) => {
-    if (!ref.current) return;
-    const { clientX, clientY } = e;
-    const { height, width, left, top } = ref.current.getBoundingClientRect();
-    const middleX = clientX - (left + width / 2);
-    const middleY = clientY - (top + height / 2);
-    setPosition({ x: middleX * 0.2, y: middleY * 0.2 });
-  };
-
-  const reset = () => {
-    setPosition({ x: 0, y: 0 });
-  };
-
-  return (
-    <motion.button
-      type={type}
-      ref={ref}
-      onMouseMove={handleMouse}
-      onMouseLeave={reset}
-      animate={{ x: position.x, y: position.y }}
-      transition={{ type: "spring", stiffness: 150, damping: 15, mass: 0.1 }}
-      className={className}
-      onClick={onClick}
-    >
-      {children}
-    </motion.button>
-  );
+    points[i*3] = bx;
+    points[i*3+1] = by;
+    points[i*3+2] = z;
+  }
+  return points;
 }
 
-// --- UI Components ---
+function getMicrochipPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = Math.random();
+    let x, y, z;
+    if (r < 0.3) {
+      // Central Die (Raised)
+      const s = 2.0;
+      const face = Math.random();
+      if (face < 0.2) { x = (Math.random()-0.5)*s; y = 0.4; z = (Math.random()-0.5)*s; } 
+      else if (face < 0.4) { x = (Math.random()-0.5)*s; y = Math.random()*0.4; z = s/2; } 
+      else if (face < 0.6) { x = (Math.random()-0.5)*s; y = Math.random()*0.4; z = -s/2; } 
+      else if (face < 0.8) { x = s/2; y = Math.random()*0.4; z = (Math.random()-0.5)*s; } 
+      else { x = -s/2; y = Math.random()*0.4; z = (Math.random()-0.5)*s; } 
+    } else if (r < 0.5) {
+      // Flat Substrate base
+      const s = 6.0;
+      x = (Math.random() - 0.5) * s;
+      y = 0;
+      z = (Math.random() - 0.5) * s;
+    } else {
+      // Circuit Pins
+      const s = 6.0;
+      const side = Math.floor(Math.random() * 4);
+      const pos = (Math.random() - 0.5) * s; 
+      const pinLength = Math.random() * 0.8 + 0.2; 
+      const pinDrop = Math.random() * 0.6; 
+      
+      const part = Math.random();
+      if (side === 0) { 
+        if (part < 0.5) { x = pos; y = 0; z = -s/2 - pinLength * Math.random(); }
+        else { x = pos; y = -pinDrop * Math.random(); z = -s/2 - pinLength; }
+      } else if (side === 1) { 
+        if (part < 0.5) { x = pos; y = 0; z = s/2 + pinLength * Math.random(); }
+        else { x = pos; y = -pinDrop * Math.random(); z = s/2 + pinLength; }
+      } else if (side === 2) { 
+        if (part < 0.5) { x = s/2 + pinLength * Math.random(); y = 0; z = pos; }
+        else { x = s/2 + pinLength; y = -pinDrop * Math.random(); z = pos; }
+      } else { 
+        if (part < 0.5) { x = -s/2 - pinLength * Math.random(); y = 0; z = pos; }
+        else { x = -s/2 - pinLength; y = -pinDrop * Math.random(); z = pos; }
+      }
+    }
+    
+    // Isometric Tilt
+    const ty = Math.PI / 4;
+    let rx = x * Math.cos(ty) - z * Math.sin(ty);
+    let rz = x * Math.sin(ty) + z * Math.cos(ty);
+    
+    const tx = Math.PI / 6;
+    let ry = y * Math.cos(tx) - rz * Math.sin(tx);
+    rz = y * Math.sin(tx) + rz * Math.cos(tx);
 
-function Header() {
-  return (
-    <motion.div 
-      initial={{ y: -50, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.2 }}
-      className="px-6 py-6 md:px-12 md:py-8 flex items-center justify-between relative z-10"
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-6 h-6 rounded-md bg-[#111]" />
-        <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Forge</span>
-      </div>
-      <div className="flex gap-6 md:gap-10 text-sm font-medium text-[#111] items-center sans-text">
-        <span className="hidden md:inline cursor-pointer hover:opacity-100 opacity-60 transition-opacity">Process</span>
-        <span className="hidden md:inline cursor-pointer hover:opacity-100 opacity-60 transition-opacity">Teardown</span>
-        <MagneticButton className="btn-primary" onClick={() => document.getElementById('intake')?.scrollIntoView({ behavior: 'smooth' })}>
-          Request Audit
-        </MagneticButton>
-      </div>
-    </motion.div>
-  );
+    points[i*3] = rx;
+    points[i*3+1] = ry;
+    points[i*3+2] = rz;
+  }
+  return points;
 }
 
-function Hero() {
-  return (
-    <div className="px-6 py-20 md:py-40 max-w-[1200px] mx-auto relative z-10 flex flex-col items-start">
-      <motion.h1 
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.3 }}
-        className="sans-text h1-fluid font-bold text-[#111] max-w-[900px] mb-8"
-      >
-        Clarity over<br/>
-        <span className="text-[#6B6B6B]">
-          intuition.
-        </span>
-      </motion.h1>
-
-      <motion.p 
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.4 }}
-        className="sans-text p-fluid font-normal text-[#6B6B6B] max-w-[720px] mb-12"
-      >
-        We ingest 30 days of your PostHog data and deliver the exact structural changes required to lift your conversion rate. No generic best practices. Just mathematical certainty.
-      </motion.p>
-
-      <motion.div 
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.5 }}
-        className="flex flex-col sm:flex-row items-start sm:items-center gap-6"
-      >
-        <MagneticButton className="btn-inverted" onClick={() => document.getElementById('intake')?.scrollIntoView({ behavior: 'smooth' })}>
-          Start the audit
-        </MagneticButton>
-        <span className="sans-text text-sm md:text-base font-medium text-[#6B6B6B] tracking-wide">
-          Accepting 10 sites this week
-        </span>
-      </motion.div>
-    </div>
-  );
+function getRingPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const u = Math.random() * Math.PI * 2;
+    const v = Math.random() * Math.PI * 2;
+    const R = 3.5; 
+    const r = Math.random() * 0.8; 
+    points[i * 3] = (R + r * Math.cos(v)) * Math.cos(u);
+    points[i * 3 + 1] = (R + r * Math.cos(v)) * Math.sin(u);
+    points[i * 3 + 2] = r * Math.sin(v);
+  }
+  return points;
 }
 
-function Methodology() {
-  return (
-    <div className="px-6 py-24 md:py-40 relative z-10 bg-white/40">
-      <div className="max-w-[1200px] mx-auto relative">
-        <motion.div 
-          initial={{ opacity: 0, y: 50 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          transition={{ type: "spring", stiffness: 60 }}
-          className="glass-panel p-8 md:p-16 lg:p-24 flex flex-col lg:flex-row gap-12 lg:gap-24"
-        >
-          <div className="flex-1">
-            <h2 className="sans-text h2-fluid font-bold text-[#111] mb-8">
-              Ingest.<br/>Analyze.<br/><span className="text-[#6B6B6B]">Intervene.</span>
-            </h2>
-            <p className="sans-text text-lg md:text-xl leading-relaxed text-[#6B6B6B]">
-              We don't do design theory. We trace the behavioral footprint of your last 10,000 visitors and fix what is broken.
-            </p>
-          </div>
+// --- Custom GLSL Vertex Shader ---
 
-          <div className="flex-1 flex flex-col gap-10 lg:pt-6">
-            {[
-              { step: '01', title: 'Data Ingestion', desc: 'You provide a URL and a read-only PostHog key. We map the entire journey of your traffic over the last thirty days.' },
-              { step: '02', title: 'Friction Analysis', desc: 'We isolate the rage-clicks, the dead scrolls, and the confusing UI patterns that cause visitors to drop off.' },
-              { step: '03', title: 'Direct Intervention', desc: 'We deliver precise, element-level fixes that will immediately lift your conversion rate. Exact copy, exact placement.' }
-            ].map((item, index) => (
-              <motion.div 
-                key={item.step}
-                initial={{ opacity: 0, x: 20 }}
-                whileInView={{ opacity: 1, x: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ type: "spring", stiffness: 80, delay: index * 0.1 }}
-                className={`flex gap-6 md:gap-8 ${index !== 2 ? 'border-b border-[var(--color-glass-border)] pb-10' : ''}`}
-              >
-                <div className="sans-text text-sm font-bold text-[#111] mt-2">{item.step}</div>
-                <div>
-                  <h3 className="sans-text text-2xl font-bold text-[#111] mb-3">{item.title}</h3>
-                  <p className="sans-text text-base leading-relaxed text-[#6B6B6B] m-0">{item.desc}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </motion.div>
-      </div>
-    </div>
-  );
+const vertexShader = `
+uniform float uProgress;
+uniform float uTime;
+uniform float uSpawnTime;
+uniform vec3 uOffsets[5]; // Global offsets for the 5 shapes
+
+attribute vec3 position1;
+attribute vec3 position2;
+attribute vec3 position3;
+attribute vec3 position4;
+attribute vec3 position5;
+
+// Hash & Noise
+float hash(vec3 p) {
+  p  = fract( p*0.3183099+.1 );
+  p *= 17.0;
+  return fract( p.x*p.y*p.z*(p.x+p.y+p.z) );
 }
 
-function Specimen() {
-  const containerRef = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start center", "end center"]
+float noise(in vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f*f*(3.0-2.0*f);
+    return mix(mix(mix( hash(i+vec3(0,0,0)), hash(i+vec3(1,0,0)),f.x),
+                   mix( hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)),f.x),f.y),
+               mix(mix( hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)),f.x),
+                   mix( hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)),f.x),f.y),f.z);
+}
+
+// Curl noise for fluid smoke effects during morphs
+vec3 curlNoise(vec3 p) {
+    float e = 0.1;
+    vec3 dx = vec3(e, 0.0, 0.0);
+    vec3 dy = vec3(0.0, e, 0.0);
+    vec3 dz = vec3(0.0, 0.0, e);
+    
+    float x = noise(p + dy) - noise(p - dy) - noise(p + dz) + noise(p - dz);
+    float y = noise(p + dz) - noise(p - dz) - noise(p + dx) + noise(p - dx);
+    float z = noise(p + dx) - noise(p - dx) - noise(p + dy) + noise(p - dy);
+    
+    return normalize(vec3(x, y, z)) * 2.0;
+}
+
+void main() {
+  // DEDICATED SHAPE ANIMATIONS (applied in local space before offset)
+  
+  // 1. Data Core: Rings orbit the center at different speeds based on distance
+  vec3 p1 = position1;
+  float dist1 = length(p1.xz);
+  float angle1 = uTime * (1.0 / (dist1 + 0.5));
+  float tmpX1 = p1.x * cos(angle1) - p1.z * sin(angle1);
+  float tmpZ1 = p1.x * sin(angle1) + p1.z * cos(angle1);
+  p1.x = tmpX1; p1.z = tmpZ1;
+  
+  // 2. Server Grid: Sine wave pulses of electricity moving across the grid
+  vec3 p2 = position2;
+  p2.y += sin(p2.x * 2.0 + p2.z * 1.5 + uTime * 4.0) * 0.15;
+  
+  // 3. Delta Jet: Smooth hover banking and violent thruster exhaust
+  vec3 p3 = position3;
+  p3.y += sin(uTime * 2.0) * 0.3; // Hover
+  if (p3.z > 3.0) { // Thrusters at the back
+      p3.x += (hash(p3 + uTime) - 0.5) * 0.15;
+      p3.y += (hash(p3 + uTime + 1.0) - 0.5) * 0.15;
+  }
+  
+  // 4. Microchip: Energy pulses shooting down the pins
+  vec3 p4 = position4;
+  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 5.0)) * 0.1;
+  
+  // 5. Ring: Slow majestic spin
+  vec3 p5 = position5;
+  float angle5 = uTime * 0.5;
+  float tmpX5 = p5.x * cos(angle5) - p5.y * sin(angle5);
+  float tmpY5 = p5.x * sin(angle5) + p5.y * cos(angle5);
+  p5.x = tmpX5; p5.y = tmpY5;
+
+  // Apply world offsets
+  vec3 w1 = p1 + uOffsets[0];
+  vec3 w2 = p2 + uOffsets[1];
+  vec3 w3 = p3 + uOffsets[2];
+  vec3 w4 = p4 + uOffsets[3];
+  vec3 w5 = p5 + uOffsets[4];
+
+  // INTERPOLATION & TRANSITION
+  vec3 target;
+  
+  // Use smoothstep to "linger" on fully formed objects at the top and bottom of scrolls
+  float t = fract(uProgress);
+  float easedT = smoothstep(0.3, 0.7, t); 
+  float transitionState = 0.0;
+  
+  if (uProgress < 1.0) {
+    target = mix(w1, w2, easedT);
+    transitionState = easedT;
+  } else if (uProgress < 2.0) {
+    target = mix(w2, w3, easedT);
+    transitionState = easedT;
+  } else if (uProgress < 3.0) {
+    target = mix(w3, w4, easedT);
+    transitionState = easedT;
+  } else {
+    float lastT = smoothstep(0.3, 0.7, max(0.0, min(1.0, uProgress - 3.0)));
+    target = mix(w4, w5, lastT);
+    transitionState = lastT;
+  }
+  
+  // Apply Curl Noise fluid dynamics only during morphing.
+  // Because transitionState is eased, sin(PI) is exactly 0 when lingering!
+  float noiseIntensity = sin(transitionState * 3.14159) * 2.5;
+  vec3 curl = curlNoise(target * 0.5 + uTime * 0.2) * noiseIntensity;
+  vec3 finalPos = target + curl;
+
+  // SPAWN ANIMATION (Big Bang)
+  float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0); 
+  vec3 origin = uOffsets[0]; // Explode from Hero position
+  finalPos = mix(origin, finalPos, spawnEase);
+  
+  vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  
+  gl_PointSize = max(2.0, 50.0 / -mvPosition.z) * (1.0 + noiseIntensity * 0.5) * spawnEase;
+}
+`;
+
+const fragmentShader = `
+void main() {
+  float dist = distance(gl_PointCoord, vec2(0.5));
+  if (dist > 0.5) discard;
+  float alpha = smoothstep(0.5, 0.3, dist) * 0.8;
+  gl_FragColor = vec4(0.066, 0.066, 0.066, alpha); // #111111
+}
+`;
+
+// --- The GPU Particle Swarm ---
+
+const PARTICLE_COUNT = 50000;
+
+function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
+  const shaderRef = useRef<THREE.ShaderMaterial>(null);
+  const pointsRef = useRef<THREE.Points>(null);
+  const { viewport } = useThree();
+  
+  const mountTime = useRef(Date.now());
+
+  // Generate centered buffers
+  const buffers = useMemo(() => ({
+    pos1: getDataCorePoints(PARTICLE_COUNT),
+    pos2: getServerGridPoints(PARTICLE_COUNT),
+    pos3: getJetPoints(PARTICLE_COUNT),
+    pos4: getMicrochipPoints(PARTICLE_COUNT),
+    pos5: getRingPoints(PARTICLE_COUNT) 
+  }), []);
+
+  // Define global spatial offsets mapping to DOM
+  const offsets = useMemo(() => {
+    const vh = viewport.height;
+    return [
+      new THREE.Vector3(3.0, 0, 0),             // Hero: Right
+      new THREE.Vector3(2.5, -vh - 1.0, 0),     // Section 2: Right
+      new THREE.Vector3(-2.5, -vh * 2, 0),      // Section 3: Left
+      new THREE.Vector3(2.5, -vh * 3, 0),       // Section 4: Right
+      new THREE.Vector3(0, -vh * 4 - 0.5, 0),   // Section 5: Center
+    ];
+  }, [viewport.height]);
+
+  const uniforms = useMemo(() => ({
+    uProgress: { value: 0 },
+    uTime: { value: 0 },
+    uSpawnTime: { value: 0 },
+    uOffsets: { value: offsets }
+  }), [offsets]);
+
+  useFrame((state) => {
+    if (!shaderRef.current || !pointsRef.current) return;
+    
+    const time = state.clock.getElapsedTime();
+    const progress = scrollYProgress.get(); 
+    
+    const elapsedSpawn = (Date.now() - mountTime.current) / 2500;
+    
+    shaderRef.current.uniforms.uTime.value = time;
+    shaderRef.current.uniforms.uProgress.value = progress * 4.0;
+    shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
+
+    // Sync WebGL swarm vertically with native DOM scroll
+    pointsRef.current.position.y = progress * (viewport.height * 4.0);
+    
+    // NOTE: Removed pointsRef.current.rotation to eliminate erratic spinning!
   });
 
-  const isRevealed = useTransform(scrollYProgress, [0.4, 0.6], [0, 1]);
-  const transformY = useTransform(scrollYProgress, [0.4, 0.6], [20, 0]);
-  const highlightWidth = useSpring(useTransform(scrollYProgress, [0.3, 0.6], ["0%", "100%"]), { stiffness: 100, damping: 20 });
-
   return (
-    <div ref={containerRef} className="px-6 py-32 md:py-48 max-w-[1200px] mx-auto relative z-10" style={{ perspective: "1000px" }}>
-      <div className="text-center mb-16 md:mb-24">
-        <h2 className="sans-text h2-fluid font-bold text-[#111] mb-6">
-          An Interactive Teardown
-        </h2>
-        <p className="sans-text text-lg md:text-xl text-[#6B6B6B] max-w-[600px] mx-auto">
-          Analysis 042: SaaS Pricing Page. 12,450 visits. Projected lift: +4.1%.
-        </p>
-      </div>
+    <points ref={pointsRef} frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={PARTICLE_COUNT} array={buffers.pos1} itemSize={3} />
+        <bufferAttribute attach="attributes-position1" count={PARTICLE_COUNT} array={buffers.pos1} itemSize={3} />
+        <bufferAttribute attach="attributes-position2" count={PARTICLE_COUNT} array={buffers.pos2} itemSize={3} />
+        <bufferAttribute attach="attributes-position3" count={PARTICLE_COUNT} array={buffers.pos3} itemSize={3} />
+        <bufferAttribute attach="attributes-position4" count={PARTICLE_COUNT} array={buffers.pos4} itemSize={3} />
+        <bufferAttribute attach="attributes-position5" count={PARTICLE_COUNT} array={buffers.pos5} itemSize={3} />
+      </bufferGeometry>
+      <shaderMaterial
+        ref={shaderRef}
+        vertexShader={vertexShader}
+        fragmentShader={fragmentShader}
+        uniforms={uniforms}
+        transparent={true}
+        depthWrite={false}
+        blending={THREE.NormalBlending}
+      />
+    </points>
+  );
+}
 
-      <div className="flex flex-col lg:flex-row gap-16 items-center">
-        {/* Text Explainer */}
-        <div className="flex-1">
-          <h3 className="sans-text text-3xl font-bold text-[#111] mb-6 tracking-tight">
-            The hierarchy was inverted.
-          </h3>
-          <div className="sans-text text-lg leading-relaxed text-[#6B6B6B] mb-8">
-            Users were bouncing because the tier distinction was buried under a 12-row feature matrix. 
-            <span className="relative inline-block ml-1">
-              <span className="relative z-10 text-[#111]">The primary CTA sat below the fold for 40% of mobile users.</span>
-              <motion.span 
-                style={{ scaleX: highlightWidth, transformOrigin: "left" }}
-                className="absolute bottom-1 left-0 right-0 h-3 bg-[var(--color-accent-coral)] opacity-30 z-0 rounded-sm"
-              />
-            </span>
-          </div>
-          <div className="p-6 md:p-8 bg-white rounded-2xl border border-[var(--color-glass-border)] shadow-sm">
-            <div className="sans-text text-xs text-[var(--color-accent-coral)] font-bold tracking-widest uppercase mb-4">The Intervention</div>
-            <div className="sans-text text-lg md:text-xl text-[#111] font-medium leading-relaxed">
-              Move the billing toggle directly below the $H1. Collapse the feature matrix into an expandable accordion.
-            </div>
-          </div>
+// --- The Minimalist DOM Overlay ---
+
+function MinimalDOM() {
+  return (
+    <div className="w-full text-[#111]">
+      <section className="h-screen w-full flex items-center px-6 md:px-24 pointer-events-none">
+        <div className="max-w-[700px]">
+          <h1 className="sans-text text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-8 leading-[0.9]">
+            Clarity over<br/>intuition.
+          </h1>
+          <p className="sans-text text-xl md:text-2xl font-medium text-[#6B6B6B]">
+            We ingest 30 days of raw PostHog data and algorithmically map the friction points breaking your architecture.
+          </p>
         </div>
+      </section>
 
-        {/* Visual DOM Representation - Hidden on very small mobile to prevent layout breaking, visible on md+ */}
-        <div className="flex-1 relative h-[300px] md:h-[400px] w-full hidden sm:block">
-          <motion.div 
-            className="dom-card dom-card-before glass-card absolute w-full h-full p-6 md:p-8 flex flex-col gap-4"
-          >
-            <div className="w-[60%] h-8 bg-gray-200 rounded" />
-            <div className="flex gap-4 flex-1">
-              <div className="flex-1 border border-gray-200 rounded-lg p-4 flex flex-col">
-                <div className="w-[40%] h-4 bg-gray-200 mb-6 rounded" />
-                {[1,2,3,4].map(i => <div key={i} className="w-full h-2 bg-gray-100 mb-3 rounded-sm" />)}
-                <div className="w-full h-8 bg-gray-200 mt-auto rounded" />
-              </div>
-              <div className="flex-1 border border-gray-200 rounded-lg p-4 flex flex-col">
-                <div className="w-[40%] h-4 bg-gray-200 mb-6 rounded" />
-                {[1,2,3,4].map(i => <div key={i} className="w-full h-2 bg-gray-100 mb-3 rounded-sm" />)}
-                <div className="w-full h-8 bg-gray-200 mt-auto rounded" />
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div 
-            className="dom-card dom-card-after glass-card absolute w-full h-full p-6 md:p-8 flex flex-col gap-4"
-            style={{ opacity: isRevealed, y: transformY }}
-          >
-            <div className="w-[60%] h-8 bg-[#111] rounded" />
-            <div className="w-[120px] h-6 bg-[var(--color-accent-coral)] rounded-full self-start opacity-90" />
-            <div className="flex gap-4 flex-1">
-              <div className="flex-1 border-2 border-[#111] rounded-lg p-4 flex flex-col">
-                <div className="w-[40%] h-4 bg-[#111] mb-4 rounded" />
-                <div className="w-full h-10 bg-[#111] rounded mt-auto" />
-              </div>
-              <div className="flex-1 border-2 border-[#111] rounded-lg p-4 flex flex-col">
-                <div className="w-[40%] h-4 bg-[#111] mb-4 rounded" />
-                <div className="w-full h-10 bg-[var(--color-accent-coral)] rounded mt-auto" />
-              </div>
-            </div>
-            <div className="w-full h-4 bg-gray-100 rounded mt-2" />
-          </motion.div>
+      <section className="h-screen w-full flex items-start pt-[20vh] px-6 md:px-24 pointer-events-none">
+        <div className="max-w-[500px]">
+          <h2 className="sans-text text-5xl md:text-7xl font-bold tracking-tight mb-6">The Audit.</h2>
+          <p className="sans-text text-xl md:text-2xl text-[#6B6B6B]">
+            A website isn't art. It's a conversion engine. We don't guess what's wrong—we mathematically map your entire user journey to isolate where revenue is bleeding.
+          </p>
         </div>
-      </div>
-    </div>
-  );
-}
+      </section>
 
-function IntakeForm() {
-  const [url, setUrl] = useState("");
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+      <section className="h-screen w-full flex items-start justify-end pt-[20vh] px-6 md:px-24 text-right pointer-events-none">
+        <div className="max-w-[500px]">
+          <h2 className="sans-text text-5xl md:text-7xl font-bold tracking-tight mb-6">The Aerodynamics.</h2>
+          <p className="sans-text text-xl md:text-2xl text-[#6B6B6B]">
+            Once the leaks are isolated, we provide the precise code-level patches needed to remove drag and lift your conversion rates to the stratosphere.
+          </p>
+        </div>
+      </section>
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url || !email) return;
-    
-    setStatus("loading");
-    try {
-      const res = await fetch("/api/intake", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, email })
-      });
-      
-      if (res.ok) {
-        setStatus("success");
-      } else {
-        setStatus("error");
-      }
-    } catch (err) {
-      setStatus("error");
-    }
-  };
+      <section className="h-screen w-full flex items-start pt-[20vh] px-6 md:px-24 pointer-events-none">
+        <div className="max-w-[500px]">
+          <h2 className="sans-text text-5xl md:text-7xl font-bold tracking-tight mb-6">The Engine.</h2>
+          <p className="sans-text text-xl md:text-2xl text-[#6B6B6B]">
+            We don't deal in generic best practices. Every UI intervention is backed by pure certainty extracted exclusively from your own traffic.
+          </p>
+        </div>
+      </section>
 
-  return (
-    <div id="intake" className="px-6 py-24 md:py-32 relative z-10">
-      <div className="glass-panel max-w-[700px] mx-auto p-8 md:p-16 text-center">
-        <h2 className="sans-text text-3xl md:text-5xl font-bold text-[#111] mb-6 tracking-tight">
-          Let's smooth the path.
+      <section className="h-screen w-full flex flex-col items-center justify-center text-center px-6">
+        <h2 className="sans-text text-5xl md:text-8xl font-bold tracking-tighter mb-12 pointer-events-none">
+          Ready to Forge?
         </h2>
-        <p className="sans-text text-lg text-[#6B6B6B] mb-12">
-          Drop your URL below. We'll trace the friction and deliver the patch.
-        </p>
-
-        {status === "success" ? (
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="p-8 bg-[var(--color-accent-coral)] text-white rounded-2xl font-bold text-xl"
-          >
-            Audit request received. We'll be in touch.
-          </motion.div>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4 text-left">
-            <div>
-              <label className="block sans-text text-sm font-bold text-[#111] mb-2 px-1">Website URL</label>
-              <input 
-                type="url" 
-                required 
-                placeholder="https://yourstartup.com" 
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                className="input-field"
-                disabled={status === "loading"}
-              />
-            </div>
-            <div>
-              <label className="block sans-text text-sm font-bold text-[#111] mb-2 px-1">Work Email</label>
-              <input 
-                type="email" 
-                required 
-                placeholder="founder@yourstartup.com" 
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="input-field"
-                disabled={status === "loading"}
-              />
-            </div>
-            <MagneticButton type="submit" className="btn-inverted w-full mt-4 flex justify-center items-center">
-              {status === "loading" ? "Submitting..." : "Request Audit"}
-            </MagneticButton>
-            {status === "error" && <p className="text-[var(--color-accent-coral)] text-sm mt-2 text-center">Something went wrong. Please try again.</p>}
-          </form>
-        )}
-      </div>
+        <button className="bg-[#111] text-white px-12 py-6 rounded-full sans-text text-2xl font-bold shadow-2xl hover:scale-105 transition-transform pointer-events-auto">
+          Start the Audit
+        </button>
+      </section>
     </div>
   );
 }
 
-function Footer() {
-  return (
-    <div className="px-6 py-12 md:py-16 border-t border-[var(--color-glass-border)] flex flex-col md:flex-row justify-between items-center gap-6 relative z-10 bg-[var(--color-primary-bg)]">
-      <div className="flex items-center gap-4">
-        <div className="w-5 h-5 rounded bg-[#111]" />
-        <span className="sans-text font-bold text-[#111]">Forge</span>
-      </div>
-      <div className="sans-text text-sm font-medium text-[#6B6B6B]">
-        forge.run · precision over intuition
-      </div>
-    </div>
-  );
-}
+// --- Main Application ---
 
 export default function Home() {
+  const { scrollYProgress } = useScroll();
+
   return (
-    <SmoothScroll>
-      <main className="p-0 m-0 relative">
-        <SceneBackground />
-        <Header />
-        <Hero />
-        <Methodology />
-        <Specimen />
-        <IntakeForm />
-        <Footer />
-      </main>
-    </SmoothScroll>
+    <main className="relative w-full bg-[#FAFAF8] text-[#111]">
+      <header className="fixed top-0 left-0 w-full px-6 py-8 flex items-center justify-between z-50 pointer-events-none">
+        <div className="flex items-center gap-3">
+          <div className="w-6 h-6 rounded-md bg-[#111]" />
+          <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Forge</span>
+        </div>
+        <div className="sans-text font-bold tracking-widest uppercase text-xs text-[#6B6B6B]">
+          Precision Engineering
+        </div>
+      </header>
+
+      <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
+        <Canvas camera={{ position: [0, 0, 10], fov: 45 }}>
+          <ambientLight intensity={1} />
+          <Environment preset="city" />
+          <ParticleSwarm scrollYProgress={scrollYProgress} />
+        </Canvas>
+      </div>
+
+      <div className="relative z-10 w-full">
+        <MinimalDOM />
+      </div>
+    </main>
   );
 }
