@@ -16,33 +16,64 @@ function randomOnRect(w: number, h: number, z: number, axis: 'x' | 'y' | 'z') {
   return [z, a, b];
 }
 
+function getSpawnPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    // Scatter across screen-space: wide X and Y, moderate Z
+    const x = (Math.random() - 0.5) * 60;
+    const y = (Math.random() - 0.5) * 60;
+    const z = (Math.random() - 0.5) * 40 - 10;
+    points[i*3] = x;
+    points[i*3+1] = y;
+    points[i*3+2] = z;
+  }
+  return points;
+}
+
 function getDataCorePoints(count: number) {
   const points = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
     const r = Math.random();
-    if (r < 0.4) {
-      // Dense central sphere (core)
+    if (r < 0.15) {
+      // Inner Dense Nucleus
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
-      const rad = Math.cbrt(Math.random()) * 1.0; // Scaled down from 1.8
+      const rad = Math.cbrt(Math.random()) * 0.4;
+      points[i*3] = rad * Math.sin(phi) * Math.cos(theta);
+      points[i*3+1] = rad * Math.sin(phi) * Math.sin(theta);
+      points[i*3+2] = rad * Math.cos(phi);
+    } else if (r < 0.35) {
+      // Outer Spherical Shell
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      const rad = 0.9 + (Math.random() * 0.05);
       points[i*3] = rad * Math.sin(phi) * Math.cos(theta);
       points[i*3+1] = rad * Math.sin(phi) * Math.sin(theta);
       points[i*3+2] = rad * Math.cos(phi);
     } else {
-      // Intricate orbital rings
-      const ringId = Math.floor(Math.random() * 8); // 8 rings
+      // Omni-Directional Orbital Rings
+      const ringId = Math.floor(Math.random() * 12);
       const theta = Math.random() * Math.PI * 2;
-      const rad = 1.3 + ringId * 0.25 + (Math.random() * 0.05); // Scaled down from 2.2
+      const rad = 1.3 + (ringId % 4) * 0.25 + (Math.random() * 0.05);
       
       let bx = Math.cos(theta) * rad;
-      let by = (Math.random() - 0.5) * 0.15; // thick rings
-      let bz = Math.sin(theta) * rad;
+      let by = Math.sin(theta) * rad;
+      let bz = (Math.random() - 0.5) * 0.15;
       
-      // Tilt ring
-      const tilt = (ringId / 8) * Math.PI;
-      points[i*3] = bx * Math.cos(tilt) - by * Math.sin(tilt);
-      points[i*3+1] = bx * Math.sin(tilt) + by * Math.cos(tilt);
-      points[i*3+2] = bz;
+      const rotX = (ringId * 13.1) % (Math.PI * 2);
+      const rotY = (ringId * 7.7) % (Math.PI * 2);
+      const rotZ = (ringId * 19.3) % (Math.PI * 2);
+      
+      let y1 = by * Math.cos(rotX) - bz * Math.sin(rotX);
+      let z1 = by * Math.sin(rotX) + bz * Math.cos(rotX);
+      let x2 = bx * Math.cos(rotY) + z1 * Math.sin(rotY);
+      let z2 = -bx * Math.sin(rotY) + z1 * Math.cos(rotY);
+      let x3 = x2 * Math.cos(rotZ) - y1 * Math.sin(rotZ);
+      let y3 = x2 * Math.sin(rotZ) + y1 * Math.cos(rotZ);
+      
+      points[i*3] = x3;
+      points[i*3+1] = y3;
+      points[i*3+2] = z2;
     }
   }
   return points;
@@ -244,16 +275,17 @@ function getSilkWavePoints(count: number) {
 // --- Custom GLSL Vertex Shader ---
 
 const vertexShader = `
-uniform float uProgress;
-uniform float uTime;
-uniform float uSpawnTime;
-uniform vec3 uOffsets[5]; // Global offsets for the 5 shapes
+  attribute vec3 spawnPos;
+  attribute vec3 position1;
+  attribute vec3 position2;
+  attribute vec3 position3;
+  attribute vec3 position4;
+  attribute vec3 position5;
 
-attribute vec3 position1;
-attribute vec3 position2;
-attribute vec3 position3;
-attribute vec3 position4;
-attribute vec3 position5;
+  uniform float uTime;
+  uniform float uProgress;
+  uniform float uSpawnTime;
+  uniform vec3 uOffsets[5];
 
 // Hash & Noise
 float hash(vec3 p) {
@@ -287,16 +319,14 @@ vec3 curlNoise(vec3 p) {
 }
 
 void main() {
-  // DEDICATED SHAPE ANIMATIONS (applied in local space before offset)
-  
-  // 1. Data Core: Rings orbit the center at different speeds based on distance
+  // 1. Data Core: Rings orbit the center at different speeds
   vec3 p1 = position1;
   float dist1 = length(p1.xz);
-  float angle1 = uTime * (0.4 / (dist1 + 0.5)); // Slower
+  float angle1 = uTime * (0.4 / (dist1 + 0.5));
   float tmpX1 = p1.x * cos(angle1) - p1.z * sin(angle1);
   float tmpZ1 = p1.x * sin(angle1) + p1.z * cos(angle1);
   p1.x = tmpX1; p1.z = tmpZ1;
-  
+
   // 2. DNA Helix: Majestic slow rotation around Y-axis
   vec3 p2 = position2;
   float dnaAngle = uTime * 0.2;
@@ -304,19 +334,19 @@ void main() {
   float tmpZ2 = p2.x * sin(dnaAngle) + p2.z * cos(dnaAngle);
   p2.x = tmpX2; p2.z = tmpZ2;
   
-  // 3. Delta Jet: Smooth hover banking and violent thruster exhaust
+  // 3. Jet: Smooth hover and thruster exhaust
   vec3 p3 = position3;
-  p3.y += sin(uTime * 1.5) * 0.3; // Slower hover
-  if (p3.z > 3.0) { // Thrusters at the back
+  p3.y += sin(uTime * 1.5) * 0.3;
+  if (p3.z > 3.0) {
       p3.x += (hash(p3 + uTime) - 0.5) * 0.15;
       p3.y += (hash(p3 + uTime + 1.0) - 0.5) * 0.15;
   }
   
-  // 4. Microchip: Energy pulses shooting down the pins
+  // 4. Microchip: Energy pulses
   vec3 p4 = position4;
-  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 3.0)) * 0.1; // Slower pulse
+  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 3.0)) * 0.1; 
   
-  // 5. Silk Wave: Majestic ocean-like undulating waves
+  // 5. Silk Wave: Ocean-like undulation
   vec3 p5 = position5;
   p5.y += sin(p5.x * 0.3 + uTime * 0.6) * 1.2 + cos(p5.z * 0.4 + uTime * 0.4) * 0.8;
 
@@ -356,15 +386,23 @@ void main() {
   vec3 curl = curlNoise(target * 0.5 + uTime * 0.2) * noiseIntensity;
   vec3 finalPos = target + curl;
 
-  // SPAWN ANIMATION (Big Bang)
+  // SPAWN ANIMATION (Chaotic Coalescence)
   float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0); 
-  vec3 origin = uOffsets[0]; // Explode from Hero position
-  finalPos = mix(origin, finalPos, spawnEase);
+  
+  // Particles start fully scattered from the dedicated spawnPos buffer
+  vec3 chaoticStart = spawnPos;
+  
+  // Add extreme curl turbulence during the spawn phase so they take curved, flowing paths inward
+  float spawnTurbulence = (1.0 - spawnEase) * 4.0; 
+  vec3 spawnCurl = curlNoise(chaoticStart * 0.1 + uTime) * spawnTurbulence;
+  chaoticStart += spawnCurl;
+  
+  finalPos = mix(chaoticStart, finalPos, spawnEase);
   
   vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   
-  gl_PointSize = max(2.0, 50.0 / -mvPosition.z) * (1.0 + noiseIntensity * 0.5) * spawnEase;
+  gl_PointSize = max(1.5, 50.0 / -mvPosition.z) * (1.0 + noiseIntensity * 0.5) * spawnEase;
 }
 `;
 
@@ -379,27 +417,43 @@ void main() {
 
 // --- The GPU Particle Swarm ---
 
-const PARTICLE_COUNT = 50000;
+const PARTICLE_COUNT_DESKTOP = 50000;
+const PARTICLE_COUNT_MOBILE = 25000;
 
 function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
   const pointsRef = useRef<THREE.Points>(null);
-  const { viewport } = useThree();
+  const { viewport, size } = useThree();
+  
+  const isMobile = size.width < 768;
+  const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
   
   const mountTime = useRef(Date.now());
 
   // Generate centered buffers
   const buffers = useMemo(() => ({
+    spawn: getSpawnPoints(PARTICLE_COUNT),
     pos1: getDataCorePoints(PARTICLE_COUNT),
     pos2: getDNAPoints(PARTICLE_COUNT),
     pos3: getJetPoints(PARTICLE_COUNT),
     pos4: getMicrochipPoints(PARTICLE_COUNT),
     pos5: getSilkWavePoints(PARTICLE_COUNT) 
-  }), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [PARTICLE_COUNT]);
 
-  // Define global spatial offsets mapping to DOM
+  // Define global spatial offsets mapping to DOM — responsive
   const offsets = useMemo(() => {
     const vh = viewport.height;
+    if (isMobile) {
+      // Mobile: Center everything, stack vertically
+      return [
+        new THREE.Vector3(0, 1.5, 0),              // Hero: Center-top
+        new THREE.Vector3(0, -vh + 1.5, 0),         // Section 2: Center
+        new THREE.Vector3(0, -vh * 2 + 1.5, 0),     // Section 3: Center
+        new THREE.Vector3(0, -vh * 3 + 1.5, 0),     // Section 4: Center
+        new THREE.Vector3(0, -vh * 4 - 0.5, 0),     // Section 5: Center
+      ];
+    }
     return [
       new THREE.Vector3(3.0, 0, 0),             // Hero: Right
       new THREE.Vector3(2.5, -vh - 1.0, 0),     // Section 2: Right
@@ -407,7 +461,7 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
       new THREE.Vector3(2.5, -vh * 3, 0),       // Section 4: Right
       new THREE.Vector3(0, -vh * 4 - 0.5, 0),   // Section 5: Center
     ];
-  }, [viewport.height]);
+  }, [viewport.height, isMobile]);
 
   const uniforms = useMemo(() => ({
     uProgress: { value: 0 },
@@ -422,7 +476,8 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
     const time = state.clock.getElapsedTime();
     const progress = scrollYProgress.get(); 
     
-    const elapsedSpawn = (Date.now() - mountTime.current) / 2500;
+    // Slower spawn: 4 seconds instead of 2.5
+    const elapsedSpawn = (Date.now() - mountTime.current) / 4000;
     
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = progress * 4.0;
@@ -430,14 +485,13 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
 
     // Sync WebGL swarm vertically with native DOM scroll
     pointsRef.current.position.y = progress * (viewport.height * 4.0);
-    
-    // NOTE: Removed pointsRef.current.rotation to eliminate erratic spinning!
   });
 
   return (
     <points ref={pointsRef} frustumCulled={false}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[buffers.pos1, 3]} />
+        <bufferAttribute attach="attributes-spawnPos" args={[buffers.spawn, 3]} />
         <bufferAttribute attach="attributes-position1" args={[buffers.pos1, 3]} />
         <bufferAttribute attach="attributes-position2" args={[buffers.pos2, 3]} />
         <bufferAttribute attach="attributes-position3" args={[buffers.pos3, 3]} />
@@ -457,57 +511,348 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   );
 }
 
+// --- Intake Form Modal ---
+
+function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  const [formData, setFormData] = useState({ name: '', email: '', url: '' });
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus('submitting');
+    setErrorMsg('');
+
+    try {
+      const res = await fetch('/api/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Something went wrong.');
+        setStatus('error');
+        return;
+      }
+
+      setStatus('success');
+    } catch {
+      setErrorMsg('Network error. Please try again.');
+      setStatus('error');
+    }
+  };
+
+  const handleClose = () => {
+    onClose();
+    // Reset after animation
+    setTimeout(() => {
+      setStatus('idle');
+      setFormData({ name: '', email: '', url: '' });
+      setErrorMsg('');
+    }, 300);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        animation: 'modalFadeIn 0.3s ease-out',
+      }}
+    >
+      {/* Backdrop */}
+      <div
+        onClick={handleClose}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(10, 10, 8, 0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+        }}
+      />
+
+      {/* Modal */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: '480px',
+          background: '#FAFAF8',
+          border: '1px solid rgba(0,0,0,0.08)',
+          borderRadius: '16px',
+          padding: '48px',
+          boxShadow: '0 48px 96px -24px rgba(0,0,0,0.25)',
+          animation: 'modalSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+          fontFamily: 'var(--font-inter), system-ui, sans-serif',
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={handleClose}
+          aria-label="Close"
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '20px',
+            background: 'none',
+            border: 'none',
+            fontSize: '24px',
+            color: '#6B6B6B',
+            cursor: 'pointer',
+            lineHeight: 1,
+            padding: '4px',
+          }}
+        >
+          ×
+        </button>
+
+        {status === 'success' ? (
+          <div style={{ textAlign: 'center', padding: '24px 0' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>✓</div>
+            <h3
+              style={{
+                fontSize: '28px',
+                fontWeight: 700,
+                letterSpacing: '-0.03em',
+                margin: '0 0 12px',
+                color: '#111',
+              }}
+            >
+              She's on her way.
+            </h3>
+            <p style={{ fontSize: '16px', color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
+              We'll reach out within 48 hours to begin the survey. Keep an eye on your inbox.
+            </p>
+            <button
+              onClick={handleClose}
+              style={{
+                background: '#111',
+                color: '#FAFAF8',
+                border: 'none',
+                padding: '14px 32px',
+                borderRadius: '100px',
+                fontSize: '15px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <>
+            <h3
+              style={{
+                fontSize: '28px',
+                fontWeight: 700,
+                letterSpacing: '-0.03em',
+                margin: '0 0 8px',
+                color: '#111',
+              }}
+            >
+              Request a survey
+            </h3>
+            <p style={{ fontSize: '15px', color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
+              Free during private beta. No card required.
+            </p>
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label
+                  htmlFor="intake-name"
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#6B6B6B',
+                    marginBottom: '6px',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  Your name
+                </label>
+                <input
+                  id="intake-name"
+                  type="text"
+                  required
+                  placeholder="Jane Doe"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input-field"
+                  style={{ boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="intake-email"
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#6B6B6B',
+                    marginBottom: '6px',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  Email
+                </label>
+                <input
+                  id="intake-email"
+                  type="email"
+                  required
+                  placeholder="jane@company.com"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="input-field"
+                  style={{ boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="intake-url"
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#6B6B6B',
+                    marginBottom: '6px',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  Website URL
+                </label>
+                <input
+                  id="intake-url"
+                  type="url"
+                  required
+                  placeholder="https://yoursite.com"
+                  value={formData.url}
+                  onChange={(e) => setFormData({ ...formData, url: e.target.value })}
+                  className="input-field"
+                  style={{ boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {status === 'error' && (
+                <p style={{ fontSize: '14px', color: '#d32f2f', margin: '0', padding: '8px 12px', background: 'rgba(211,47,47,0.06)', borderRadius: '8px' }}>
+                  {errorMsg}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={status === 'submitting'}
+                style={{
+                  marginTop: '8px',
+                  background: status === 'submitting' ? '#444' : '#111',
+                  color: '#FAFAF8',
+                  border: 'none',
+                  padding: '16px 32px',
+                  borderRadius: '100px',
+                  fontSize: '16px',
+                  fontWeight: 600,
+                  cursor: status === 'submitting' ? 'wait' : 'pointer',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.2s ease',
+                  opacity: status === 'submitting' ? 0.7 : 1,
+                }}
+              >
+                {status === 'submitting' ? 'Sending…' : 'Start the Forge →'}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes modalFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes modalSlideUp {
+          from { opacity: 0; transform: translateY(24px) scale(0.96); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // --- The Minimalist DOM Overlay ---
 
 function MinimalDOM() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const openModal = () => setIsModalOpen(true);
+  const closeModal = () => setIsModalOpen(false);
+
   return (
     <div className="w-full text-[#111]">
-      <section className="h-screen w-full flex items-center px-6 md:px-24 pointer-events-none">
+      <section className="h-screen w-full flex items-end md:items-center px-6 md:px-24 pb-24 md:pb-0 pointer-events-none">
         <div className="max-w-[700px]">
-          <h1 className="sans-text text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-8 leading-[0.9]">
+          <h1 className="sans-text text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-6 md:mb-8 leading-[0.9]">
             Clarity over<br/>intuition.
           </h1>
-          <p className="sans-text text-xl md:text-2xl font-medium text-[#6B6B6B]">
+          <p className="sans-text text-base sm:text-xl md:text-2xl font-medium text-[#6B6B6B]">
             We ingest 30 days of raw PostHog data and algorithmically map the friction points breaking your architecture.
           </p>
         </div>
       </section>
 
-      <section className="h-screen w-full flex items-start pt-[20vh] px-6 md:px-24 pointer-events-none">
+      <section className="h-screen w-full flex items-center md:items-start md:pt-[20vh] px-6 md:px-24 pointer-events-none">
         <div className="max-w-[500px]">
-          <h2 className="sans-text text-5xl md:text-7xl font-bold tracking-tight mb-6">The Audit.</h2>
-          <p className="sans-text text-xl md:text-2xl text-[#6B6B6B]">
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-4 md:mb-6">The Audit.</h2>
+          <p className="sans-text text-base sm:text-xl md:text-2xl text-[#6B6B6B]">
             A website isn't art. It's a conversion engine. We don't guess what's wrong—we mathematically map your entire user journey to isolate where revenue is bleeding.
           </p>
         </div>
       </section>
 
-      <section className="h-screen w-full flex items-start justify-end pt-[20vh] px-6 md:px-24 text-right pointer-events-none">
+      <section className="h-screen w-full flex items-center md:items-start md:justify-end md:pt-[20vh] px-6 md:px-24 md:text-right pointer-events-none">
         <div className="max-w-[500px]">
-          <h2 className="sans-text text-5xl md:text-7xl font-bold tracking-tight mb-6">The Aerodynamics.</h2>
-          <p className="sans-text text-xl md:text-2xl text-[#6B6B6B]">
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-4 md:mb-6">The Aerodynamics.</h2>
+          <p className="sans-text text-base sm:text-xl md:text-2xl text-[#6B6B6B]">
             Once the leaks are isolated, we provide the precise code-level patches needed to remove drag and lift your conversion rates to the stratosphere.
           </p>
         </div>
       </section>
 
-      <section className="h-screen w-full flex items-start pt-[20vh] px-6 md:px-24 pointer-events-none">
+      <section className="h-screen w-full flex items-center md:items-start md:pt-[20vh] px-6 md:px-24 pointer-events-none">
         <div className="max-w-[500px]">
-          <h2 className="sans-text text-5xl md:text-7xl font-bold tracking-tight mb-6">The Engine.</h2>
-          <p className="sans-text text-xl md:text-2xl text-[#6B6B6B]">
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-4 md:mb-6">The Engine.</h2>
+          <p className="sans-text text-base sm:text-xl md:text-2xl text-[#6B6B6B]">
             We don't deal in generic best practices. Every UI intervention is backed by pure certainty extracted exclusively from your own traffic.
           </p>
         </div>
       </section>
 
       <section className="h-screen w-full flex flex-col items-center justify-center text-center px-6">
-        <h2 className="sans-text text-5xl md:text-8xl font-bold tracking-tighter mb-12 pointer-events-none">
+        <h2 className="sans-text text-3xl sm:text-5xl md:text-8xl font-bold tracking-tighter mb-8 md:mb-12 pointer-events-none">
           Ready to Forge?
         </h2>
-        <button className="bg-[#111] text-white px-12 py-6 rounded-full sans-text text-2xl font-bold shadow-2xl hover:scale-105 transition-transform pointer-events-auto">
-          Start the Audit
+        <button
+          onClick={openModal}
+          className="bg-[#111] text-white px-8 md:px-12 py-4 md:py-6 rounded-full sans-text text-lg md:text-2xl font-bold shadow-2xl hover:scale-105 transition-transform pointer-events-auto"
+        >
+          Start the Forge
         </button>
       </section>
+
+      <IntakeModal isOpen={isModalOpen} onClose={closeModal} />
     </div>
   );
 }
