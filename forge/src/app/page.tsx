@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useRef } from "react";
-import { motion, useScroll, useTransform, useSpring } from "framer-motion";
+import { motion, useScroll, useTransform, useSpring, MotionValue } from "framer-motion";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { MeshDistortMaterial, Icosahedron, Float, Environment } from "@react-three/drei";
 import * as THREE from "three";
 
 // --- 3D Scene Component ---
-function FluidMesh({ scrollYProgress }: { scrollYProgress: any }) {
+function FluidMesh({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<any>(null);
   
@@ -15,17 +15,18 @@ function FluidMesh({ scrollYProgress }: { scrollYProgress: any }) {
   
   useFrame((state, delta) => {
     if (meshRef.current && materialRef.current) {
-      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.2 + smoothProgress.get() * Math.PI * 2;
-      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.1 + smoothProgress.get() * Math.PI;
+      const progress = smoothProgress.get();
+      meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.2 + progress * Math.PI * 2;
+      meshRef.current.rotation.x = state.clock.getElapsedTime() * 0.1 + progress * Math.PI;
       
       const baseDistort = 0.3;
-      const scrollDistort = smoothProgress.get() * 0.6;
+      const scrollDistort = progress * 0.6;
       materialRef.current.distort = THREE.MathUtils.lerp(materialRef.current.distort, baseDistort + scrollDistort, 0.05);
       
       const color = new THREE.Color().lerpColors(
         new THREE.Color("#FF3366"),
         new THREE.Color("#00E5FF"),
-        smoothProgress.get()
+        progress
       );
       materialRef.current.color = color;
     }
