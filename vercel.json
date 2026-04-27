@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd forge && npm run build",
+  "outputDirectory": "forge/.next",
+  "framework": "nextjs",
+  "installCommand": "cd forge && npm install"
+}
