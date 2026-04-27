@@ -2,7 +2,6 @@
 
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Environment } from "@react-three/drei";
 import { motion, useScroll } from "framer-motion";
 import * as THREE from "three";
 
@@ -285,6 +284,8 @@ const vertexShader = `
   uniform float uTime;
   uniform float uProgress;
   uniform float uSpawnTime;
+  uniform float uScale;
+  uniform float uMobile;
   uniform vec3 uOffsets[5];
 
 // Hash & Noise
@@ -320,7 +321,7 @@ vec3 curlNoise(vec3 p) {
 
 void main() {
   // 1. Data Core: Rings orbit the center at different speeds
-  vec3 p1 = position1;
+  vec3 p1 = position1 * uScale;
   float dist1 = length(p1.xz);
   float angle1 = uTime * (0.4 / (dist1 + 0.5));
   float tmpX1 = p1.x * cos(angle1) - p1.z * sin(angle1);
@@ -328,27 +329,29 @@ void main() {
   p1.x = tmpX1; p1.z = tmpZ1;
 
   // 2. DNA Helix: Majestic slow rotation around Y-axis
-  vec3 p2 = position2;
+  vec3 p2 = position2 * uScale;
   float dnaAngle = uTime * 0.2;
   float tmpX2 = p2.x * cos(dnaAngle) - p2.z * sin(dnaAngle);
   float tmpZ2 = p2.x * sin(dnaAngle) + p2.z * cos(dnaAngle);
   p2.x = tmpX2; p2.z = tmpZ2;
   
   // 3. Jet: Smooth hover and thruster exhaust
-  vec3 p3 = position3;
-  p3.y += sin(uTime * 1.5) * 0.3;
-  if (p3.z > 3.0) {
-      p3.x += (hash(p3 + uTime) - 0.5) * 0.15;
-      p3.y += (hash(p3 + uTime + 1.0) - 0.5) * 0.15;
+  vec3 p3 = position3 * uScale;
+  p3.y += sin(uTime * 1.5) * 0.3 * uScale;
+  if (p3.z > 3.0 * uScale) {
+      float thrusterIntensity = 0.15 * (1.0 - uMobile * 0.5);
+      p3.x += (hash(p3 + uTime) - 0.5) * thrusterIntensity;
+      p3.y += (hash(p3 + uTime + 1.0) - 0.5) * thrusterIntensity;
   }
   
   // 4. Microchip: Energy pulses
-  vec3 p4 = position4;
-  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 3.0)) * 0.1; 
+  vec3 p4 = position4 * uScale;
+  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 3.0)) * 0.1 * uScale; 
   
   // 5. Silk Wave: Ocean-like undulation
-  vec3 p5 = position5;
-  p5.y += sin(p5.x * 0.3 + uTime * 0.6) * 1.2 + cos(p5.z * 0.4 + uTime * 0.4) * 0.8;
+  vec3 p5 = position5 * uScale;
+  float waveIntensity = 1.0 - uMobile * 0.4;
+  p5.y += (sin(p5.x * 0.3 + uTime * 0.6) * 1.2 + cos(p5.z * 0.4 + uTime * 0.4) * 0.8) * waveIntensity;
 
   // Apply world offsets
   vec3 w1 = p1 + uOffsets[0];
@@ -381,8 +384,9 @@ void main() {
   }
   
   // Apply Curl Noise fluid dynamics only during morphing.
-  // Reduced intensity to 1.2 so it feels like slow fluid smoke, not chaotic splashing
-  float noiseIntensity = sin(transitionState * 3.14159) * 1.2;
+  // On mobile, reduce intensity significantly for performance
+  float curlScale = 1.2 * (1.0 - uMobile * 0.6);
+  float noiseIntensity = sin(transitionState * 3.14159) * curlScale;
   vec3 curl = curlNoise(target * 0.5 + uTime * 0.2) * noiseIntensity;
   vec3 finalPos = target + curl;
 
@@ -402,7 +406,7 @@ void main() {
   vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   
-  gl_PointSize = max(1.5, 50.0 / -mvPosition.z) * (1.0 + noiseIntensity * 0.5) * spawnEase;
+  gl_PointSize = max(1.0, (50.0 - uMobile * 20.0) / -mvPosition.z) * (1.0 + noiseIntensity * 0.3) * spawnEase;
 }
 `;
 
@@ -418,7 +422,7 @@ void main() {
 // --- The GPU Particle Swarm ---
 
 const PARTICLE_COUNT_DESKTOP = 50000;
-const PARTICLE_COUNT_MOBILE = 25000;
+const PARTICLE_COUNT_MOBILE = 12000;
 
 function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
@@ -427,6 +431,7 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   
   const isMobile = size.width < 768;
   const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
+  const shapeScale = isMobile ? 0.55 : 1.0;
   
   const mountTime = useRef(Date.now());
 
@@ -445,13 +450,18 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   const offsets = useMemo(() => {
     const vh = viewport.height;
     if (isMobile) {
-      // Mobile: Center everything, stack vertically
+      // Per-shape offsets tuned to each shape's actual geometry
+      // Data Core: compact (~2.5u radius). Sits just above center
+      // DNA: VERY tall (11u). Must be pushed far up so bottom doesn't cover text
+      // Jet: long but not tall (~2u height). Moderate offset
+      // Microchip: wide, flat (~3u height). Moderate offset
+      // Silk Wave: huge, flat. Centered for CTA
       return [
-        new THREE.Vector3(0, 1.5, 0),              // Hero: Center-top
-        new THREE.Vector3(0, -vh + 1.5, 0),         // Section 2: Center
-        new THREE.Vector3(0, -vh * 2 + 1.5, 0),     // Section 3: Center
-        new THREE.Vector3(0, -vh * 3 + 1.5, 0),     // Section 4: Center
-        new THREE.Vector3(0, -vh * 4 - 0.5, 0),     // Section 5: Center
+        new THREE.Vector3(0, vh * 0.08, -1),                    // Hero: Data Core just above center
+        new THREE.Vector3(0, -vh + vh * 0.35, -1),              // Section 2: DNA pushed HIGH
+        new THREE.Vector3(0, -vh * 2 + vh * 0.12, -1),          // Section 3: Jet moderate
+        new THREE.Vector3(0, -vh * 3 + vh * 0.12, -1),          // Section 4: Microchip moderate
+        new THREE.Vector3(0, -vh * 4 - 0.5, -1),                // Section 5: Silk wave CTA
       ];
     }
     return [
@@ -467,8 +477,11 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
     uProgress: { value: 0 },
     uTime: { value: 0 },
     uSpawnTime: { value: 0 },
+    uScale: { value: shapeScale },
+    uMobile: { value: isMobile ? 1.0 : 0.0 },
     uOffsets: { value: offsets }
-  }), [offsets]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [offsets, shapeScale, isMobile]);
 
   useFrame((state) => {
     if (!shaderRef.current || !pointsRef.current) return;
@@ -476,8 +489,9 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
     const time = state.clock.getElapsedTime();
     const progress = scrollYProgress.get(); 
     
-    // Slower spawn: 4 seconds instead of 2.5
-    const elapsedSpawn = (Date.now() - mountTime.current) / 4000;
+    // Slower spawn: 4 seconds on desktop, 3 seconds on mobile
+    const spawnDuration = isMobile ? 3000 : 4000;
+    const elapsedSpawn = (Date.now() - mountTime.current) / spawnDuration;
     
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = progress * 4.0;
@@ -802,44 +816,49 @@ function MinimalDOM() {
 
   return (
     <div className="w-full text-[#111]">
-      <section className="h-screen w-full flex items-end md:items-center px-6 md:px-24 pb-24 md:pb-0 pointer-events-none">
+      {/* Hero: Data Core is compact, text can sit close below */}
+      <section className="h-screen w-full flex flex-col justify-end md:justify-center px-6 md:px-24 pb-10 md:pb-0 pointer-events-none">
         <div className="max-w-[700px]">
-          <h1 className="sans-text text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-6 md:mb-8 leading-[0.9]">
+          <h1 className="sans-text text-[2.5rem] sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-4 md:mb-8 leading-[0.9]">
             Clarity over<br/>intuition.
           </h1>
-          <p className="sans-text text-base sm:text-xl md:text-2xl font-medium text-[#6B6B6B]">
+          <p className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-relaxed">
             We ingest 30 days of raw PostHog data and algorithmically map the friction points breaking your architecture.
           </p>
         </div>
       </section>
 
-      <section className="h-screen w-full flex items-center md:items-start md:pt-[20vh] px-6 md:px-24 pointer-events-none">
-        <div className="max-w-[500px]">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-4 md:mb-6">The Audit.</h2>
-          <p className="sans-text text-base sm:text-xl md:text-2xl text-[#6B6B6B]">
-            A website isn't art. It's a conversion engine. We don't guess what's wrong—we mathematically map your entire user journey to isolate where revenue is bleeding.
+      {/* Section 2: DNA is 11 units tall — text must start very low */}
+      <section className="h-screen w-full flex flex-col pt-[62vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
+        <div className="max-w-[500px] md:mt-[20vh]">
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">The Audit.</h2>
+          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
+            A website isn&apos;t art. It&apos;s a conversion engine. We don&apos;t guess what&apos;s wrong—we mathematically map your entire user journey to isolate where revenue is bleeding.
           </p>
         </div>
       </section>
 
-      <section className="h-screen w-full flex items-center md:items-start md:justify-end md:pt-[20vh] px-6 md:px-24 md:text-right pointer-events-none">
-        <div className="max-w-[500px]">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-4 md:mb-6">The Aerodynamics.</h2>
-          <p className="sans-text text-base sm:text-xl md:text-2xl text-[#6B6B6B]">
+      {/* Section 3: Jet is wide but not tall — text can be higher */}
+      <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
+        <div className="max-w-[500px] md:mt-[20vh]">
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">The Aerodynamics.</h2>
+          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
             Once the leaks are isolated, we provide the precise code-level patches needed to remove drag and lift your conversion rates to the stratosphere.
           </p>
         </div>
       </section>
 
-      <section className="h-screen w-full flex items-center md:items-start md:pt-[20vh] px-6 md:px-24 pointer-events-none">
-        <div className="max-w-[500px]">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-4 md:mb-6">The Engine.</h2>
-          <p className="sans-text text-base sm:text-xl md:text-2xl text-[#6B6B6B]">
-            We don't deal in generic best practices. Every UI intervention is backed by pure certainty extracted exclusively from your own traffic.
+      {/* Section 4: Microchip is flat/wide — text can be higher */}
+      <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
+        <div className="max-w-[500px] md:mt-[20vh]">
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">The Engine.</h2>
+          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
+            We don&apos;t deal in generic best practices. Every UI intervention is backed by pure certainty extracted exclusively from your own traffic.
           </p>
         </div>
       </section>
 
+      {/* Section 5: CTA */}
       <section className="h-screen w-full flex flex-col items-center justify-center text-center px-6">
         <h2 className="sans-text text-3xl sm:text-5xl md:text-8xl font-bold tracking-tighter mb-8 md:mb-12 pointer-events-none">
           Ready to Forge?
@@ -875,9 +894,8 @@ export default function Home() {
       </header>
 
       <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
-        <Canvas camera={{ position: [0, 0, 10], fov: 45 }}>
+        <Canvas camera={{ position: [0, 0, 10], fov: 45 }} dpr={[1, 1.5]}>
           <ambientLight intensity={1} />
-          <Environment preset="city" />
           <ParticleSwarm scrollYProgress={scrollYProgress} />
         </Canvas>
       </div>
