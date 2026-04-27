@@ -48,42 +48,56 @@ function getDataCorePoints(count: number) {
   return points;
 }
 
-function getServerGridPoints(count: number) {
+function getDNAPoints(count: number) {
   const points = new Float32Array(count * 3);
+  const height = 11.0;
+  const radius = 2.0;
+  const turns = 2.5;
+  const numSteps = 40; // Horizontal rungs
+
   for (let i = 0; i < count; i++) {
-    // 10x10 Cityscape / Server Rack Grid (Tighter, scaled down)
-    const gx = Math.floor(Math.random() * 10) - 5;
-    const gz = Math.floor(Math.random() * 10) - 5;
+    const r = Math.random();
+    const t = Math.random() - 0.5; // -0.5 to 0.5 (bottom to top)
+    const y = t * height;
+    const angle = t * Math.PI * 2 * turns;
     
-    // Gaussian distribution: Taller buildings in the center, lower on the edges
-    const distFromCenter = Math.sqrt(gx*gx + gz*gz);
-    const maxH = 4.0;
-    const height = maxH * Math.exp(-distFromCenter * 0.4) + Math.random() * 0.5;
+    if (r < 0.3) {
+      // Backbone 1
+      const noiseX = (Math.random() - 0.5) * 0.3;
+      const noiseZ = (Math.random() - 0.5) * 0.3;
+      points[i*3] = Math.cos(angle) * radius + noiseX;
+      points[i*3+1] = y + (Math.random() - 0.5) * 0.2;
+      points[i*3+2] = Math.sin(angle) * radius + noiseZ;
+    } else if (r < 0.6) {
+      // Backbone 2 (180 degrees offset)
+      const noiseX = (Math.random() - 0.5) * 0.3;
+      const noiseZ = (Math.random() - 0.5) * 0.3;
+      points[i*3] = Math.cos(angle + Math.PI) * radius + noiseX;
+      points[i*3+1] = y + (Math.random() - 0.5) * 0.2;
+      points[i*3+2] = Math.sin(angle + Math.PI) * radius + noiseZ;
+    } else {
+      // Connecting rungs
+      const stepT = (Math.floor((t + 0.5) * numSteps) / numSteps) - 0.5;
+      const stepY = stepT * height;
+      const stepAngle = stepT * Math.PI * 2 * turns;
+      
+      const bridgeT = Math.random(); // 0 to 1 across the rung
+      const x1 = Math.cos(stepAngle) * radius;
+      const z1 = Math.sin(stepAngle) * radius;
+      const x2 = Math.cos(stepAngle + Math.PI) * radius;
+      const z2 = Math.sin(stepAngle + Math.PI) * radius;
+      
+      points[i*3] = x1 * (1 - bridgeT) + x2 * bridgeT + (Math.random() - 0.5) * 0.2;
+      points[i*3+1] = stepY + (Math.random() - 0.5) * 0.2;
+      points[i*3+2] = z1 * (1 - bridgeT) + z2 * bridgeT + (Math.random() - 0.5) * 0.2;
+    }
     
-    const px = gx * 0.45; // Tight spacing
-    const pz = gz * 0.45;
-    const w = 0.3; // Thinner pillars
-    
-    let x, y, z;
-    const face = Math.random();
-    if (face < 0.2) { x = px + (Math.random()-0.5)*w; y = height; z = pz + (Math.random()-0.5)*w; } // Top
-    else if (face < 0.4) { x = px + (Math.random()-0.5)*w; y = Math.random()*height; z = pz + w/2; } // Front
-    else if (face < 0.6) { x = px + (Math.random()-0.5)*w; y = Math.random()*height; z = pz - w/2; } // Back
-    else if (face < 0.8) { x = px + w/2; y = Math.random()*height; z = pz + (Math.random()-0.5)*w; } // Right
-    else { x = px - w/2; y = Math.random()*height; z = pz + (Math.random()-0.5)*w; } // Left
-    
-    // Isometric tilt
-    const ty = Math.PI / 4;
-    let rx = x * Math.cos(ty) - z * Math.sin(ty);
-    let rz = x * Math.sin(ty) + z * Math.cos(ty);
-    
-    const tx = Math.PI / 6;
-    let ry = y * Math.cos(tx) - rz * Math.sin(tx);
-    rz = y * Math.sin(tx) + rz * Math.cos(tx);
-    
-    points[i*3] = rx;
-    points[i*3+1] = ry;
-    points[i*3+2] = rz;
+    // Tilt the whole DNA strand slightly for a cinematic angle
+    const tilt = Math.PI / 8;
+    const px = points[i*3];
+    const py = points[i*3+1];
+    points[i*3] = px * Math.cos(tilt) - py * Math.sin(tilt);
+    points[i*3+1] = px * Math.sin(tilt) + py * Math.cos(tilt);
   }
   return points;
 }
@@ -210,16 +224,19 @@ function getMicrochipPoints(count: number) {
   return points;
 }
 
-function getRingPoints(count: number) {
+function getSilkWavePoints(count: number) {
   const points = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    const u = Math.random() * Math.PI * 2;
-    const v = Math.random() * Math.PI * 2;
-    const R = 3.5; 
-    const r = Math.random() * 0.8; 
-    points[i * 3] = (R + r * Math.cos(v)) * Math.cos(u);
-    points[i * 3 + 1] = (R + r * Math.cos(v)) * Math.sin(u);
-    points[i * 3 + 2] = r * Math.sin(v);
+    // Generate an incredibly wide, deep plane
+    const x = (Math.random() - 0.5) * 40; // Spread wide
+    const z = (Math.random() - 0.5) * 30; // Spread deep
+    
+    // Baseline structural curve (adds volume to the flat plane)
+    const y = Math.sin(x * 0.15) * 2.0 + Math.cos(z * 0.15) * 2.0;
+    
+    points[i * 3] = x;
+    points[i * 3 + 1] = y - 4.0; // Offset down to sit behind the CTA button
+    points[i * 3 + 2] = z;
   }
   return points;
 }
@@ -275,18 +292,21 @@ void main() {
   // 1. Data Core: Rings orbit the center at different speeds based on distance
   vec3 p1 = position1;
   float dist1 = length(p1.xz);
-  float angle1 = uTime * (1.0 / (dist1 + 0.5));
+  float angle1 = uTime * (0.4 / (dist1 + 0.5)); // Slower
   float tmpX1 = p1.x * cos(angle1) - p1.z * sin(angle1);
   float tmpZ1 = p1.x * sin(angle1) + p1.z * cos(angle1);
   p1.x = tmpX1; p1.z = tmpZ1;
   
-  // 2. Server Grid: Sine wave pulses of electricity moving across the grid
+  // 2. DNA Helix: Majestic slow rotation around Y-axis
   vec3 p2 = position2;
-  p2.y += sin(p2.x * 2.0 + p2.z * 1.5 + uTime * 4.0) * 0.15;
+  float dnaAngle = uTime * 0.2;
+  float tmpX2 = p2.x * cos(dnaAngle) - p2.z * sin(dnaAngle);
+  float tmpZ2 = p2.x * sin(dnaAngle) + p2.z * cos(dnaAngle);
+  p2.x = tmpX2; p2.z = tmpZ2;
   
   // 3. Delta Jet: Smooth hover banking and violent thruster exhaust
   vec3 p3 = position3;
-  p3.y += sin(uTime * 2.0) * 0.3; // Hover
+  p3.y += sin(uTime * 1.5) * 0.3; // Slower hover
   if (p3.z > 3.0) { // Thrusters at the back
       p3.x += (hash(p3 + uTime) - 0.5) * 0.15;
       p3.y += (hash(p3 + uTime + 1.0) - 0.5) * 0.15;
@@ -294,14 +314,11 @@ void main() {
   
   // 4. Microchip: Energy pulses shooting down the pins
   vec3 p4 = position4;
-  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 5.0)) * 0.1;
+  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 3.0)) * 0.1; // Slower pulse
   
-  // 5. Ring: Slow majestic spin
+  // 5. Silk Wave: Majestic ocean-like undulating waves
   vec3 p5 = position5;
-  float angle5 = uTime * 0.5;
-  float tmpX5 = p5.x * cos(angle5) - p5.y * sin(angle5);
-  float tmpY5 = p5.x * sin(angle5) + p5.y * cos(angle5);
-  p5.x = tmpX5; p5.y = tmpY5;
+  p5.y += sin(p5.x * 0.3 + uTime * 0.6) * 1.2 + cos(p5.z * 0.4 + uTime * 0.4) * 0.8;
 
   // Apply world offsets
   vec3 w1 = p1 + uOffsets[0];
@@ -313,9 +330,9 @@ void main() {
   // INTERPOLATION & TRANSITION
   vec3 target;
   
-  // Use smoothstep to "linger" on fully formed objects at the top and bottom of scrolls
+  // Use smoothstep to "linger" on fully formed objects, but widened (0.1 to 0.9) to make morphing slower and more fluid
   float t = fract(uProgress);
-  float easedT = smoothstep(0.3, 0.7, t); 
+  float easedT = smoothstep(0.1, 0.9, t); 
   float transitionState = 0.0;
   
   if (uProgress < 1.0) {
@@ -328,14 +345,14 @@ void main() {
     target = mix(w3, w4, easedT);
     transitionState = easedT;
   } else {
-    float lastT = smoothstep(0.3, 0.7, max(0.0, min(1.0, uProgress - 3.0)));
+    float lastT = smoothstep(0.1, 0.9, max(0.0, min(1.0, uProgress - 3.0)));
     target = mix(w4, w5, lastT);
     transitionState = lastT;
   }
   
   // Apply Curl Noise fluid dynamics only during morphing.
-  // Because transitionState is eased, sin(PI) is exactly 0 when lingering!
-  float noiseIntensity = sin(transitionState * 3.14159) * 2.5;
+  // Reduced intensity to 1.2 so it feels like slow fluid smoke, not chaotic splashing
+  float noiseIntensity = sin(transitionState * 3.14159) * 1.2;
   vec3 curl = curlNoise(target * 0.5 + uTime * 0.2) * noiseIntensity;
   vec3 finalPos = target + curl;
 
@@ -374,10 +391,10 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
   // Generate centered buffers
   const buffers = useMemo(() => ({
     pos1: getDataCorePoints(PARTICLE_COUNT),
-    pos2: getServerGridPoints(PARTICLE_COUNT),
+    pos2: getDNAPoints(PARTICLE_COUNT),
     pos3: getJetPoints(PARTICLE_COUNT),
     pos4: getMicrochipPoints(PARTICLE_COUNT),
-    pos5: getRingPoints(PARTICLE_COUNT) 
+    pos5: getSilkWavePoints(PARTICLE_COUNT) 
   }), []);
 
   // Define global spatial offsets mapping to DOM
