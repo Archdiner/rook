@@ -2,7 +2,6 @@
 
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { motion, useScroll } from "framer-motion";
 import * as THREE from "three";
 
 // --- Premium Procedural Geometries (Centered at 0,0,0) ---
@@ -18,10 +17,10 @@ function randomOnRect(w: number, h: number, z: number, axis: 'x' | 'y' | 'z') {
 function getSpawnPoints(count: number) {
   const points = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    // Scatter across screen-space: wide X and Y, moderate Z
-    const x = (Math.random() - 0.5) * 60;
-    const y = (Math.random() - 0.5) * 60;
-    const z = (Math.random() - 0.5) * 40 - 10;
+    // Scatter across screen-space: moderate X and Y, shallow Z to prevent them from being too spread out
+    const x = (Math.random() - 0.5) * 40;
+    const y = (Math.random() - 0.5) * 40;
+    const z = (Math.random() - 0.5) * 20 - 5;
     points[i*3] = x;
     points[i*3+1] = y;
     points[i*3+2] = z;
@@ -295,28 +294,12 @@ float hash(vec3 p) {
   return fract( p.x*p.y*p.z*(p.x+p.y+p.z) );
 }
 
-float noise(in vec3 x) {
-    vec3 i = floor(x);
-    vec3 f = fract(x);
-    f = f*f*(3.0-2.0*f);
-    return mix(mix(mix( hash(i+vec3(0,0,0)), hash(i+vec3(1,0,0)),f.x),
-                   mix( hash(i+vec3(0,1,0)), hash(i+vec3(1,1,0)),f.x),f.y),
-               mix(mix( hash(i+vec3(0,0,1)), hash(i+vec3(1,0,1)),f.x),
-                   mix( hash(i+vec3(0,1,1)), hash(i+vec3(1,1,1)),f.x),f.y),f.z);
-}
-
-// Curl noise for fluid smoke effects during morphs
-vec3 curlNoise(vec3 p) {
-    float e = 0.1;
-    vec3 dx = vec3(e, 0.0, 0.0);
-    vec3 dy = vec3(0.0, e, 0.0);
-    vec3 dz = vec3(0.0, 0.0, e);
-    
-    float x = noise(p + dy) - noise(p - dy) - noise(p + dz) + noise(p - dz);
-    float y = noise(p + dz) - noise(p - dz) - noise(p + dx) + noise(p - dx);
-    float z = noise(p + dx) - noise(p - dx) - noise(p + dy) + noise(p - dy);
-    
-    return normalize(vec3(x, y, z)) * 2.0;
+// Cheaper turbulence to replace expensive curl noise
+vec3 cheapTurbulence(vec3 p) {
+    float x = sin(p.y * 3.0) + cos(p.z * 2.0);
+    float y = sin(p.z * 3.0) + cos(p.x * 2.0);
+    float z = sin(p.x * 3.0) + cos(p.y * 2.0);
+    return vec3(x, y, z) * 0.5;
 }
 
 void main() {
@@ -383,11 +366,12 @@ void main() {
     transitionState = lastT;
   }
   
-  // Apply Curl Noise fluid dynamics only during morphing.
+  // Apply cheaper turbulence fluid dynamics only during morphing.
   // On mobile, reduce intensity significantly for performance
   float curlScale = 1.2 * (1.0 - uMobile * 0.6);
   float noiseIntensity = sin(transitionState * 3.14159) * curlScale;
-  vec3 curl = curlNoise(target * 0.5 + uTime * 0.2) * noiseIntensity;
+  // Drive turbulence partially by scroll progress so it feels physically connected to scrolling
+  vec3 curl = cheapTurbulence(target * 0.5 + vec3(0.0, uProgress * 2.0, uTime * 0.2)) * noiseIntensity;
   vec3 finalPos = target + curl;
 
   // SPAWN ANIMATION (Chaotic Coalescence)
@@ -396,9 +380,9 @@ void main() {
   // Particles start fully scattered from the dedicated spawnPos buffer
   vec3 chaoticStart = spawnPos;
   
-  // Add extreme curl turbulence during the spawn phase so they take curved, flowing paths inward
+  // Add extreme turbulence during the spawn phase so they take curved, flowing paths inward
   float spawnTurbulence = (1.0 - spawnEase) * 4.0; 
-  vec3 spawnCurl = curlNoise(chaoticStart * 0.1 + uTime) * spawnTurbulence;
+  vec3 spawnCurl = cheapTurbulence(chaoticStart * 0.1 + uTime) * spawnTurbulence;
   chaoticStart += spawnCurl;
   
   finalPos = mix(chaoticStart, finalPos, spawnEase);
@@ -422,16 +406,16 @@ void main() {
 // --- The GPU Particle Swarm ---
 
 const PARTICLE_COUNT_DESKTOP = 50000;
-const PARTICLE_COUNT_MOBILE = 12000;
+const PARTICLE_COUNT_MOBILE = 30000;
 
-function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
+function ParticleSwarm() {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const { viewport, size } = useThree();
   
   const isMobile = size.width < 768;
   const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
-  const shapeScale = isMobile ? 0.55 : 1.0;
+  const shapeScale = isMobile ? 0.75 : 1.0;
   
   const mountTime = useRef(Date.now());
 
@@ -487,10 +471,15 @@ function ParticleSwarm({ scrollYProgress }: { scrollYProgress: any }) {
     if (!shaderRef.current || !pointsRef.current) return;
     
     const time = state.clock.getElapsedTime();
-    const progress = scrollYProgress.get(); 
     
-    // Slower spawn: 4 seconds on desktop, 3 seconds on mobile
-    const spawnDuration = isMobile ? 3000 : 4000;
+    // Use native scroll for zero-latency syncing
+    // Clamp scrollY to prevent negative values (overscroll bounce on Mac/iOS)
+    const scrollY = Math.max(0, window.scrollY);
+    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const progress = scrollY / maxScroll;
+    
+    // Slower spawn: 3 seconds on desktop, 1.5 seconds on mobile for snappier feel
+    const spawnDuration = isMobile ? 1500 : 3000;
     const elapsedSpawn = (Date.now() - mountTime.current) / spawnDuration;
     
     shaderRef.current.uniforms.uTime.value = time;
@@ -879,8 +868,6 @@ function MinimalDOM() {
 // --- Main Application ---
 
 export default function Home() {
-  const { scrollYProgress } = useScroll();
-
   return (
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
       <header className="fixed top-0 left-0 w-full px-6 py-8 flex items-center justify-between z-50 pointer-events-none">
@@ -896,7 +883,7 @@ export default function Home() {
       <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
         <Canvas camera={{ position: [0, 0, 10], fov: 45 }} dpr={[1, 1.5]}>
           <ambientLight intensity={1} />
-          <ParticleSwarm scrollYProgress={scrollYProgress} />
+          <ParticleSwarm />
         </Canvas>
       </div>
 
