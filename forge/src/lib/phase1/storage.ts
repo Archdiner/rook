@@ -1,4 +1,7 @@
 import { BlobNotFoundError, head, list, put } from '@vercel/blob';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export type Phase1Collection = 'sites' | 'events' | 'snapshots';
 
@@ -59,6 +62,7 @@ interface BlobLikeEntry {
 const PHASE1_PREFIX = 'phase1';
 const DEFAULT_READ_LIMIT = 100;
 const DEFAULT_MONTHS_TO_SCAN = 6;
+const LOCAL_FALLBACK_ROOT = path.join(os.tmpdir(), 'forge-phase1');
 
 function getBlobToken(): string | undefined {
   return process.env.BLOB_READ_WRITE_TOKEN;
@@ -74,6 +78,65 @@ function monthPath(collection: Phase1Collection, month = getMonthKey()): string 
 
 function collectionPrefix(collection: Phase1Collection): string {
   return `${PHASE1_PREFIX}/${collection}/`;
+}
+
+function getLocalFallbackPath(pathname: string): string {
+  return path.join(LOCAL_FALLBACK_ROOT, pathname);
+}
+
+async function appendLocalJsonl(pathname: string, record: object): Promise<void> {
+  const filePath = getLocalFallbackPath(pathname);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.appendFile(filePath, `${JSON.stringify(record)}\n`, 'utf8');
+}
+
+async function listLocalMonthPaths(collection: Phase1Collection, limit: number): Promise<string[]> {
+  const collectionDir = getLocalFallbackPath(collectionPrefix(collection));
+  try {
+    const entries = await fs.readdir(collectionDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
+      .map((entry) => `${collectionPrefix(collection)}${entry.name}`)
+      .sort((a, b) => b.localeCompare(a))
+      .slice(0, Math.max(limit, 1));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to list local records for ${collection}`, error);
+  }
+}
+
+async function readLocalJsonlRecords<T>(
+  collection: Phase1Collection,
+  options: {
+    limit: number;
+    monthsToScan: number;
+    filter?: (record: T) => boolean;
+  }
+): Promise<T[]> {
+  const out: T[] = [];
+  const paths = await listLocalMonthPaths(collection, options.monthsToScan);
+  for (const pathname of paths) {
+    if (out.length >= options.limit) break;
+    try {
+      const text = await fs.readFile(getLocalFallbackPath(pathname), 'utf8');
+      const lines = text.split('\n').reverse();
+      for (const line of lines) {
+        const parsed = parseJsonlLine<T>(line);
+        if (!parsed) continue;
+        if (options.filter && !options.filter(parsed)) continue;
+        out.push(parsed);
+        if (out.length >= options.limit) break;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        continue;
+      }
+      throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to read local records ${pathname}`, error);
+    }
+  }
+  return out;
 }
 
 function parseJsonlLine<T>(line: string): T | null {
@@ -92,11 +155,13 @@ export async function appendJsonlRecord<T extends object>(
   date = new Date()
 ): Promise<{ pathname: string }> {
   const token = getBlobToken();
+  const pathname = monthPath(collection, getMonthKey(date));
   if (!token) {
-    throw new MissingBlobTokenError();
+    // Local development fallback when Vercel Blob credentials are not configured.
+    await appendLocalJsonl(pathname, record);
+    return { pathname };
   }
 
-  const pathname = monthPath(collection, getMonthKey(date));
   const newLine = `${JSON.stringify(record)}\n`;
   let existing = '';
 
@@ -133,7 +198,7 @@ export async function listMonthPaths(
 ): Promise<string[]> {
   const token = getBlobToken();
   if (!token) {
-    return [];
+    return listLocalMonthPaths(collection, limit);
   }
 
   try {
@@ -160,13 +225,14 @@ export async function readJsonlRecords<T>(
   }
 ): Promise<T[]> {
   const token = getBlobToken();
-  if (!token) {
-    return [];
-  }
-
   const limit = Math.max(options?.limit ?? DEFAULT_READ_LIMIT, 1);
   const monthsToScan = Math.max(options?.monthsToScan ?? DEFAULT_MONTHS_TO_SCAN, 1);
   const filter = options?.filter;
+
+  if (!token) {
+    return readLocalJsonlRecords<T>(collection, { limit, monthsToScan, filter });
+  }
+
   const out: T[] = [];
 
   const paths = await listMonthPaths(collection, monthsToScan);
