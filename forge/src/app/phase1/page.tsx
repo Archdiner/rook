@@ -44,18 +44,28 @@ function toSite(item: unknown): Site | null {
   const record = item as Record<string, unknown>;
   const rawId = record.id ?? record.siteId ?? record.site_id;
   if (typeof rawId !== "string" && typeof rawId !== "number") return null;
+  const rawProvider = record.provider ?? record.analyticsProvider ?? record.analytics_provider;
   return {
     id: String(rawId),
     name: typeof record.name === "string" ? record.name : "Untitled Site",
     domain: typeof record.domain === "string" ? record.domain : "unknown-domain",
-    provider: typeof record.provider === "string" ? record.provider : "unknown",
+    provider: typeof rawProvider === "string" ? rawProvider : "unknown",
   };
 }
 
+function unwrapResponseEnvelope(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object") return payload;
+  const record = payload as Record<string, unknown>;
+  if ("data" in record && record.data !== undefined) return record.data;
+  if ("result" in record && record.result !== undefined) return record.result;
+  return payload;
+}
+
 function normalizeSites(payload: unknown): Site[] {
-  if (Array.isArray(payload)) return payload.map(toSite).filter(Boolean) as Site[];
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
+  const source = unwrapResponseEnvelope(payload);
+  if (Array.isArray(source)) return source.map(toSite).filter(Boolean) as Site[];
+  if (source && typeof source === "object") {
+    const record = source as Record<string, unknown>;
     if (Array.isArray(record.sites)) return record.sites.map(toSite).filter(Boolean) as Site[];
     if (Array.isArray(record.data)) return record.data.map(toSite).filter(Boolean) as Site[];
   }
@@ -78,12 +88,13 @@ function normalizeReadiness(payload: unknown): ReadinessItem[] {
     return { category, status, evidenceCount };
   };
 
-  if (Array.isArray(payload)) {
-    return payload.map(normalizeItem).filter(Boolean) as ReadinessItem[];
+  const source = unwrapResponseEnvelope(payload);
+  if (Array.isArray(source)) {
+    return source.map(normalizeItem).filter(Boolean) as ReadinessItem[];
   }
 
-  if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
+  if (source && typeof source === "object") {
+    const record = source as Record<string, unknown>;
     const candidate = record.readiness ?? record.data ?? record.categories;
     if (Array.isArray(candidate)) {
       return candidate.map(normalizeItem).filter(Boolean) as ReadinessItem[];
@@ -133,10 +144,11 @@ function normalizeRecommendations(payload: unknown): RecommendationItem[] {
   };
 
   let source: unknown[] = [];
-  if (Array.isArray(payload)) {
-    source = payload;
-  } else if (payload && typeof payload === "object") {
-    const record = payload as Record<string, unknown>;
+  const envelope = unwrapResponseEnvelope(payload);
+  if (Array.isArray(envelope)) {
+    source = envelope;
+  } else if (envelope && typeof envelope === "object") {
+    const record = envelope as Record<string, unknown>;
     if (Array.isArray(record.recommendations)) source = record.recommendations;
     else if (Array.isArray(record.data)) source = record.data;
     else if (Array.isArray(record.items)) source = record.items;
@@ -187,6 +199,11 @@ function statusBadge(status: string): { label: string; bg: string; fg: string; b
     return { label: "Missing", bg: "rgba(154, 31, 42, 0.08)", fg: "#9A1F2A", border: "rgba(154, 31, 42, 0.2)" };
   }
   return { label: status || "Unknown", bg: "rgba(0,0,0,0.05)", fg: INK, border: "rgba(0,0,0,0.12)" };
+}
+
+function withSiteIdQuery(path: string, siteId: string): string {
+  const params = new URLSearchParams({ siteId });
+  return `${path}?${params.toString()}`;
 }
 
 export default function Phase1Page() {
@@ -251,10 +268,8 @@ export default function Phase1Page() {
     setReadinessState("loading");
     setReadinessError("");
     try {
-      const payload = await requestJson("/api/phase1/readiness", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId }),
+      const payload = await requestJson(withSiteIdQuery("/api/phase1/readiness", siteId), {
+        method: "GET",
         fallbackErrorMessage: "Unable to load readiness.",
       });
       setReadinessItems(normalizeReadiness(payload));
@@ -270,10 +285,8 @@ export default function Phase1Page() {
     setRecommendationsState("loading");
     setRecommendationsError("");
     try {
-      const payload = await requestJson("/api/phase1/recommendations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ siteId }),
+      const payload = await requestJson(withSiteIdQuery("/api/phase1/recommendations", siteId), {
+        method: "GET",
         fallbackErrorMessage: "Unable to load recommendations.",
       });
       setRecommendations(normalizeRecommendations(payload));
@@ -326,7 +339,11 @@ export default function Phase1Page() {
         fallbackErrorMessage: "Unable to create site.",
       });
 
-      const created = toSite(payload) ?? toSite((payload as { site?: unknown })?.site ?? null);
+      const source = unwrapResponseEnvelope(payload);
+      const created =
+        toSite(source) ??
+        toSite((source as { site?: unknown })?.site ?? null) ??
+        toSite((source as { createdSite?: unknown })?.createdSite ?? null);
       await loadSites(created?.id);
       setCreateState("success");
       setCreateMessage(created ? `Created ${created.name}.` : "Site created.");
