@@ -67,7 +67,6 @@ export type {
   NarrativePathAggregate,
   OnboardingStepAggregate,
 } from "./insights";
-export { clampMaxFindings, generateInsights } from "./insights";
 
 export type {
   HealthResponse,
