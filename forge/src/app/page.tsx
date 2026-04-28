@@ -473,7 +473,8 @@ function ParticleSwarm() {
     const time = state.clock.getElapsedTime();
     
     // Use native scroll for zero-latency syncing
-    const scrollY = window.scrollY;
+    // Clamp scrollY to prevent negative values (overscroll bounce on Mac/iOS)
+    const scrollY = Math.max(0, window.scrollY);
     const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
     const progress = scrollY / maxScroll;
     
