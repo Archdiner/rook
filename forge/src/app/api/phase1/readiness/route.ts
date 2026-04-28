@@ -1,5 +1,5 @@
 import { Phase1Event, Phase1ReadinessSnapshot, readJsonlRecords } from '@/lib/phase1/storage';
-import { badRequest, mapRouteError, parseString, success } from '../_shared';
+import { badRequest, mapRouteError, parseJsonObject, parseString, success } from '../_shared';
 
 interface ReadinessData {
   snapshot: Phase1ReadinessSnapshot;
@@ -67,29 +67,64 @@ async function computeSnapshot(siteId: string, events: Phase1Event[]): Promise<P
   return fallbackSufficiency(siteId, events);
 }
 
+async function buildReadinessResponse(siteId: string) {
+  const events = await readJsonlRecords<Phase1Event>('events', {
+    limit: 2000,
+    monthsToScan: 6,
+    filter: (record) => record.siteId === siteId,
+  });
+
+  const snapshot = await computeSnapshot(siteId, events);
+  const totals = {
+    eventCount: events.length,
+    sessionCount: new Set(events.map((event) => event.sessionId)).size,
+    pageCount: new Set(events.map((event) => event.path)).size,
+    eventTypeCount: new Set(events.map((event) => event.type)).size,
+  };
+
+  const payload: ReadinessData = { snapshot, totals };
+  return success(payload);
+}
+
+function parseSiteIdFromQuery(request: Request): string | null {
+  return parseString(new URL(request.url).searchParams.get('siteId'));
+}
+
+async function parseSiteIdFromBody(request: Request): Promise<{ siteId: string } | { error: Response }> {
+  const parsedBody = await parseJsonObject(request);
+  if (!parsedBody.ok) {
+    return { error: badRequest(parsedBody.message) };
+  }
+
+  const siteId = parseString(parsedBody.value.siteId);
+  if (!siteId) {
+    return { error: badRequest('`siteId` is required in JSON body.') };
+  }
+
+  return { siteId };
+}
+
 export async function GET(request: Request) {
   try {
-    const siteId = parseString(new URL(request.url).searchParams.get('siteId'));
+    const siteId = parseSiteIdFromQuery(request);
     if (!siteId) {
       return badRequest('`siteId` query param is required.');
     }
 
-    const events = await readJsonlRecords<Phase1Event>('events', {
-      limit: 2000,
-      monthsToScan: 6,
-      filter: (record) => record.siteId === siteId,
-    });
+    return await buildReadinessResponse(siteId);
+  } catch (error) {
+    return mapRouteError(error);
+  }
+}
 
-    const snapshot = await computeSnapshot(siteId, events);
-    const totals = {
-      eventCount: events.length,
-      sessionCount: new Set(events.map((event) => event.sessionId)).size,
-      pageCount: new Set(events.map((event) => event.path)).size,
-      eventTypeCount: new Set(events.map((event) => event.type)).size,
-    };
+export async function POST(request: Request) {
+  try {
+    const parsedSiteId = await parseSiteIdFromBody(request);
+    if ('error' in parsedSiteId) {
+      return parsedSiteId.error;
+    }
 
-    const payload: ReadinessData = { snapshot, totals };
-    return success(payload);
+    return await buildReadinessResponse(parsedSiteId.siteId);
   } catch (error) {
     return mapRouteError(error);
   }
