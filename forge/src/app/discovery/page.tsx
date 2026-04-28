@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState } from 'react';
 
 type YesNo = 'yes' | 'no' | '';
@@ -287,7 +288,11 @@ export default function DiscoveryPage() {
           margin: '0 auto',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <Link
+          href="/"
+          aria-label="Go to Forge homepage"
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none' }}
+        >
           <div
             style={{
               width: '24px',
@@ -307,7 +312,7 @@ export default function DiscoveryPage() {
           >
             Forge
           </span>
-        </div>
+        </Link>
         <div
           className="sans-text"
           style={{
