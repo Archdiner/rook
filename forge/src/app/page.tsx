@@ -812,7 +812,7 @@ function MinimalDOM() {
             Clarity over<br/>intuition.
           </h1>
           <p className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-relaxed">
-            We ingest 30 days of raw PostHog data and algorithmically map the friction points breaking your architecture.
+            As your real users move through your site, raw signal becomes structure—and the friction breaking your architecture becomes visible, in evidence.
           </p>
         </div>
       </section>

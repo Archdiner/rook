@@ -16,8 +16,8 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "Forge | A Patient Reader",
-  description: "We send a rook to your landing page. She reads your data for thirty days. She returns with three changes that will move your conversion rate.",
+  title: "Forge — Clarity over intuition",
+  description: "Forge transforms how real users move through your product into the precise, evidenced changes that move your conversion. Raw signal becomes structured intelligence.",
 };
 
 export default function RootLayout({
