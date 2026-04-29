@@ -240,6 +240,35 @@ curl -s -X POST "$BASE_URL/api/phase2/integrations/$INTEGRATION_ID/sync" \
 Then call `/api/phase2/insights/run` and findings come from real PostHog data.
 Mapping table and credential checklist live in [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §9.
 
+### Page DNA snapshots (design audit grounding)
+
+To make findings *tasteful* — naming the actual H1, the actual button,
+the actual class signals — Forge takes static snapshots of customer
+pages. Each snapshot stores meta tags, heading hierarchy, CTA inventory
+(with visual-weight signals), and forms.
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/sites/replace-with-site-id/snapshots" \
+  -H "Content-Type: application/json" \
+  -H "x-org-id: org_abc123" \
+  --data '{
+    "baseUrl": "https://example.com",
+    "paths":   ["/", "/pricing", "/signup"]
+  }'
+```
+
+Returns a per-path report; failures are non-fatal and tagged with a
+structured `errorCode` (`TIMEOUT`, `BLOCKED_BY_ROBOTS`, `NON_HTML`, ...).
+List snapshots or fetch a single page:
+
+```bash
+curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots" -H "x-org-id: org_abc123"
+curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots?pathRef=/pricing" -H "x-org-id: org_abc123"
+```
+
+See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §10
+for the full snapshot contract and visual-weight scoring rubric.
+
 ## Architecture (High Level)
 
 - Next.js App Router app with UI routes and API routes in a single service
@@ -258,10 +287,11 @@ Mapping table and credential checklist live in [`docs/PHASE2_EVIDENCE_MODEL.md`]
 - `src/app/api/discovery` - Discovery survey API
 - `src/app/api/intake` - General intake API
 - `src/app/api/phase1` - Phase 1 endpoints (health, sites, events, readiness, recommendations, sufficiency, insights)
-- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run)
+- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run, integrations, page snapshots)
 - `src/lib/phase1` - Core contracts, storage adapter, sufficiency engine, insights engine
 - `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
 - `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution)
+- `src/lib/phase2/snapshots` - Page DNA static analysis (fetcher, parser, visual-weight scoring, fold guess)
 - `drizzle` - Generated Postgres migrations (`drizzle-kit generate`)
 - `public` - Static assets
 

@@ -10,6 +10,12 @@ import type {
   IntegrationRecord,
   UpdateIntegrationStateInput,
 } from '@/lib/phase2/connectors/types';
+import type {
+  GetPageSnapshotInput,
+  ListPageSnapshotsInput,
+  PageSnapshot,
+  UpsertPageSnapshotInput,
+} from '@/lib/phase2/snapshots/types';
 
 export type Phase1RepositoryDriver = 'blob' | 'postgres';
 
@@ -166,4 +172,14 @@ export interface Phase1Repository {
   getIntegration(input: GetIntegrationInput): Promise<IntegrationRecord | null>;
   /** Phase 2: list integrations for an org, ordered by `createdAt` desc. */
   listIntegrations(input: ListIntegrationsInput): Promise<IntegrationRecord[]>;
+  /**
+   * Phase 2: insert or update a page snapshot keyed on `(siteId, pathRef)`.
+   * On conflict, the row is replaced (latest snapshot wins) — drift is
+   * tracked via `data.contentHash`, not separate rows.
+   */
+  upsertPageSnapshot(input: UpsertPageSnapshotInput): Promise<PageSnapshot>;
+  /** Phase 2: fetch one snapshot for `(organizationId, siteId, pathRef)`. */
+  getPageSnapshot(input: GetPageSnapshotInput): Promise<PageSnapshot | null>;
+  /** Phase 2: list snapshots for a site, ordered by `fetchedAt` desc. */
+  listPageSnapshots(input: ListPageSnapshotsInput): Promise<PageSnapshot[]>;
 }

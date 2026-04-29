@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { appendJsonlRecord, readJsonlRecords } from '@/lib/phase1/storage';
 import type {
   CreateIntegrationInput,
@@ -5,6 +7,13 @@ import type {
   IntegrationStatus,
   UpdateIntegrationStateInput,
 } from '@/lib/phase2/connectors/types';
+import type {
+  GetPageSnapshotInput,
+  ListPageSnapshotsInput,
+  PageSnapshot,
+  PageSnapshotData,
+  UpsertPageSnapshotInput,
+} from '@/lib/phase2/snapshots/types';
 import type {
   CanonicalEvent,
   CanonicalEventSchemaVersion,
@@ -38,6 +47,19 @@ const DEFAULT_INTEGRATIONS_LIMIT = 100;
 const WINDOW_EVENTS_LIMIT = 5000;
 const DEDUPE_SCAN_LIMIT = 5000;
 
+const DEFAULT_PAGE_SNAPSHOTS_LIMIT = 100;
+const MAX_PAGE_SNAPSHOTS_LIMIT = 500;
+/** Months scanned when listing/reading page snapshots from blob storage. */
+const PAGE_SNAPSHOTS_MONTHS_TO_SCAN = 12;
+/** Per-pathRef recent-history cap when reading a single snapshot. */
+const PAGE_SNAPSHOTS_GET_LIMIT = 200;
+/**
+ * Multiplier applied to the caller's `limit` when listing snapshots. Records
+ * are append-only, so we may need to scan past older entries to find the
+ * latest write per pathRef.
+ */
+const PAGE_SNAPSHOTS_LIST_OVERSCAN = 5;
+
 type StoredCanonicalEvent = CanonicalEvent & {
   organizationId?: string;
 };
@@ -65,6 +87,23 @@ type StoredPhase2SiteConfig = Phase2SiteConfig & {
 type StoredIntegrationRecord = Omit<IntegrationRecord, 'id'> & {
   id: string;
   integrationId: string;
+};
+
+/**
+ * Persisted shape for a page snapshot in the blob store. Append-only; the
+ * latest write per `(siteId, pathRef)` wins on read (blob layer sorts by
+ * `fetchedAt` desc within the partition).
+ */
+type StoredPageSnapshot = {
+  id: string;
+  organizationId: string;
+  siteId: string;
+  pathRef: string;
+  url: string;
+  data: PageSnapshotData;
+  contentHash: string;
+  fetchedAt: string;
+  createdAt: string;
 };
 
 function toCanonicalEvent(record: StoredCanonicalEvent): CanonicalEvent {
@@ -126,6 +165,19 @@ function makeIntegrationBlobId(): string {
   const writeStamp = Date.now();
   const randomSuffix = Math.random().toString(36).slice(2, 10);
   return `${writeStamp}-${randomSuffix}`;
+}
+
+function toPageSnapshot(record: StoredPageSnapshot): PageSnapshot {
+  return {
+    id: record.id,
+    organizationId: record.organizationId,
+    siteId: record.siteId,
+    pathRef: record.pathRef,
+    url: record.url,
+    data: record.data,
+    fetchedAt: new Date(record.fetchedAt),
+    createdAt: new Date(record.createdAt),
+  };
 }
 
 function toIntegrationRecord(record: StoredIntegrationRecord): IntegrationRecord {
@@ -508,6 +560,82 @@ export function createBlobPhase1Repository(): Phase1Repository {
 
       const limit = Math.max(input.limit ?? DEFAULT_INTEGRATIONS_LIMIT, 1);
       return latest.slice(0, limit).map(toIntegrationRecord);
+    },
+    /**
+     * Append a new page snapshot record. The blob driver is append-only, so
+     * "upsert" semantics here mean: every fetch lands as its own blob, and
+     * `getPageSnapshot` / `listPageSnapshots` reduce to the latest write per
+     * `(siteId, pathRef)` (sorted by `fetchedAt` desc on read).
+     */
+    async upsertPageSnapshot(input: UpsertPageSnapshotInput): Promise<PageSnapshot> {
+      const id = `phase2_page_snapshot_${randomUUID()}`;
+      const now = new Date();
+      const stored: StoredPageSnapshot = {
+        id,
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        pathRef: input.pathRef,
+        url: input.url,
+        data: input.data,
+        contentHash: input.data.contentHash,
+        fetchedAt: input.fetchedAt.toISOString(),
+        createdAt: now.toISOString(),
+      };
+
+      await appendJsonlRecord('pageSnapshots', stored);
+
+      return {
+        id,
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        pathRef: input.pathRef,
+        url: input.url,
+        data: input.data,
+        fetchedAt: input.fetchedAt,
+        createdAt: now,
+      };
+    },
+    async getPageSnapshot(
+      input: GetPageSnapshotInput
+    ): Promise<PageSnapshot | null> {
+      const records = await readJsonlRecords<StoredPageSnapshot>('pageSnapshots', {
+        siteId: input.siteId,
+        monthsToScan: PAGE_SNAPSHOTS_MONTHS_TO_SCAN,
+        limit: PAGE_SNAPSHOTS_GET_LIMIT,
+        filter: (record) =>
+          record.organizationId === input.organizationId &&
+          record.pathRef === input.pathRef,
+      });
+
+      const latest = records[0];
+      if (!latest) return null;
+      return toPageSnapshot(latest);
+    },
+    async listPageSnapshots(
+      input: ListPageSnapshotsInput
+    ): Promise<PageSnapshot[]> {
+      const cap = Math.min(
+        Math.max(input.limit ?? DEFAULT_PAGE_SNAPSHOTS_LIMIT, 1),
+        MAX_PAGE_SNAPSHOTS_LIMIT
+      );
+
+      const records = await readJsonlRecords<StoredPageSnapshot>('pageSnapshots', {
+        siteId: input.siteId,
+        monthsToScan: PAGE_SNAPSHOTS_MONTHS_TO_SCAN,
+        limit: cap * PAGE_SNAPSHOTS_LIST_OVERSCAN,
+        filter: (record) => record.organizationId === input.organizationId,
+      });
+
+      // Records arrive sorted by `fetchedAt` desc; take the first hit per pathRef.
+      const seen = new Set<string>();
+      const out: PageSnapshot[] = [];
+      for (const record of records) {
+        if (seen.has(record.pathRef)) continue;
+        seen.add(record.pathRef);
+        out.push(toPageSnapshot(record));
+        if (out.length >= cap) break;
+      }
+      return out;
     },
   };
 }

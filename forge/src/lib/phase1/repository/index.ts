@@ -29,3 +29,11 @@ export type {
   IntegrationRecord,
   UpdateIntegrationStateInput,
 } from '@/lib/phase2/connectors/types';
+
+export type {
+  GetPageSnapshotInput,
+  ListPageSnapshotsInput,
+  PageSnapshot,
+  PageSnapshotData,
+  UpsertPageSnapshotInput,
+} from '@/lib/phase2/snapshots/types';

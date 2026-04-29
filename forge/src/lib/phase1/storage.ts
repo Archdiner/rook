@@ -15,13 +15,17 @@ import path from 'node:path';
  *   sorts by `updatedAt` desc on read).
  * - `integrations`: Phase 2 connector integration records. Append-only; latest
  *   write per logical integration id wins on read (callers reduce in memory).
+ * - `pageSnapshots`: Phase 2 design-DNA page snapshots. Append-only per fetch;
+ *   blob reader sorts by `fetchedAt` desc and the repository takes the latest
+ *   per `(siteId, pathRef)`.
  */
 export type Phase1Collection =
   | 'sites'
   | 'events'
   | 'snapshots'
   | 'siteConfigs'
-  | 'integrations';
+  | 'integrations'
+  | 'pageSnapshots';
 
 export interface Phase1Site {
   id: string;
@@ -150,6 +154,16 @@ function recordBlobPathname(
     }
     case 'integrations':
       return `${PHASE1_PREFIX}/integrations/${month}/${id}.json`;
+    case 'pageSnapshots': {
+      const siteId = typeof record.siteId === 'string' ? record.siteId : null;
+      if (!siteId) {
+        throw new Phase1StorageError(
+          'BLOB_APPEND_FAILED',
+          'Page snapshot record missing siteId for partitioned blob path.'
+        );
+      }
+      return `${PHASE1_PREFIX}/pageSnapshots/${month}/${siteId}/${id}.json`;
+    }
   }
 }
 
@@ -408,6 +422,22 @@ export async function readJsonlRecords<T>(
     return rows.slice(0, limit);
   }
 
+  if (collection === 'pageSnapshots' && siteId) {
+    const rows: T[] = [];
+    for (const month of months) {
+      const prefix = `${PHASE1_PREFIX}/pageSnapshots/${month}/${siteId}/`;
+      const entries = await listBlobJsonEntries(prefix, token);
+      for (const { pathname, url } of entries) {
+        const parsed = await fetchBlobJson<T>(pathname, token, { url });
+        if (!parsed) continue;
+        if (filter && !filter(parsed)) continue;
+        rows.push(parsed);
+      }
+    }
+    rows.sort((a, b) => compareRecordsByFetchedAt(a, b));
+    return rows.slice(0, limit);
+  }
+
   const collected: T[] = [];
 
   for (const month of months) {
@@ -499,6 +529,18 @@ function compareRecordsByUpdatedAt(a: unknown, b: unknown): number {
   return ub - ua;
 }
 
+function compareRecordsByFetchedAt(a: unknown, b: unknown): number {
+  const fa =
+    typeof a === 'object' && a !== null && 'fetchedAt' in a && typeof (a as { fetchedAt: string }).fetchedAt === 'string'
+      ? Date.parse((a as { fetchedAt: string }).fetchedAt)
+      : 0;
+  const fb =
+    typeof b === 'object' && b !== null && 'fetchedAt' in b && typeof (b as { fetchedAt: string }).fetchedAt === 'string'
+      ? Date.parse((b as { fetchedAt: string }).fetchedAt)
+      : 0;
+  return fb - fa;
+}
+
 async function readPhase1RecordsLocal<T>(
   collection: Phase1Collection,
   options: { limit: number; monthsToScan: number; filter?: (record: T) => boolean; siteId?: string }
@@ -525,6 +567,17 @@ async function readPhase1RecordsLocal<T>(
       rows.push(...batch);
     }
     rows.sort((a, b) => compareRecordsByUpdatedAt(a, b));
+    return rows.slice(0, limit);
+  }
+
+  if (collection === 'pageSnapshots' && siteId) {
+    const rows: T[] = [];
+    for (const month of months) {
+      const rel = `${PHASE1_PREFIX}/pageSnapshots/${month}/${siteId}`;
+      const batch = await readLocalJsonFiles<T>(rel, filter, 10_000);
+      rows.push(...batch);
+    }
+    rows.sort((a, b) => compareRecordsByFetchedAt(a, b));
     return rows.slice(0, limit);
   }
 
