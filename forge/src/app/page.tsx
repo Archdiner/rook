@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { ForgeParticleCanvas } from "@/components/forge-particle-background";
+import { useAuth } from "@clerk/nextjs";
 
 // --- Intake Form Modal ---
 
@@ -301,6 +302,41 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
   );
 }
 
+// ---------------------------------------------------------------------------
+// Auth-aware nav CTA — shows "Sign in" or "Dashboard" based on session state
+// ---------------------------------------------------------------------------
+function AuthNavCta() {
+  // useAuth is a no-op hook when ClerkProvider is absent (Clerk key not set)
+  let isSignedIn = false;
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const auth = useAuth();
+    isSignedIn = auth.isSignedIn ?? false;
+  } catch {
+    // Clerk not configured — treat as unauthenticated
+  }
+
+  if (isSignedIn) {
+    return (
+      <Link
+        href="/dashboard"
+        className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] transition-colors hover:text-[#555]"
+      >
+        Dashboard →
+      </Link>
+    );
+  }
+
+  return (
+    <Link
+      href="/sign-in"
+      className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+    >
+      Sign in
+    </Link>
+  );
+}
+
 // --- The Minimalist DOM Overlay ---
 
 function MinimalDOM() {
@@ -400,30 +436,7 @@ export default function Home() {
           className="flex flex-wrap items-center justify-end gap-4 md:gap-8 sans-text"
           aria-label="Primary"
         >
-          <Link
-            href="/docs"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-          >
-            API
-          </Link>
-          <Link
-            href="/discovery"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-          >
-            Discovery
-          </Link>
-          <Link
-            href="/phase1"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-          >
-            Phase 1
-          </Link>
-          <Link
-            href="/onboarding"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-          >
-            Setup
-          </Link>
+          <AuthNavCta />
         </nav>
         <div className="hidden lg:block sans-text font-bold tracking-widest uppercase text-xs text-[#6B6B6B]">
           Precision Engineering

@@ -3,6 +3,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  real,
   text,
   timestamp,
   uniqueIndex,
@@ -156,6 +157,112 @@ export const forgeApiKeys = pgTable(
     orgIdx: index('forge_api_keys_org_idx').on(table.organizationId),
   })
 );
+
+// ---------------------------------------------------------------------------
+// Forge Dashboard — Findings & Experiments (FORGE-065/066/067/068/069)
+// ---------------------------------------------------------------------------
+
+/**
+ * Persisted audit findings. Upserted on every insight sync run so status
+ * (open → approved → shipped → measured) survives across runs without losing
+ * operator decisions (preview URL, dismissal, linked experiment).
+ *
+ * Deduplication key: (siteId, ruleId, pathRef) — one finding per rule×path.
+ * pathRef is null for site-wide findings; the unique index uses a sentinel.
+ */
+export const forgeFindings = pgTable(
+  'forge_findings',
+  {
+    id: text('id').primaryKey(), // deterministic: sha-ish of siteId+ruleId+pathRef
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    // AuditFinding fields
+    ruleId: text('rule_id').notNull(),
+    category: text('category').notNull(),
+    severity: text('severity').notNull(), // 'info' | 'warn' | 'critical'
+    confidence: real('confidence').notNull(), // 0..1
+    priorityScore: real('priority_score').notNull(), // 0..1
+    pathRef: text('path_ref'), // null = site-wide
+    title: text('title').notNull(),
+    summary: text('summary').notNull(),
+    recommendation: jsonb('recommendation').$type<string[]>().notNull(),
+    evidence: jsonb('evidence').$type<Array<{ label: string; value: string | number; context?: string }>>().notNull(),
+    refs: jsonb('refs').$type<Record<string, string | undefined> | null>(),
+    // Lifecycle
+    status: text('status').notNull().default('open'), // 'open'|'approved'|'dismissed'|'shipped'|'measured'
+    previewUrl: text('preview_url'),
+    previewType: text('preview_type'), // 'staging'|'deployment'|'image'|'mock'
+    previewNotes: text('preview_notes'),
+    // Run context (most recent sync that emitted this finding)
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),
+    insightWindowStart: timestamp('insight_window_start', { withTimezone: true }),
+    insightWindowEnd: timestamp('insight_window_end', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index('forge_findings_org_idx').on(table.organizationId),
+    siteIdx: index('forge_findings_site_idx').on(table.siteId),
+    siteStatusIdx: index('forge_findings_site_status_idx').on(table.siteId, table.status),
+    sitePriorityIdx: index('forge_findings_site_priority_idx').on(table.siteId, table.priorityScore),
+  })
+);
+
+/**
+ * Experiment / rollout entity. Created when an operator approves a finding
+ * and defines how production impact will be measured.
+ */
+export const forgeExperiments = pgTable(
+  'forge_experiments',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    findingId: text('finding_id'), // FK → forge_findings.id (nullable: standalone experiments)
+    hypothesis: text('hypothesis').notNull(),
+    primaryMetric: text('primary_metric').notNull(), // event name
+    primaryMetricSource: text('primary_metric_source'), // 'posthog'|'segment'|'custom'
+    audienceControlPct: integer('audience_control_pct').notNull().default(50),
+    audienceVariantPct: integer('audience_variant_pct').notNull().default(50),
+    durationDays: integer('duration_days').notNull().default(14),
+    status: text('status').notNull().default('draft'), // 'draft'|'running'|'completed'|'stopped'
+    externalUrl: text('external_url'), // link to PostHog / LaunchDarkly etc
+    externalProvider: text('external_provider'), // 'posthog'|'custom'
+    externalId: text('external_id'),
+    guardrails: jsonb('guardrails').$type<string[]>(),
+    notes: text('notes'),
+    // Results snapshot (optional — updated manually or via future webhook)
+    resultControlRate: real('result_control_rate'),   // 0..1 conversion rate
+    resultVariantRate: real('result_variant_rate'),   // 0..1 conversion rate
+    resultConfidence: real('result_confidence'),      // 0..1 statistical confidence
+    resultParticipants: integer('result_participants'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index('forge_experiments_org_idx').on(table.organizationId),
+    siteIdx: index('forge_experiments_site_idx').on(table.siteId),
+    findingIdx: index('forge_experiments_finding_idx').on(table.findingId),
+    siteStatusIdx: index('forge_experiments_site_status_idx').on(table.siteId, table.status),
+  })
+);
+
+/**
+ * Per-site operational metadata for data-volume-triggered insight runs.
+ * Updated by the PostHog sync cron after each sync.
+ */
+export const forgeSiteMeta = pgTable('forge_site_meta', {
+  siteId: text('site_id').primaryKey(),
+  organizationId: text('organization_id').notNull(),
+  /** Total session count the last time insights ran for this site. */
+  sessionCountAtLastRun: integer('session_count_at_last_run').notNull().default(0),
+  /** Minimum new sessions required to trigger a fresh insights run. */
+  insightThreshold: integer('insight_threshold').notNull().default(100),
+  lastInsightRunAt: timestamp('last_insight_run_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const phase1ReadinessSnapshots = pgTable(
   'phase1_readiness_snapshots',
