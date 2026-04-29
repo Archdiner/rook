@@ -303,9 +303,8 @@ function MinimalDOM() {
             intuition.
           </h1>
           <p className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-relaxed">
-            <span className="text-[#111]">Forge</span> is built for teams who want product and UX changes grounded in{' '}
-            <span className="text-[#111]">real user behavior</span>—not hunches. We take how people actually move through your product (paths, sessions, events) and turn that signal into{' '}
-            <span className="text-[#111]">specific recommendations aimed at user pain</span>: where they stall, get confused, or leave. Not generic “redesign everything” lists. Not blank best practices. Changes you can tie back to what your data already shows is broken.
+            <span className="text-[#111]">Forge</span> reads how people move through your product and returns ranked changes aimed at{' '}
+            <span className="text-[#111]">real pain</span>—stalls, confusion, drop-off—grounded in paths, sessions, and events. Not hunches. Not generic redesign lists.
           </p>
         </div>
       </section>
@@ -315,8 +314,8 @@ function MinimalDOM() {
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
           <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
-            Drop-offs, loops, and weak journeys aren’t abstract—they’re visible in how people click, scroll, and convert (or don’t). Forge starts from that signal so you’re solving{' '}
-            <span className="text-[#111]">real struggle</span>, not inventing problems to justify a roadmap.
+            Weak journeys show up in clicks and conversions. We start from that signal so you fix{' '}
+            <span className="text-[#111]">real struggle</span>, not invented roadmap work.
           </p>
         </div>
       </section>
@@ -326,8 +325,8 @@ function MinimalDOM() {
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
           <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
-            Recommendations are ranked against the pain your data exposes—so engineering and design spend cycles on{' '}
-            <span className="text-[#111]">relieving friction users already hit</span>, instead of shipping undifferentiated changes that don’t map to a documented problem.
+            Rankings follow the friction your data already shows—so you ship relief for{' '}
+            <span className="text-[#111]">problems you can point to</span>, not random tweaks.
           </p>
         </div>
       </section>
@@ -337,8 +336,8 @@ function MinimalDOM() {
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">How we define Forge.</h2>
           <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
-            We’re a <span className="text-[#111]">behavior-first</span> product: real usage in, readiness and ranked interventions out—each tied to evidence you can explain.{' '}
-            <span className="text-[#111]">Clarity</span> means knowing which user pains deserve the next sprint; <span className="text-[#111]">intuition</span> is what we deliberately replace when the data says otherwise.
+            <span className="text-[#111]">Behavior-first</span>: usage in, evidence-backed rankings out.{' '}
+            <span className="text-[#111]">Clarity</span> picks what ships; the signal beats intuition.
           </p>
         </div>
       </section>
@@ -349,7 +348,7 @@ function MinimalDOM() {
           Clarity over intuition—in practice.
         </h2>
         <p className="sans-text pointer-events-none mb-8 max-w-lg text-sm text-[#6B6B6B] md:mb-12 md:text-lg">
-          Request a conversation—we’ll follow up on your product, your data, and whether Forge is the right way to turn user pain into prioritized work.
+          Request a conversation—we’ll follow up if Forge fits your product and data.
         </p>
         <button
           onClick={openModal}
