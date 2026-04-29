@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
-import { createPhase1Repository } from '@/lib/phase1';
-import { Phase1Event, Phase1ReadinessSnapshot } from '@/lib/phase1/storage';
+import { computeReadinessSnapshotFromEvents, createPhase1Repository } from '@/lib/phase1';
+import type { Phase1Event, Phase1ReadinessSnapshot } from '@/lib/phase1/storage';
 import {
   badRequest,
   mapRouteError,
@@ -20,62 +20,6 @@ interface ReadinessData {
   };
 }
 
-function fallbackSufficiency(siteId: string, events: Phase1Event[]): Phase1ReadinessSnapshot {
-  const sessions = new Set(events.map((event) => event.sessionId));
-  const pages = new Set(events.map((event) => event.path));
-  const eventTypes = new Set(events.map((event) => event.type));
-
-  const reasons: string[] = [];
-  if (events.length < 25) reasons.push('Need at least 25 events.');
-  if (sessions.size < 10) reasons.push('Need at least 10 unique sessions.');
-  if (pages.size < 5) reasons.push('Need events across at least 5 paths.');
-  if (eventTypes.size < 3) reasons.push('Need at least 3 event types.');
-
-  const scoreParts = [
-    Math.min(events.length / 25, 1),
-    Math.min(sessions.size / 10, 1),
-    Math.min(pages.size / 5, 1),
-    Math.min(eventTypes.size / 3, 1),
-  ];
-  const score = Math.round((scoreParts.reduce((sum, n) => sum + n, 0) / scoreParts.length) * 100);
-
-  const status: Phase1ReadinessSnapshot['status'] =
-    score >= 85 ? 'sufficient' : score >= 50 ? 'collecting' : 'insufficient';
-
-  return {
-    id: `snapshot-${siteId}-${new Date().toISOString().slice(0, 16)}`,
-    siteId,
-    score,
-    status,
-    reasons,
-    eventCount: events.length,
-    sessionCount: sessions.size,
-    generatedAt: new Date().toISOString(),
-  };
-}
-
-async function computeSnapshot(siteId: string, events: Phase1Event[]): Promise<Phase1ReadinessSnapshot> {
-  try {
-    const modulePath = '@/lib/phase1/sufficiency';
-    const sufficiencyModule = (await import(modulePath)) as {
-      computeSufficiencySnapshot?: (args: { siteId: string; events: Phase1Event[] }) => Phase1ReadinessSnapshot;
-      computeSufficiency?: (args: { siteId: string; events: Phase1Event[] }) => Phase1ReadinessSnapshot;
-    };
-
-    if (typeof sufficiencyModule.computeSufficiencySnapshot === 'function') {
-      return sufficiencyModule.computeSufficiencySnapshot({ siteId, events });
-    }
-
-    if (typeof sufficiencyModule.computeSufficiency === 'function') {
-      return sufficiencyModule.computeSufficiency({ siteId, events });
-    }
-  } catch {
-    // Fall back when sufficiency module is not available in this phase.
-  }
-
-  return fallbackSufficiency(siteId, events);
-}
-
 async function buildReadinessResponse(siteId: string, organizationId: string) {
   const repository = createPhase1Repository();
   const events = (await repository.listEvents({
@@ -84,7 +28,7 @@ async function buildReadinessResponse(siteId: string, organizationId: string) {
     limit: 2000,
   })) as Phase1Event[];
 
-  const snapshot = await computeSnapshot(siteId, events);
+  const snapshot = computeReadinessSnapshotFromEvents(siteId, events);
   await repository.createReadinessSnapshot({
     id: randomUUID(),
     organizationId,

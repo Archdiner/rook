@@ -7,6 +7,57 @@ import type {
 const CONFIDENCE_FLOOR = 0.2;
 const CONFIDENCE_CEILING = 0.98;
 
+/** Thresholds and weights for deterministic insight rules — tune here instead of inline. */
+const RULE = {
+  cohortAsymmetry: {
+    minConversionGap: 0.12,
+    minSessionsPerCohort: 30,
+    confidenceBase: 0.45,
+    conversionGapWeight: 1.4,
+    intentGapWeight: 0.3,
+    sessionCoverageWeight: 0.2,
+    priorityWeight: 0.55,
+    priorityCoverageFactor: 0.7,
+    priorityIntensityFactor: 0.5,
+  },
+  narrativeMismatch: {
+    confidenceBase: 0.4,
+    minMismatchRate: 0.25,
+    minDominantPathShare: 0.2,
+    confidenceMismatchFactor: 0.9,
+    confidenceDominantShareFactor: 0.2,
+    priorityWeight: 0.5,
+  },
+  onboardingFriction: {
+    confidenceBase: 0.38,
+    minDropRate: 0.22,
+    minRageRate: 0.08,
+    confidenceDropFactor: 1.1,
+    confidenceRageFactor: 0.7,
+    priorityWeight: 0.58,
+  },
+  ctaHierarchyConflict: {
+    confidenceBase: 0.42,
+    minConversionGap: 0.08,
+    confidenceConversionGapFactor: 1.3,
+    confidenceClickShareFactor: 0.2,
+    priorityWeight: 0.52,
+  },
+  deadEndRage: {
+    confidenceBase: 0.46,
+    minDeadEndRate: 0.18,
+    minRageRate: 0.12,
+    minImpactedSessions: 20,
+    confidenceDeadEndFactor: 0.9,
+    confidenceRageFactor: 0.8,
+    priorityWeight: 0.6,
+  },
+  scoreBlend: {
+    intensityWeight: 0.7,
+    coverageWeight: 0.5,
+  },
+} as const;
+
 export function evaluateAllRules(input: InsightInput): InsightFinding[] {
   assertInsightInput(input);
 
@@ -24,6 +75,8 @@ export function evaluateCohortAsymmetry(input: InsightInput): InsightFinding[] {
     return [];
   }
 
+  const R = RULE.cohortAsymmetry;
+
   const byPerformance = [...input.cohorts].sort((a, b) => {
     const byConversion = b.conversionRate - a.conversionRate;
     if (byConversion !== 0) return byConversion;
@@ -35,7 +88,7 @@ export function evaluateCohortAsymmetry(input: InsightInput): InsightFinding[] {
   const intentGap = top.avgIntentScore - bottom.avgIntentScore;
   const sessionCoverage = (top.sessionCount + bottom.sessionCount) / Math.max(input.totals.sessions, 1);
 
-  if (conversionGap < 0.12 || top.sessionCount < 30 || bottom.sessionCount < 30) {
+  if (conversionGap < R.minConversionGap || top.sessionCount < R.minSessionsPerCohort || bottom.sessionCount < R.minSessionsPerCohort) {
     return [];
   }
 
@@ -55,17 +108,24 @@ export function evaluateCohortAsymmetry(input: InsightInput): InsightFinding[] {
         `Replicate high-intent entry framing from ${top.label} for ${bottom.label}.`,
         `Audit copy and offer parity for ${bottom.label} paths that underperform.`,
       ],
-      confidence: bounded(0.45 + conversionGap * 1.4 + intentGap * 0.3 + sessionCoverage * 0.2),
-      priorityScore: score(0.55, conversionGap, sessionCoverage),
+      confidence: bounded(
+        R.confidenceBase +
+          conversionGap * R.conversionGapWeight +
+          intentGap * R.intentGapWeight +
+          sessionCoverage * R.sessionCoverageWeight
+      ),
+      priorityScore: score(R.priorityWeight, conversionGap, sessionCoverage),
     },
   ];
 }
 
 export function evaluateNarrativeMismatch(input: InsightInput): InsightFinding[] {
   const findings: InsightFinding[] = [];
+  const R = RULE.narrativeMismatch;
+
   const sorted = [...input.narratives].sort((a, b) => a.narrativeId.localeCompare(b.narrativeId));
   for (const narrative of sorted) {
-    if (narrative.mismatchRate < 0.25 || narrative.dominantPathShare < 0.2) {
+    if (narrative.mismatchRate < R.minMismatchRate || narrative.dominantPathShare < R.minDominantPathShare) {
       continue;
     }
     const evidenceRefs = uniq(narrative.evidenceRefs).slice(0, 10);
@@ -83,8 +143,12 @@ export function evaluateNarrativeMismatch(input: InsightInput): InsightFinding[]
         `Align landing narrative modules to expected paths (${narrative.expectedPathRefs.join(", ")}).`,
         `Reorder IA blocks so ${narrative.dominantPathRef} is not the accidental default route.`,
       ],
-      confidence: bounded(0.4 + narrative.mismatchRate * 0.9 + narrative.dominantPathShare * 0.2),
-      priorityScore: score(0.5, narrative.mismatchRate, narrative.dominantPathShare),
+      confidence: bounded(
+        R.confidenceBase +
+          narrative.mismatchRate * R.confidenceMismatchFactor +
+          narrative.dominantPathShare * R.confidenceDominantShareFactor
+      ),
+      priorityScore: score(R.priorityWeight, narrative.mismatchRate, narrative.dominantPathShare),
     });
   }
   return findings;
@@ -92,10 +156,12 @@ export function evaluateNarrativeMismatch(input: InsightInput): InsightFinding[]
 
 export function evaluateOnboardingFriction(input: InsightInput): InsightFinding[] {
   const findings: InsightFinding[] = [];
+  const R = RULE.onboardingFriction;
+
   const sorted = [...input.onboarding].sort((a, b) => a.stepId.localeCompare(b.stepId));
   for (const step of sorted) {
     const dropRate = Math.max(0, step.entryRate - step.completionRate);
-    if (dropRate < 0.22 || step.rageRate < 0.08) {
+    if (dropRate < R.minDropRate || step.rageRate < R.minRageRate) {
       continue;
     }
     const evidenceRefs = uniq(step.evidenceRefs).slice(0, 10);
@@ -113,8 +179,8 @@ export function evaluateOnboardingFriction(input: InsightInput): InsightFinding[
         `Reduce cognitive load in ${step.stepLabel} by trimming required actions.`,
         `Introduce inline guidance and error prevention for ${step.stepLabel}.`,
       ],
-      confidence: bounded(0.38 + dropRate * 1.1 + step.rageRate * 0.7),
-      priorityScore: score(0.58, dropRate, step.rageRate),
+      confidence: bounded(R.confidenceBase + dropRate * R.confidenceDropFactor + step.rageRate * R.confidenceRageFactor),
+      priorityScore: score(R.priorityWeight, dropRate, step.rageRate),
     });
   }
   return findings;
@@ -122,6 +188,8 @@ export function evaluateOnboardingFriction(input: InsightInput): InsightFinding[
 
 export function evaluateCtaHierarchyConflict(input: InsightInput): InsightFinding[] {
   const findings: InsightFinding[] = [];
+  const R = RULE.ctaHierarchyConflict;
+
   const groups = groupByPage(input.ctas);
   const pageRefs = Object.keys(groups).sort((a, b) => a.localeCompare(b));
 
@@ -147,7 +215,7 @@ export function evaluateCtaHierarchyConflict(input: InsightInput): InsightFindin
     }
 
     const conversionGap = conversionTop.conversionShare - visualTop.conversionShare;
-    if (conversionGap < 0.08) {
+    if (conversionGap < R.minConversionGap) {
       continue;
     }
 
@@ -166,8 +234,10 @@ export function evaluateCtaHierarchyConflict(input: InsightInput): InsightFindin
         `Promote "${conversionTop.label}" above "${visualTop.label}" in hierarchy and styling.`,
         `Reduce visual dominance of low-converting CTA variants on ${pageRef}.`,
       ],
-      confidence: bounded(0.42 + conversionGap * 1.3 + conversionTop.clickShare * 0.2),
-      priorityScore: score(0.52, conversionGap, conversionTop.clickShare),
+      confidence: bounded(
+        R.confidenceBase + conversionGap * R.confidenceConversionGapFactor + conversionTop.clickShare * R.confidenceClickShareFactor
+      ),
+      priorityScore: score(R.priorityWeight, conversionGap, conversionTop.clickShare),
     });
   }
 
@@ -176,9 +246,15 @@ export function evaluateCtaHierarchyConflict(input: InsightInput): InsightFindin
 
 export function evaluateDeadEndRageConcentration(input: InsightInput): InsightFinding[] {
   const findings: InsightFinding[] = [];
+  const R = RULE.deadEndRage;
+
   const sorted = [...input.deadEnds].sort((a, b) => a.pageRef.localeCompare(b.pageRef));
   for (const node of sorted) {
-    if (node.deadEndRate < 0.18 || node.rageRate < 0.12 || node.impactedSessions < 20) {
+    if (
+      node.deadEndRate < R.minDeadEndRate ||
+      node.rageRate < R.minRageRate ||
+      node.impactedSessions < R.minImpactedSessions
+    ) {
       continue;
     }
     const evidenceRefs = uniq(node.evidenceRefs).slice(0, 10);
@@ -196,8 +272,10 @@ export function evaluateDeadEndRageConcentration(input: InsightInput): InsightFi
         `Add explicit next-step exits from ${node.pageRef} to high-intent destinations.`,
         `Instrument and remove interaction traps causing repeated dead-end actions.`,
       ],
-      confidence: bounded(0.46 + node.deadEndRate * 0.9 + node.rageRate * 0.8),
-      priorityScore: score(0.6, node.deadEndRate, node.rageRate),
+      confidence: bounded(
+        R.confidenceBase + node.deadEndRate * R.confidenceDeadEndFactor + node.rageRate * R.confidenceRageFactor
+      ),
+      priorityScore: score(R.priorityWeight, node.deadEndRate, node.rageRate),
     });
   }
   return findings;
@@ -238,7 +316,8 @@ function bounded(value: number): number {
 }
 
 function score(weight: number, intensity: number, coverage: number): number {
-  return round(100 * (weight + intensity * 0.7 + coverage * 0.5));
+  const { intensityWeight, coverageWeight } = RULE.scoreBlend;
+  return round(100 * (weight + intensity * intensityWeight + coverage * coverageWeight));
 }
 
 function round(value: number): number {

@@ -70,6 +70,7 @@ export function createBlobPhase1Repository(): Phase1Repository {
       const events = await readJsonlRecords<Phase1EventRecord & { organizationId?: string }>('events', {
         limit: input.limit ?? DEFAULT_EVENTS_LIMIT,
         monthsToScan: 6,
+        siteId: input.siteId,
         filter: (record) =>
           record.siteId === input.siteId && isOrgMatch(record.organizationId, input.organizationId),
       });
@@ -105,6 +106,7 @@ export function createBlobPhase1Repository(): Phase1Repository {
         {
           limit: 1,
           monthsToScan: 6,
+          siteId: input.siteId,
           filter: (record) =>
             record.siteId === input.siteId && isOrgMatch(record.organizationId, input.organizationId),
         }
