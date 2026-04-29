@@ -10,7 +10,9 @@ This is the **canonical, version-controlled** product narrative. For private scr
 
 ## 1. Executive summary
 
-**Forge** helps teams decide **what to ship next** by grounding prioritization in **observed user behavior**, not opinion alone. The product combines:
+**Forge** is a **site improver**, not a site builder: it helps teams decide **what to change on an existing live product** by grounding prioritization in **observed user behavior**, **per-property design/context**, and **attributable receipts**—not generic templates alone. Strategic differentiation, autonomy boundaries, credibility demos, and third-party-first composition are specified in **`docs/SITE_IMPROVER_VISION_PRD.md`** (read alongside this document).
+
+The phased product combines:
 
 - **Intake & discovery** (Phase 0) to validate problems and recruit design partners.
 - **Deterministic analysis** (Phase 1+) — sufficiency, readiness, insights, recommendations — exposed via HTTP APIs and optional operator UI.
@@ -34,7 +36,7 @@ Forge addresses this by making **sufficiency and readiness explicit**, producing
 
 ## 3. Product vision
 
-Forge becomes the **decision layer** between telemetry and execution: ingest structured signals, judge whether conclusions are justified, surface ranked insights, and recommend next actions with explicit confidence.
+Forge becomes the **decision layer** between telemetry and execution: ingest structured signals, judge whether conclusions are justified, surface ranked insights, and recommend next actions with explicit confidence—all on **the customer’s live site**, respecting **per-property context** (“design DNA”), not prescribing a generic Forge look. Expanded positioning—**site improver vs site builder**, **credibility demos**, **third-party composition**, autonomy levels—is in **`docs/SITE_IMPROVER_VISION_PRD.md`**.
 
 Long-term, Forge pairs deterministic cores with richer integrations and outcome feedback. Near-term, Forge ships a **thin vertical slice**: ingest → score → recommend → inspect.
 
@@ -199,10 +201,12 @@ Long-term, Forge pairs deterministic cores with richer integrations and outcome 
 
 ---
 
-## 10. References (code)
+## 10. References (documents & code)
 
 | Topic | Location |
 | --- | --- |
+| **Site Improver Vision & credibility demos** | `forge/docs/SITE_IMPROVER_VISION_PRD.md` |
+| Evidence model / Phase 2 audits | `forge/docs/PHASE2_EVIDENCE_MODEL.md` |
 | Phase 1 APIs | `src/app/api/phase1/` |
 | Sufficiency engine | `src/lib/phase1/sufficiency/` |
 | Insights rules | `src/lib/phase1/insights/rules.ts` |

@@ -318,10 +318,14 @@ function MinimalDOM() {
             Clarity over<br />
             intuition.
           </h1>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-[1.8]">
-            <span className="text-[#111]">Forge</span> reads how people move through your product and returns ranked changes aimed at{' '}
-            <span className="text-[#111]">real pain</span>—stalls, confusion, drop-off—grounded in paths, sessions, and events. Not hunches. Not generic redesign lists.
-          </p>
+          <div className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+            <p className="text-[#111]">
+              Forge analyzes how people actually use your product—clicks, paths, sessions—and ranks what to change first.
+            </p>
+            <p>
+              The output is a prioritized fix list tied to real stalls and drop-offs, not opinion decks or generic redesign checklists.
+            </p>
+          </div>
         </div>
       </section>
 
@@ -329,10 +333,10 @@ function MinimalDOM() {
       <section className="h-screen w-full flex flex-col pt-[62vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-[1.8]">
-            Weak journeys show up in clicks and conversions. We start from that signal so you fix{' '}
-            <span className="text-[#111]">real struggle</span>, not invented roadmap work.
-          </p>
+          <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+            <p>If the journey is broken, your analytics already show it—missed clicks, weak conversion, repetitive loops.</p>
+            <p className="text-[#111]">We ground recommendations in that behavior so you solve real friction, not placeholder roadmap items.</p>
+          </div>
         </div>
       </section>
 
@@ -340,32 +344,35 @@ function MinimalDOM() {
       <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-[1.8]">
-            Rankings follow the friction your data already shows—so you ship relief for{' '}
-            <span className="text-[#111]">problems you can point to</span>, not random tweaks.
-          </p>
+          <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+            <p>Priorities mirror the friction visible in your data.</p>
+            <p className="text-[#111]">You ship changes you can justify with evidence—not scattershot UX tweaks.</p>
+          </div>
         </div>
       </section>
 
       {/* Section 4: Microchip is flat/wide — text can be higher */}
       <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
         <div className="max-w-[500px] md:mt-[20vh]">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">How we define Forge.</h2>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-[1.8]">
-            <span className="text-[#111]">Behavior-first</span>: usage in, evidence-backed rankings out.{' '}
-            <span className="text-[#111]">Clarity</span> picks what ships; the signal beats intuition.
-          </p>
+          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">What Forge means.</h2>
+          <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+            <p>
+              <span className="text-[#111]">Behavior-first:</span> product usage in; ranked, explainable priorities out.
+            </p>
+            <p className="text-[#111]">Signal from your data—not gut feel—decides what ships.</p>
+          </div>
         </div>
       </section>
 
       {/* Section 5: CTA */}
       <section className="h-screen w-full flex flex-col items-center justify-center text-center px-6">
         <h2 className="sans-text text-3xl sm:text-5xl md:text-8xl font-bold tracking-tighter mb-4 md:mb-6 pointer-events-none">
-          Clarity over intuition—in practice.
+          See if Forge fits.
         </h2>
-        <p className="sans-text pointer-events-none mb-8 max-w-lg text-sm text-[#6B6B6B] md:mb-12 md:text-lg">
-          Request a conversation—we’ll follow up if Forge fits your product and data.
-        </p>
+        <div className="sans-text pointer-events-none mb-8 max-w-md mx-auto space-y-2 text-sm text-[#6B6B6B] md:mb-12 md:text-lg">
+          <p>Send your site—we’ll review your funnel manually.</p>
+          <p>We’ll only reach out if there’s a real match.</p>
+        </div>
         <button
           onClick={openModal}
           className="bg-[#111] text-white px-8 md:px-12 py-4 md:py-6 rounded-full sans-text text-lg md:text-2xl font-bold shadow-2xl hover:scale-105 transition-transform pointer-events-auto"

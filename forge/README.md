@@ -8,7 +8,7 @@ Forge is pre-product. **Phase 1 core** (sufficiency + insights engines, Phase 1 
 
 When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensure migrations are applied). To smoke-test APIs without Postgres: `PORT=3020 DATABASE_URL= PHASE1_STORAGE_DRIVER=blob npm run start`.
 
-**Full product narrative (Phases 0–4):** see `[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)`. **Phase 2 evidence contract:** see `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`. For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
+**Full product narrative (Phases 0–4):** see `[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)`. **Site improver positioning, credibility demos, DNA model, autonomy boundaries:** see `[docs/SITE_IMPROVER_VISION_PRD.md](docs/SITE_IMPROVER_VISION_PRD.md)`. **Phase 2 evidence contract:** see `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`. For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
 
 **Interactive API docs** (marketing-site visuals + particle background): open `**/docs`** on your deployment (e.g. `https://your-app.vercel.app/docs`).
 
@@ -340,7 +340,7 @@ See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
 
 ## Repository Structure
 
-- `docs` - Product PRD and phase narrative (`PRODUCT_PRD.md`)
+- `docs` - Product PRD (`PRODUCT_PRD.md`), site-improver vision PRD (`SITE_IMPROVER_VISION_PRD.md`), Phase 2 evidence model
 - `src/app` - Pages and route handlers
 - `src/app/api/discovery` - Discovery survey API
 - `src/app/api/intake` - General intake API
@@ -356,7 +356,7 @@ See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
 
 ## Roadmap
 
-See `**[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)`** for goals, success criteria, and non-goals per phase.
+See **[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)** for goals, success criteria, and non-goals per phase, and **[docs/SITE_IMPROVER_VISION_PRD.md](docs/SITE_IMPROVER_VISION_PRD.md)** for north-star differentiation (credentials, receipts, DNA, third-party stack).
 
 - **Phase 0**: Discovery and problem validation
 - **Phase 1**: Data sufficiency, readiness scoring, deterministic insights/recommendations
