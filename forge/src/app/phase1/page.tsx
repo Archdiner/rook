@@ -301,19 +301,16 @@ export default function Phase1Page() {
   };
 
   useEffect(() => {
-    // Defer initial load to avoid synchronous setState calls in effect body.
-    void Promise.resolve().then(() => {
-      void loadSites();
-    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch lists on mount (async loaders manage their own state).
+    void loadSites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!selectedSiteId) return;
-    void Promise.resolve().then(() => {
-      void loadReadiness(selectedSiteId);
-      void loadRecommendations(selectedSiteId);
-    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load panels when site selection changes.
+    void loadReadiness(selectedSiteId);
+    void loadRecommendations(selectedSiteId);
   }, [selectedSiteId]);
 
   const onCreateSite = async (event: React.FormEvent) => {

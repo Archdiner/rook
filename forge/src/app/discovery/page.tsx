@@ -3,26 +3,15 @@
 import Link from 'next/link';
 import React, { useState } from 'react';
 
+import {
+  DISCOVERY_Q3_OPTIONS,
+  DISCOVERY_Q5_OPTIONS,
+  DISCOVERY_Q6_OPTIONS,
+  validateDiscoveryPayload,
+} from '@/lib/discovery/schema';
+
 type YesNo = 'yes' | 'no' | '';
 type Status = 'idle' | 'submitting' | 'success' | 'error';
-
-const Q3_OPTIONS = [
-  'Looked at analytics',
-  'Watched session replays',
-  'Asked users directly',
-  'Hired a contractor or agency',
-  'Used Cursor or another AI tool to make changes',
-  'Nothing — gave up',
-  'Other',
-];
-
-const Q5_OPTIONS = [
-  'Yes, immediately',
-  'Yes, if I trusted the source',
-  'Probably not',
-];
-
-const Q6_OPTIONS = ['Yes', 'Maybe', 'No'];
 
 const INK = '#111';
 const MUTED = '#6B6B6B';
@@ -61,19 +50,6 @@ const numberStyle: React.CSSProperties = {
 const questionBlockStyle: React.CSSProperties = {
   marginBottom: '48px',
 };
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidUrl(value: string): boolean {
-  try {
-    const u = new URL(value.startsWith('http') ? value : `https://${value}`);
-    return Boolean(u.hostname);
-  } catch {
-    return false;
-  }
-}
 
 function OptionRow({
   selected,
@@ -190,44 +166,6 @@ export default function DiscoveryPage() {
     e.preventDefault();
     setErrorMsg('');
 
-    if (!q1) {
-      setErrorMsg('Please answer the first question to continue.');
-      return;
-    }
-
-    if (q1 === 'yes') {
-      if (q4 < 1 || q4 > 5) {
-        setErrorMsg('Please rate question 4 on the 1–5 scale.');
-        return;
-      }
-      if (!q5) {
-        setErrorMsg('Please answer question 5.');
-        return;
-      }
-      if (!q6) {
-        setErrorMsg('Please answer question 6.');
-        return;
-      }
-      if (!q7) {
-        setErrorMsg('Please answer question 7.');
-        return;
-      }
-      if (q7 === 'yes' && !isValidEmail(q7Email.trim())) {
-        setErrorMsg('Please provide a valid email for the call.');
-        return;
-      }
-      if (!q8) {
-        setErrorMsg('Please answer question 8.');
-        return;
-      }
-      if (q8 === 'yes' && !isValidUrl(q8Url.trim())) {
-        setErrorMsg('Please provide a valid site URL for the audit.');
-        return;
-      }
-    }
-
-    setStatus('submitting');
-
     const payload = {
       q1,
       q2: q1 === 'yes' ? q2.trim() : '',
@@ -244,11 +182,19 @@ export default function DiscoveryPage() {
       website_field: websiteField,
     };
 
+    const validated = validateDiscoveryPayload(payload);
+    if (!validated.ok) {
+      setErrorMsg(validated.error);
+      return;
+    }
+
+    setStatus('submitting');
+
     try {
       const res = await fetch('/api/discovery', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(validated.data),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -497,7 +443,7 @@ export default function DiscoveryPage() {
                       Select all that apply.
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {Q3_OPTIONS.map((option) => (
+                      {DISCOVERY_Q3_OPTIONS.map((option) => (
                         <OptionRow
                           key={option}
                           selected={q3.includes(option)}
@@ -586,7 +532,7 @@ export default function DiscoveryPage() {
                       would you ship them?
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {Q5_OPTIONS.map((option) => (
+                      {DISCOVERY_Q5_OPTIONS.map((option) => (
                         <OptionRow
                           key={option}
                           selected={q5 === option}
@@ -608,7 +554,7 @@ export default function DiscoveryPage() {
                       you, with a refund if your conversions don&apos;t move within 60 days?
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {Q6_OPTIONS.map((option) => (
+                      {DISCOVERY_Q6_OPTIONS.map((option) => (
                         <OptionRow
                           key={option}
                           selected={q6 === option}

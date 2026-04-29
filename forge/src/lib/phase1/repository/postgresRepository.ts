@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db/client';
-import { phase1Events, phase1Sites } from '@/lib/db/schema';
+import { phase1Events, phase1ReadinessSnapshots, phase1Sites } from '@/lib/db/schema';
 
 import type {
   CreatePhase1EventInput,
@@ -115,25 +115,64 @@ export function createPostgresPhase1Repository(): Phase1Repository {
     async createReadinessSnapshot(
       input: CreatePhase1ReadinessSnapshotInput
     ): Promise<Phase1ReadinessSnapshotRecord> {
-      // TODO(phase1): Persist snapshots in Postgres once read models are wired.
+      const db = getDb();
+      const [created] = await db
+        .insert(phase1ReadinessSnapshots)
+        .values({
+          id: input.id,
+          organizationId: input.organizationId,
+          siteId: input.siteId,
+          score: input.score,
+          status: input.status,
+          reasons: input.reasons,
+          eventCount: input.eventCount,
+          sessionCount: input.sessionCount,
+          generatedAt: new Date(input.generatedAt),
+        })
+        .returning();
+
       return {
-        id: input.id,
-        organizationId: input.organizationId,
-        siteId: input.siteId,
-        score: input.score,
-        status: input.status,
-        reasons: input.reasons,
-        eventCount: input.eventCount,
-        sessionCount: input.sessionCount,
-        generatedAt: input.generatedAt,
+        id: created.id,
+        organizationId: created.organizationId,
+        siteId: created.siteId,
+        score: created.score,
+        status: created.status as Phase1ReadinessSnapshotRecord['status'],
+        reasons: created.reasons,
+        eventCount: created.eventCount,
+        sessionCount: created.sessionCount,
+        generatedAt: created.generatedAt.toISOString(),
       };
     },
     async getLatestReadinessSnapshot(
       input: GetLatestPhase1ReadinessSnapshotInput
     ): Promise<Phase1ReadinessSnapshotRecord | null> {
-      void input;
-      // TODO(phase1): Read snapshots from Postgres after snapshot persistence is implemented.
-      return null;
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(phase1ReadinessSnapshots)
+        .where(
+          and(
+            eq(phase1ReadinessSnapshots.organizationId, input.organizationId),
+            eq(phase1ReadinessSnapshots.siteId, input.siteId)
+          )
+        )
+        .orderBy(desc(phase1ReadinessSnapshots.generatedAt))
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+
+      return {
+        id: row.id,
+        organizationId: row.organizationId,
+        siteId: row.siteId,
+        score: row.score,
+        status: row.status as Phase1ReadinessSnapshotRecord['status'],
+        reasons: row.reasons,
+        eventCount: row.eventCount,
+        sessionCount: row.sessionCount,
+        generatedAt: row.generatedAt.toISOString(),
+      };
     },
   };
 }

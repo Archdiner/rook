@@ -63,7 +63,6 @@ const PHASE1_PREFIX = 'phase1';
 const DEFAULT_READ_LIMIT = 100;
 const DEFAULT_MONTHS_TO_SCAN = 6;
 const LOCAL_FALLBACK_ROOT = path.join(os.tmpdir(), 'forge-phase1');
-
 function getBlobToken(): string | undefined {
   return process.env.BLOB_READ_WRITE_TOKEN;
 }
@@ -72,194 +71,430 @@ function getMonthKey(date = new Date()): string {
   return date.toISOString().slice(0, 7);
 }
 
-function monthPath(collection: Phase1Collection, month = getMonthKey()): string {
+function recentMonthKeys(count: number): string[] {
+  const keys: string[] = [];
+  const base = new Date();
+  for (let i = 0; i < count; i++) {
+    const d = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() - i, 1));
+    keys.push(d.toISOString().slice(0, 7));
+  }
+  return keys;
+}
+
+/** Legacy monthly NDJSON blob (read-only compat). */
+function legacyMonthJsonlPath(collection: Phase1Collection, month: string): string {
   return `${PHASE1_PREFIX}/${collection}/${month}.jsonl`;
 }
 
-function collectionPrefix(collection: Phase1Collection): string {
-  return `${PHASE1_PREFIX}/${collection}/`;
+function recordBlobPathname(
+  collection: Phase1Collection,
+  record: Record<string, unknown>,
+  month: string
+): string {
+  const id = typeof record.id === 'string' ? record.id : null;
+  if (!id) {
+    throw new Phase1StorageError(
+      'BLOB_APPEND_FAILED',
+      `Record missing string id for ${collection} append.`
+    );
+  }
+
+  switch (collection) {
+    case 'sites':
+      return `${PHASE1_PREFIX}/sites/${month}/${id}.json`;
+    case 'events': {
+      const siteId = typeof record.siteId === 'string' ? record.siteId : null;
+      if (!siteId) {
+        throw new Phase1StorageError(
+          'BLOB_APPEND_FAILED',
+          'Event record missing siteId for partitioned blob path.'
+        );
+      }
+      return `${PHASE1_PREFIX}/events/${month}/${siteId}/${id}.json`;
+    }
+    case 'snapshots': {
+      const siteId = typeof record.siteId === 'string' ? record.siteId : null;
+      if (!siteId) {
+        throw new Phase1StorageError(
+          'BLOB_APPEND_FAILED',
+          'Snapshot record missing siteId for partitioned blob path.'
+        );
+      }
+      return `${PHASE1_PREFIX}/snapshots/${month}/${siteId}/${id}.json`;
+    }
+  }
 }
 
 function getLocalFallbackPath(pathname: string): string {
   return path.join(LOCAL_FALLBACK_ROOT, pathname);
 }
 
-async function appendLocalJsonl(pathname: string, record: object): Promise<void> {
+async function writeLocalJsonRecord(pathname: string, record: object): Promise<void> {
   const filePath = getLocalFallbackPath(pathname);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.appendFile(filePath, `${JSON.stringify(record)}\n`, 'utf8');
+  await fs.writeFile(filePath, JSON.stringify(record), 'utf8');
 }
 
-async function listLocalMonthPaths(collection: Phase1Collection, limit: number): Promise<string[]> {
-  const collectionDir = getLocalFallbackPath(collectionPrefix(collection));
+async function listBlobJsonPathnames(prefix: string, token: string): Promise<string[]> {
   try {
-    const entries = await fs.readdir(collectionDir, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
-      .map((entry) => `${collectionPrefix(collection)}${entry.name}`)
-      .sort((a, b) => b.localeCompare(a))
-      .slice(0, Math.max(limit, 1));
+    const result = await list({
+      token,
+      prefix,
+      limit: 2000,
+    });
+    return (result.blobs as BlobLikeEntry[])
+      .map((entry) => entry.pathname)
+      .filter((pathname): pathname is string => Boolean(pathname?.endsWith('.json')));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
-    }
-    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to list local records for ${collection}`, error);
+    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to list blobs for prefix ${prefix}`, error);
   }
 }
 
-async function readLocalJsonlRecords<T>(
-  collection: Phase1Collection,
-  options: {
-    limit: number;
-    monthsToScan: number;
-    filter?: (record: T) => boolean;
-  }
-): Promise<T[]> {
-  const out: T[] = [];
-  const paths = await listLocalMonthPaths(collection, options.monthsToScan);
-  for (const pathname of paths) {
-    if (out.length >= options.limit) break;
-    try {
-      const text = await fs.readFile(getLocalFallbackPath(pathname), 'utf8');
-      const lines = text.split('\n').reverse();
-      for (const line of lines) {
-        const parsed = parseJsonlLine<T>(line);
-        if (!parsed) continue;
-        if (options.filter && !options.filter(parsed)) continue;
-        out.push(parsed);
-        if (out.length >= options.limit) break;
-      }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        continue;
-      }
-      throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to read local records ${pathname}`, error);
-    }
-  }
-  return out;
-}
-
-function parseJsonlLine<T>(line: string): T | null {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
+function parseJsonObject<T>(raw: string): T | null {
   try {
-    return JSON.parse(trimmed) as T;
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
 }
 
+function parseJsonlLine<T>(line: string): T | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  return parseJsonObject(trimmed);
+}
+
+async function fetchBlobJson<T>(pathname: string, token: string): Promise<T | null> {
+  try {
+    const meta = await head(pathname, { token });
+    const res = await fetch(meta.url, { cache: 'no-store' });
+    if (!res.ok) return null;
+    return parseJsonObject<T>(await res.text());
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) {
+      return null;
+    }
+    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to read blob ${pathname}`, error);
+  }
+}
+
+async function readLegacyMonthJsonl<T>(
+  collection: Phase1Collection,
+  month: string,
+  token: string,
+  filter: ((record: T) => boolean) | undefined,
+  take: number
+): Promise<T[]> {
+  const pathname = legacyMonthJsonlPath(collection, month);
+  const out: T[] = [];
+  try {
+    const meta = await head(pathname, { token });
+    const res = await fetch(meta.url, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const lines = (await res.text()).split('\n').reverse();
+    for (const line of lines) {
+      if (out.length >= take) break;
+      const parsed = parseJsonlLine<T>(line);
+      if (!parsed) continue;
+      if (filter && !filter(parsed)) continue;
+      out.push(parsed);
+    }
+  } catch (error) {
+    if (error instanceof BlobNotFoundError) {
+      return [];
+    }
+    throw error;
+  }
+  return out;
+}
+
+async function readLocalJsonFiles<T>(
+  relativeDir: string,
+  filter: ((record: T) => boolean) | undefined,
+  limit: number
+): Promise<T[]> {
+  const dirPath = getLocalFallbackPath(relativeDir);
+  let names: string[] = [];
+  try {
+    names = await fs.readdir(dirPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to read local dir ${relativeDir}`, error);
+  }
+
+  const jsonFiles = names.filter((n) => n.endsWith('.json')).sort((a, b) => b.localeCompare(a));
+  const out: T[] = [];
+  for (const name of jsonFiles) {
+    if (out.length >= limit) break;
+    try {
+      const raw = await fs.readFile(path.join(dirPath, name), 'utf8');
+      const parsed = parseJsonObject<T>(raw.trim());
+      if (!parsed) continue;
+      if (filter && !filter(parsed)) continue;
+      out.push(parsed);
+    } catch {
+      continue;
+    }
+  }
+  return out;
+}
+
+async function readLocalLegacyJsonlMonth<T>(
+  collection: Phase1Collection,
+  month: string,
+  filter: ((record: T) => boolean) | undefined,
+  limit: number
+): Promise<T[]> {
+  const pathname = legacyMonthJsonlPath(collection, month);
+  const filePath = getLocalFallbackPath(pathname);
+  let text: string;
+  try {
+    text = await fs.readFile(filePath, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to read local legacy ${pathname}`, error);
+  }
+  const out: T[] = [];
+  const lines = text.split('\n').reverse();
+  for (const line of lines) {
+    if (out.length >= limit) break;
+    const parsed = parseJsonlLine<T>(line);
+    if (!parsed) continue;
+    if (filter && !filter(parsed)) continue;
+    out.push(parsed);
+  }
+  return out;
+}
+
+/** Single-record write — no read-modify-write; safe under concurrency. */
 export async function appendJsonlRecord<T extends object>(
   collection: Phase1Collection,
   record: T,
   date = new Date()
 ): Promise<{ pathname: string }> {
+  const month = getMonthKey(date);
+  const pathname = recordBlobPathname(collection, record as Record<string, unknown>, month);
   const token = getBlobToken();
-  const pathname = monthPath(collection, getMonthKey(date));
+  const body = JSON.stringify(record);
+
   if (!token) {
-    // Local development fallback when Vercel Blob credentials are not configured.
-    await appendLocalJsonl(pathname, record);
+    await writeLocalJsonRecord(pathname, record);
     return { pathname };
   }
 
-  const newLine = `${JSON.stringify(record)}\n`;
-  let existing = '';
-
   try {
-    const meta = await head(pathname, { token });
-    const res = await fetch(meta.url, { cache: 'no-store' });
-    if (res.ok) {
-      existing = await res.text();
-    }
-  } catch (error) {
-    if (!(error instanceof BlobNotFoundError)) {
-      throw new Phase1StorageError('BLOB_APPEND_FAILED', `Unable to read existing blob: ${pathname}`, error);
-    }
-  }
-
-  try {
-    await put(pathname, `${existing}${newLine}`, {
+    await put(pathname, body, {
       token,
       access: 'public',
-      contentType: 'application/x-ndjson',
-      allowOverwrite: true,
+      contentType: 'application/json',
+      allowOverwrite: false,
       addRandomSuffix: false,
     });
   } catch (error) {
-    throw new Phase1StorageError('BLOB_APPEND_FAILED', `Unable to append record to ${pathname}`, error);
+    throw new Phase1StorageError('BLOB_APPEND_FAILED', `Unable to write record blob ${pathname}`, error);
   }
 
   return { pathname };
 }
 
-export async function listMonthPaths(
-  collection: Phase1Collection,
-  limit = DEFAULT_MONTHS_TO_SCAN
-): Promise<string[]> {
-  const token = getBlobToken();
-  if (!token) {
-    return listLocalMonthPaths(collection, limit);
-  }
-
-  try {
-    const result = await list({ token, prefix: collectionPrefix(collection), limit: Math.max(limit, 1) * 3 });
-    const seen = new Set<string>();
-    for (const entry of result.blobs as BlobLikeEntry[]) {
-      if (entry.pathname?.endsWith('.jsonl')) {
-        seen.add(entry.pathname);
-      }
-    }
-
-    return Array.from(seen).sort((a, b) => b.localeCompare(a)).slice(0, Math.max(limit, 1));
-  } catch (error) {
-    throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to list blobs for ${collection}`, error);
-  }
-}
+export type ReadPhase1RecordsOptions<T> = {
+  limit?: number;
+  monthsToScan?: number;
+  filter?: (record: T) => boolean;
+  /** When set, only loads blobs under `events/{month}/{siteId}/` (avoids scanning unrelated sites). */
+  siteId?: string;
+};
 
 export async function readJsonlRecords<T>(
   collection: Phase1Collection,
-  options?: {
-    limit?: number;
-    monthsToScan?: number;
-    filter?: (record: T) => boolean;
-  }
+  options?: ReadPhase1RecordsOptions<T>
 ): Promise<T[]> {
-  const token = getBlobToken();
   const limit = Math.max(options?.limit ?? DEFAULT_READ_LIMIT, 1);
   const monthsToScan = Math.max(options?.monthsToScan ?? DEFAULT_MONTHS_TO_SCAN, 1);
   const filter = options?.filter;
+  const siteId = options?.siteId;
+  const token = getBlobToken();
 
   if (!token) {
-    return readLocalJsonlRecords<T>(collection, { limit, monthsToScan, filter });
+    return readPhase1RecordsLocal<T>(collection, {
+      limit,
+      monthsToScan,
+      filter,
+      siteId,
+    });
   }
 
-  const out: T[] = [];
+  const months = recentMonthKeys(monthsToScan);
 
-  const paths = await listMonthPaths(collection, monthsToScan);
-  for (const pathname of paths) {
-    if (out.length >= limit) break;
-    try {
-      const meta = await head(pathname, { token });
-      const res = await fetch(meta.url, { cache: 'no-store' });
-      if (!res.ok) {
-        continue;
-      }
-
-      const lines = (await res.text()).split('\n').reverse();
-      for (const line of lines) {
-        const parsed = parseJsonlLine<T>(line);
+  if (collection === 'snapshots' && siteId) {
+    const rows: T[] = [];
+    for (const month of months) {
+      const prefix = `${PHASE1_PREFIX}/snapshots/${month}/${siteId}/`;
+      const paths = await listBlobJsonPathnames(prefix, token);
+      for (const pathname of paths) {
+        const parsed = await fetchBlobJson<T>(pathname, token);
         if (!parsed) continue;
         if (filter && !filter(parsed)) continue;
-        out.push(parsed);
-        if (out.length >= limit) break;
+        rows.push(parsed);
       }
-    } catch (error) {
-      if (error instanceof BlobNotFoundError) {
-        continue;
+    }
+    rows.sort((a, b) => compareRecordsByGeneratedAt(a, b));
+    return rows.slice(0, limit);
+  }
+
+  const collected: T[] = [];
+
+  for (const month of months) {
+    if (collected.length >= limit) break;
+
+    if (collection === 'events' && siteId) {
+      const seenIds = new Set<string>();
+      const prefix = `${PHASE1_PREFIX}/events/${month}/${siteId}/`;
+      const paths = await listBlobJsonPathnames(prefix, token);
+      for (const pathname of paths.sort((a, b) => b.localeCompare(a))) {
+        if (collected.length >= limit) break;
+        const parsed = await fetchBlobJson<T>(pathname, token);
+        if (!parsed) continue;
+        if (filter && !filter(parsed)) continue;
+        const rid =
+          typeof (parsed as unknown as { id?: string }).id === 'string'
+            ? (parsed as unknown as { id: string }).id
+            : null;
+        if (rid) seenIds.add(rid);
+        collected.push(parsed);
       }
-      throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to read blob ${pathname}`, error);
+      const legacy = await readLegacyMonthJsonl<T>(
+        'events',
+        month,
+        token,
+        filter,
+        limit - collected.length
+      );
+      for (const row of legacy) {
+        if (collected.length >= limit) break;
+        const rid =
+          typeof (row as unknown as { id?: string }).id === 'string'
+            ? (row as unknown as { id: string }).id
+            : null;
+        if (rid && seenIds.has(rid)) continue;
+        if (rid) seenIds.add(rid);
+        collected.push(row);
+      }
+      continue;
+    }
+
+    const prefix =
+      collection === 'sites'
+        ? `${PHASE1_PREFIX}/sites/${month}/`
+        : `${PHASE1_PREFIX}/${collection}/${month}/`;
+
+    const paths = await listBlobJsonPathnames(prefix, token);
+    for (const pathname of paths.sort((a, b) => b.localeCompare(a))) {
+      if (collected.length >= limit) break;
+      const parsed = await fetchBlobJson<T>(pathname, token);
+      if (!parsed) continue;
+      if (filter && !filter(parsed)) continue;
+      collected.push(parsed);
+    }
+
+    if (collection === 'sites') {
+      const legacy = await readLegacyMonthJsonl<T>('sites', month, token, filter, limit - collected.length);
+      for (const row of legacy) {
+        if (collected.length >= limit) break;
+        collected.push(row);
+      }
     }
   }
 
-  return out;
+  return collected.slice(0, limit);
+}
+
+function compareRecordsByGeneratedAt(a: unknown, b: unknown): number {
+  const ga =
+    typeof a === 'object' && a !== null && 'generatedAt' in a && typeof (a as { generatedAt: string }).generatedAt === 'string'
+      ? Date.parse((a as { generatedAt: string }).generatedAt)
+      : 0;
+  const gb =
+    typeof b === 'object' && b !== null && 'generatedAt' in b && typeof (b as { generatedAt: string }).generatedAt === 'string'
+      ? Date.parse((b as { generatedAt: string }).generatedAt)
+      : 0;
+  return gb - ga;
+}
+
+async function readPhase1RecordsLocal<T>(
+  collection: Phase1Collection,
+  options: { limit: number; monthsToScan: number; filter?: (record: T) => boolean; siteId?: string }
+): Promise<T[]> {
+  const { limit, monthsToScan, filter, siteId } = options;
+  const months = recentMonthKeys(monthsToScan);
+
+  if (collection === 'snapshots' && siteId) {
+    const rows: T[] = [];
+    for (const month of months) {
+      const rel = `${PHASE1_PREFIX}/snapshots/${month}/${siteId}`;
+      const batch = await readLocalJsonFiles<T>(rel, filter, 10_000);
+      rows.push(...batch);
+    }
+    rows.sort((a, b) => compareRecordsByGeneratedAt(a, b));
+    return rows.slice(0, limit);
+  }
+
+  const collected: T[] = [];
+
+  for (const month of months) {
+    if (collected.length >= limit) break;
+
+    if (collection === 'events' && siteId) {
+      const seenIds = new Set<string>();
+      const rel = `${PHASE1_PREFIX}/events/${month}/${siteId}`;
+      const batch = await readLocalJsonFiles<T>(rel, filter, limit - collected.length);
+      for (const row of batch) {
+        if (collected.length >= limit) break;
+        const rid =
+          typeof (row as unknown as { id?: string }).id === 'string'
+            ? (row as unknown as { id: string }).id
+            : null;
+        if (rid) seenIds.add(rid);
+        collected.push(row);
+      }
+      const legacy = await readLocalLegacyJsonlMonth<T>('events', month, filter, limit - collected.length);
+      for (const row of legacy) {
+        if (collected.length >= limit) break;
+        const rid =
+          typeof (row as unknown as { id?: string }).id === 'string'
+            ? (row as unknown as { id: string }).id
+            : null;
+        if (rid && seenIds.has(rid)) continue;
+        if (rid) seenIds.add(rid);
+        collected.push(row);
+      }
+      continue;
+    }
+
+    if (collection === 'sites') {
+      const rel = `${PHASE1_PREFIX}/sites/${month}`;
+      const batch = await readLocalJsonFiles<T>(rel, filter, limit - collected.length);
+      collected.push(...batch);
+      const legacy = await readLocalLegacyJsonlMonth<T>('sites', month, filter, limit - collected.length);
+      for (const row of legacy) {
+        if (collected.length >= limit) break;
+        collected.push(row);
+      }
+      continue;
+    }
+
+    if (collection === 'events' && !siteId) {
+      const legacy = await readLocalLegacyJsonlMonth<T>('events', month, filter, limit - collected.length);
+      for (const row of legacy) {
+        if (collected.length >= limit) break;
+        collected.push(row);
+      }
+    }
+  }
+
+  return collected.slice(0, limit);
 }

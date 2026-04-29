@@ -1,36 +1,11 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
-import { put, head, BlobNotFoundError } from '@vercel/blob';
+import { put } from '@vercel/blob';
 import { randomUUID } from 'crypto';
 
-const RECIPIENT = 'sar367@cornell.edu';
-const Q3_VALID = new Set([
-  'Looked at analytics',
-  'Watched session replays',
-  'Asked users directly',
-  'Hired a contractor or agency',
-  'Used Cursor or another AI tool to make changes',
-  'Nothing — gave up',
-  'Other',
-]);
-const Q5_VALID = new Set(['Yes, immediately', 'Yes, if I trusted the source', 'Probably not']);
-const Q6_VALID = new Set(['Yes', 'Maybe', 'No']);
+import { type DiscoveryPayload, validateDiscoveryPayload } from '@/lib/discovery/schema';
 
-interface DiscoveryPayload {
-  q1: 'yes' | 'no';
-  q2?: string;
-  q3?: string[];
-  q3_other?: string;
-  q4?: number | null;
-  q4_note?: string;
-  q5?: string;
-  q6?: string;
-  q7?: 'yes' | 'no' | '';
-  q7_email?: string;
-  q8?: 'yes' | 'no' | '';
-  q8_url?: string;
-  website_field?: string;
-}
+const RECIPIENT = 'sar367@cornell.edu';
 
 function getResendClient() {
   const key = process.env.RESEND_API_KEY;
@@ -38,19 +13,6 @@ function getResendClient() {
     throw new Error('RESEND_API_KEY is not set');
   }
   return new Resend(key);
-}
-
-function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidUrl(value: string): boolean {
-  try {
-    const u = new URL(value.startsWith('http') ? value : `https://${value}`);
-    return Boolean(u.hostname);
-  } catch {
-    return false;
-  }
 }
 
 function escapeHtml(value: string): string {
@@ -77,90 +39,6 @@ function renderRows(rows: Array<{ label: string; value: string }>): string {
     </tr>`;
     })
     .join('');
-}
-
-function validatePayload(body: unknown): { ok: true; data: DiscoveryPayload } | { ok: false; error: string } {
-  if (!body || typeof body !== 'object') {
-    return { ok: false, error: 'Invalid payload.' };
-  }
-  const b = body as Record<string, unknown>;
-
-  if (typeof b.website_field === 'string' && b.website_field.trim() !== '') {
-    return { ok: false, error: 'Submission rejected.' };
-  }
-
-  if (b.q1 !== 'yes' && b.q1 !== 'no') {
-    return { ok: false, error: 'Question 1 must be answered.' };
-  }
-
-  if (b.q1 === 'no') {
-    return {
-      ok: true,
-      data: {
-        q1: 'no',
-        website_field: typeof b.website_field === 'string' ? b.website_field : '',
-      },
-    };
-  }
-
-  const q3Raw = Array.isArray(b.q3) ? b.q3 : [];
-  const q3 = q3Raw.filter((v): v is string => typeof v === 'string' && Q3_VALID.has(v));
-
-  const q4 = typeof b.q4 === 'number' ? b.q4 : NaN;
-  if (!Number.isInteger(q4) || q4 < 1 || q4 > 5) {
-    return { ok: false, error: 'Question 4 must be a number between 1 and 5.' };
-  }
-
-  const q5 = typeof b.q5 === 'string' ? b.q5 : '';
-  if (!Q5_VALID.has(q5)) {
-    return { ok: false, error: 'Question 5 must be one of the listed options.' };
-  }
-
-  const q6 = typeof b.q6 === 'string' ? b.q6 : '';
-  if (!Q6_VALID.has(q6)) {
-    return { ok: false, error: 'Question 6 must be one of the listed options.' };
-  }
-
-  if (b.q7 !== 'yes' && b.q7 !== 'no') {
-    return { ok: false, error: 'Question 7 must be answered.' };
-  }
-  let q7Email = '';
-  if (b.q7 === 'yes') {
-    q7Email = typeof b.q7_email === 'string' ? b.q7_email.trim() : '';
-    if (!isValidEmail(q7Email)) {
-      return { ok: false, error: 'A valid email is required to schedule a call.' };
-    }
-  }
-
-  if (b.q8 !== 'yes' && b.q8 !== 'no') {
-    return { ok: false, error: 'Question 8 must be answered.' };
-  }
-  let q8Url = '';
-  if (b.q8 === 'yes') {
-    q8Url = typeof b.q8_url === 'string' ? b.q8_url.trim() : '';
-    if (!isValidUrl(q8Url)) {
-      return { ok: false, error: 'A valid site URL is required for the audit.' };
-    }
-  }
-
-  return {
-    ok: true,
-    data: {
-      q1: 'yes',
-      q2: typeof b.q2 === 'string' ? b.q2.trim() : '',
-      q3,
-      q3_other: typeof b.q3_other === 'string' ? b.q3_other.trim() : '',
-      q4,
-      q4_note: typeof b.q4_note === 'string' ? b.q4_note.trim() : '',
-      q5,
-      q6,
-      q7: b.q7,
-      q7_email: q7Email,
-      q8: b.q8,
-      q8_url: q8Url,
-      website_field: '',
-    },
-  };
 }
 
 function renderEmailHtml(data: DiscoveryPayload, id: string, timestamp: string): string {
@@ -239,39 +117,22 @@ function renderEmailHtml(data: DiscoveryPayload, id: string, timestamp: string):
   `;
 }
 
-async function appendToBlob(record: object): Promise<void> {
+/** One blob per submission (no read-modify-write; avoids concurrent overwrite). */
+async function putDiscoveryRecordBlob(record: object, id: string): Promise<void> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) {
-    console.warn('[discovery] BLOB_READ_WRITE_TOKEN not set — skipping blob append. Email is source-of-truth.');
+    console.warn('[discovery] BLOB_READ_WRITE_TOKEN not set — skipping blob write. Email is source-of-truth.');
     return;
   }
 
   const yyyymm = new Date().toISOString().slice(0, 7);
-  const pathname = `discovery-responses/${yyyymm}.jsonl`;
-  const newLine = JSON.stringify(record) + '\n';
+  const pathname = `discovery-responses/${yyyymm}/${id}.json`;
+  const body = JSON.stringify(record);
 
-  let existing = '';
-  try {
-    const meta = await head(pathname, { token });
-    const res = await fetch(meta.url, { cache: 'no-store' });
-    if (res.ok) {
-      existing = await res.text();
-    } else {
-      console.warn(`[discovery] blob fetch returned ${res.status}; treating as empty.`);
-    }
-  } catch (err) {
-    if (err instanceof BlobNotFoundError) {
-      // First write for this month — proceed with empty existing.
-    } else {
-      console.error('[discovery] blob head failed; skipping append to avoid data loss.', err);
-      return;
-    }
-  }
-
-  await put(pathname, existing + newLine, {
+  await put(pathname, body, {
     access: 'public',
-    contentType: 'application/x-ndjson',
-    allowOverwrite: true,
+    contentType: 'application/json',
+    allowOverwrite: false,
     addRandomSuffix: false,
     token,
   });
@@ -280,7 +141,7 @@ async function appendToBlob(record: object): Promise<void> {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const result = validatePayload(body);
+    const result = validateDiscoveryPayload(body);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
@@ -319,9 +180,9 @@ export async function POST(request: Request) {
     delete (record as { website_field?: string }).website_field;
 
     try {
-      await appendToBlob(record);
+      await putDiscoveryRecordBlob(record, id);
     } catch (err) {
-      console.error('[discovery] blob append failed; email already sent.', err);
+      console.error('[discovery] blob write failed; email already sent.', err);
     }
 
     return NextResponse.json({ success: true, id });

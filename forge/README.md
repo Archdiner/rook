@@ -8,6 +8,8 @@ Forge is pre-product. **Phase 1 core** (sufficiency + insights engines, Phase 1 
 
 When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensure migrations are applied). To smoke-test APIs without Postgres: `PORT=3020 DATABASE_URL= PHASE1_STORAGE_DRIVER=blob npm run start`.
 
+**Full product narrative (Phases 0–4):** see [`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md). For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
+
 ## What Exists Today
 
 - Discovery survey flow with server-side intake handling (`src/app/discovery`, `src/app/api/discovery/route.ts`)
@@ -29,7 +31,7 @@ Then open `http://localhost:3000`.
 | Variable | Required | Used for |
 | --- | --- | --- |
 | `RESEND_API_KEY` | Yes (for discovery/intake email delivery) | Sends responses from `POST /api/discovery` and `POST /api/intake` |
-| `BLOB_READ_WRITE_TOKEN` | Optional in local dev, required for Vercel Blob persistence | Stores/retrieves JSONL records for discovery and Phase 1 collections |
+| `BLOB_READ_WRITE_TOKEN` | Optional in local dev, required for Vercel Blob persistence | Discovery: one JSON file per response; Phase 1: partitioned JSON per record (see architecture below) |
 | `PHASE1_STORAGE_DRIVER` | Optional (`auto` default) | Selects repository backend: `auto`, `blob`, or `postgres` |
 | `DATABASE_URL` | Required when using `postgres` driver | Neon/Postgres connection string used by Drizzle repository |
 | `NEXT_PUBLIC_DEFAULT_ORG_ID` | Optional (`org_default`) | Fallback organization context when no `organizationId` query/header is provided |
@@ -126,11 +128,14 @@ curl -s -X POST "$BASE_URL/api/phase1/insights" \
 - Deterministic analysis core in `src/lib/phase1` (pure logic for sufficiency and insights)
 - API routes validate inputs and map requests to domain engines
 - Org-aware repository layer supports `blob` and `postgres` drivers, with auto-selection via env config
-- Blob driver writes JSONL collections to Vercel Blob, with local fallback when Blob token is absent
+- Blob driver persists **one JSON object per record** (partitioned paths; no concurrent append on shared NDJSON for Phase 1); legacy monthly NDJSON may still be **read** for migration
+- Discovery responses use **one blob per submission** (see `src/app/api/discovery/route.ts`)
+- Postgres driver stores sites, events, and readiness snapshots in relational tables (apply Drizzle migrations)
 - Org identity resolution can be strict in production via `PHASE1_ORG_IDENTITY_MODE=header_required`
 
 ## Repository Structure
 
+- `docs` - Product PRD and phase narrative (`PRODUCT_PRD.md`)
 - `src/app` - Pages and route handlers
 - `src/app/api/discovery` - Discovery survey API
 - `src/app/api/intake` - General intake API
@@ -139,6 +144,8 @@ curl -s -X POST "$BASE_URL/api/phase1/insights" \
 - `public` - Static assets
 
 ## Roadmap
+
+See **[`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md)** for goals, success criteria, and non-goals per phase.
 
 - **Phase 0**: Discovery and problem validation
 - **Phase 1**: Data sufficiency, readiness scoring, deterministic insights/recommendations
