@@ -15,8 +15,15 @@
  * needs stricter rules it should match by event type instead.
  */
 
+import { createHash } from "node:crypto";
+
 import type { CanonicalEventInput } from "@/lib/phase2/types";
 
+import {
+  parseElementsChain,
+  type ParsedElementsChain,
+  type ParsedElementsChainNode,
+} from "./elementsChain";
 import type { PostHogEventDTO } from "./types";
 
 export interface MapResult {
@@ -48,6 +55,11 @@ const PROPERTY_RENAME_MAP: ReadonlyArray<{ from: string; to: string }> = [
   { from: "$referrer", to: "referrer" },
   { from: "$host", to: "host" },
 ];
+
+const MAX_ELEMENT_CLASSES = 5;
+const MAX_FEATURE_FLAG_PROPS = 10;
+const RAGE_TARGET_REF_LENGTH = 16;
+const ACTIVE_SECONDS_CAP = 86400;
 
 /**
  * Map a single PostHog event to a CanonicalEventInput.
@@ -138,10 +150,9 @@ export function mapPostHogEvents(
   for (let index = 0; index < dtos.length; index++) {
     const result = mapPostHogEvent(dtos[index], options);
     if (result.event === null) {
-      if (result.skippedReason === undefined) {
-        continue;
+      if (result.skippedReason !== undefined) {
+        skipped.push({ index, reason: result.skippedReason });
       }
-      skipped.push({ index, reason: result.skippedReason });
       continue;
     }
     events.push(result.event);
@@ -253,7 +264,14 @@ function deriveMetrics(
 
   const scroll = properties["$scroll_percentage"];
   if (isFiniteNumber(scroll)) {
-    metrics.scrollPct = clamp(scroll, 0, 100);
+    const clamped = clamp(scroll, 0, 100);
+    metrics.scrollPct = clamped;
+    metrics.scrollPctNormalized = clamped / 100;
+  }
+
+  const activeSeconds = properties["$active_seconds"];
+  if (isFiniteNumber(activeSeconds)) {
+    metrics.activeSeconds = activeSeconds;
   }
 
   const intent = properties["intent"];
@@ -316,10 +334,119 @@ function deriveProperties(
     }
   }
 
+  const parsedChain = readElementsChain(properties);
+  if (parsedChain !== null) {
+    applyElementsChainProperties(out, parsedChain);
+  }
+
+  const activeSeconds = properties["$active_seconds"];
+  if (isFiniteNumber(activeSeconds)) {
+    out.dwell_seconds = clamp(activeSeconds, 0, ACTIVE_SECONDS_CAP);
+  }
+
+  const recordingId = trimToString(properties["$session_recording_id"]);
+  if (recordingId !== null) {
+    out.recording_id = recordingId;
+  }
+
+  applyFeatureFlagProperties(out, properties);
+
+  if (rawEventName === "$rageclick" && parsedChain?.leaf) {
+    applyRageClickProperties(out, properties, parsedChain.leaf);
+  }
+
   if (Object.keys(out).length === 0) {
     return undefined;
   }
   return sortRecord(out);
+}
+
+function readElementsChain(
+  properties: Record<string, unknown>,
+): ParsedElementsChain | null {
+  const primary = properties["$elements_chain"];
+  if (typeof primary === "string" && primary.length > 0) {
+    return parseElementsChain(primary);
+  }
+  const fallback = properties["$elements_chain_chain"];
+  if (typeof fallback === "string" && fallback.length > 0) {
+    return parseElementsChain(fallback);
+  }
+  return null;
+}
+
+function applyElementsChainProperties(
+  out: Record<string, string | number | boolean | null>,
+  parsed: ParsedElementsChain,
+): void {
+  out.element_depth = parsed.depth;
+  out.element_role = parsed.nearestLandmark ?? null;
+  out.element_landmark_distance = parsed.nearestLandmarkDepth;
+  out.element_tag = parsed.leaf?.tag ?? null;
+  out.element_classes = parsed.leaf
+    ? parsed.leaf.classes.slice(0, MAX_ELEMENT_CLASSES).join(" ")
+    : null;
+}
+
+function applyFeatureFlagProperties(
+  out: Record<string, string | number | boolean | null>,
+  properties: Record<string, unknown>,
+): void {
+  const singleFlag = properties["$feature_flag"];
+  const singleResponse = properties["$feature_flag_response"];
+  if (typeof singleFlag === "string" && typeof singleResponse === "string") {
+    out[`flag_${singleFlag}`] = singleResponse;
+  }
+
+  const flagsBag = properties["$feature_flags"];
+  if (isRecord(flagsBag)) {
+    let written = 0;
+    for (const key of Object.keys(flagsBag)) {
+      if (written >= MAX_FEATURE_FLAG_PROPS) {
+        break;
+      }
+      const value = flagsBag[key];
+      if (typeof value === "string" || typeof value === "boolean") {
+        out[`flag_${key}`] = value;
+        written++;
+        continue;
+      }
+      if (typeof value === "number" && Number.isFinite(value)) {
+        out[`flag_${key}`] = value;
+        written++;
+      }
+    }
+  }
+}
+
+function applyRageClickProperties(
+  out: Record<string, string | number | boolean | null>,
+  properties: Record<string, unknown>,
+  leaf: ParsedElementsChainNode,
+): void {
+  const elText = properties["$el_text"];
+  let rageText: string;
+  if (typeof elText === "string") {
+    rageText = elText;
+  } else if (leaf.classes[0] !== undefined) {
+    rageText = leaf.classes[0];
+  } else if (typeof leaf.attrs["aria-label"] === "string") {
+    rageText = leaf.attrs["aria-label"];
+  } else {
+    rageText = leaf.tag;
+  }
+  out.rage_target_text = rageText;
+  out.rage_target_ref = deriveRageTargetRef(leaf);
+}
+
+function deriveRageTargetRef(leaf: ParsedElementsChainNode): string {
+  const dataCta = leaf.attrs["data-cta"] ?? "";
+  const ariaLabel = leaf.attrs["aria-label"] ?? "";
+  const material = `${leaf.tag}|${leaf.classes.join(".")}|${dataCta}|${ariaLabel}`;
+  return createHash("sha256")
+    .update(material)
+    .digest("hex")
+    .slice(0, RAGE_TARGET_REF_LENGTH);
 }
 
 function isFiniteNumber(value: unknown): value is number {

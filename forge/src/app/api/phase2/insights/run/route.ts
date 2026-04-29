@@ -15,6 +15,8 @@ import type {
   RollupContext,
   RunInsightsResponse,
 } from '@/lib/phase2/types';
+import { runDesignRules } from '@/lib/phase2/rules';
+import type { PageSnapshot } from '@/lib/phase2/snapshots/types';
 import { badConfigRequest, parseTimeWindow } from '../../_shared';
 
 const DEFAULT_MAX_FINDINGS = 3;
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
 
     const repository = createPhase1Repository();
 
-    const [config, events] = await Promise.all([
+    const [config, events, pageSnapshots] = await Promise.all([
       repository.getPhase2SiteConfig({
         organizationId: orgContext.organizationId,
         siteId,
@@ -79,6 +81,11 @@ export async function POST(request: Request) {
         organizationId: orgContext.organizationId,
         siteId,
         window: window.value,
+      }),
+      repository.listPageSnapshots({
+        organizationId: orgContext.organizationId,
+        siteId,
+        limit: 200,
       }),
     ]);
 
@@ -101,6 +108,18 @@ export async function POST(request: Request) {
 
     const findings = generateFindings(rollup.insightInput, { maxFindings });
 
+    const pageSnapshotsByPath = buildSnapshotIndex(pageSnapshots);
+    const designReport = runDesignRules({
+      organizationId: orgContext.organizationId,
+      siteId,
+      window: window.value,
+      config: resolvedConfig,
+      events,
+      rollup,
+      pageSnapshots,
+      pageSnapshotsByPath,
+    });
+
     const response: RunInsightsResponse = {
       siteId,
       window: window.value,
@@ -109,10 +128,21 @@ export async function POST(request: Request) {
       warnings: gate.warnings,
       diagnostics: rollup.diagnostics,
       trustworthy: gate.ok,
+      designReport,
     };
 
     return success(response);
   } catch (error) {
     return mapRouteError(error);
   }
+}
+
+function buildSnapshotIndex(snapshots: PageSnapshot[]): Map<string, PageSnapshot> {
+  const map = new Map<string, PageSnapshot>();
+  for (const s of snapshots) {
+    if (!map.has(s.pathRef)) {
+      map.set(s.pathRef, s);
+    }
+  }
+  return map;
 }

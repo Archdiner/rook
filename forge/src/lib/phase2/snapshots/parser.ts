@@ -176,11 +176,22 @@ function isDisabled(el: HTMLElement): boolean {
   );
 }
 
+function normalizeClasses(classes: string): string {
+  // Sort tokens so formatter-driven reorderings (e.g. Tailwind's prettier
+  // plugin) don't change the resulting hash for an otherwise identical CTA.
+  return classes.split(/\s+/).filter(Boolean).sort().join(' ');
+}
+
 function hashCtaRef(tag: string, href: string | null, text: string, classes: string): string {
   return createHash('sha256')
-    .update(`${tag}|${href ?? ''}|${text}|${classes}`)
+    .update(`${tag}|${href ?? ''}|${text}|${normalizeClasses(classes)}`)
     .digest('hex')
     .slice(0, 16);
+}
+
+function firstImgAlt(el: HTMLElement): string {
+  const img = el.querySelector('img[alt]');
+  return img ? (img.getAttribute('alt') ?? '').trim() : '';
 }
 
 function findCtas(root: HTMLElement, body: HTMLElement | null): CtaCandidate[] {
@@ -192,7 +203,11 @@ function findCtas(root: HTMLElement, body: HTMLElement | null): CtaCandidate[] {
     if (tag !== 'a' && tag !== 'button') continue;
     const text = el.text.trim();
     const ariaLabel = (el.getAttribute('aria-label') ?? '').trim();
-    if (!text && !ariaLabel) continue;
+    // Graphical buttons / logo links often have no text or aria-label and
+    // rely on a child <img alt="..."> for their accessible name. Treat that
+    // alt text as a label so we don't drop them from the inventory.
+    const imgAlt = !text && !ariaLabel ? firstImgAlt(el) : '';
+    if (!text && !ariaLabel && !imgAlt) continue;
     candidates.push(el);
   }
 
@@ -201,7 +216,10 @@ function findCtas(root: HTMLElement, body: HTMLElement | null): CtaCandidate[] {
     const el = candidates[i];
     const tag = getTag(el) as 'a' | 'button';
     const className = el.getAttribute('class') ?? null;
-    const text = el.text.trim().slice(0, TEXT_CAP);
+    const directText = el.text.trim();
+    // For graphical CTAs, fall back to the first child img's alt as the
+    // visible label so downstream rules can reason about them.
+    const text = (directText || firstImgAlt(el)).slice(0, TEXT_CAP);
     const href = tag === 'a' ? (el.getAttribute('href') ?? null) : null;
     const ariaLabel = (el.getAttribute('aria-label') ?? '').trim() || null;
     const landmark = computeLandmark(el);
@@ -242,7 +260,11 @@ function findCtas(root: HTMLElement, body: HTMLElement | null): CtaCandidate[] {
   return results;
 }
 
-function findInputLabel(form: HTMLElement, input: HTMLElement): string | null {
+function findInputLabel(
+  root: HTMLElement,
+  form: HTMLElement,
+  input: HTMLElement,
+): string | null {
   let cur = parentOf(input);
   while (cur && cur !== form) {
     if (getTag(cur) === 'label') return capText(cur.text);
@@ -250,8 +272,15 @@ function findInputLabel(form: HTMLElement, input: HTMLElement): string | null {
   }
   const id = input.getAttribute('id');
   if (!id) return null;
-  const labels = form.querySelectorAll('label');
-  for (const lbl of labels) {
+  // Per the HTML spec, <label for="..."> can live anywhere in the document,
+  // not just inside the same <form>. Search the form first (most common /
+  // cheapest case), then fall back to a document-wide scan.
+  const formLabels = form.querySelectorAll('label');
+  for (const lbl of formLabels) {
+    if (lbl.getAttribute('for') === id) return capText(lbl.text);
+  }
+  const rootLabels = root.querySelectorAll('label');
+  for (const lbl of rootLabels) {
     if (lbl.getAttribute('for') === id) return capText(lbl.text);
   }
   return null;
@@ -268,8 +297,8 @@ function hashFormRef(action: string, innerSnippet: string): string {
   return createHash('sha256').update(`${action}|${innerSnippet}`).digest('hex').slice(0, 16);
 }
 
-function findForms(root: HTMLElement): FormCandidate[] {
-  const forms = root.querySelectorAll('form');
+function findForms(root: HTMLElement, target: HTMLElement): FormCandidate[] {
+  const forms = target.querySelectorAll('form');
   const results: FormCandidate[] = [];
   let documentIndex = 0;
   for (const form of forms) {
@@ -277,7 +306,11 @@ function findForms(root: HTMLElement): FormCandidate[] {
     const action = form.getAttribute('action') ?? '';
     const innerSnippet = form.innerHTML.slice(0, TEXT_CAP);
     const landmark = computeLandmark(form);
-    const fields = form.querySelectorAll('input, select, textarea');
+    // Skip hidden inputs (CSRF tokens, tracking ids, etc.) — they don't
+    // contribute to the visual form hierarchy our audit reasons about.
+    const fields = form
+      .querySelectorAll('input, select, textarea')
+      .filter((field) => field.getAttribute('type') !== 'hidden');
     const fieldCount = fields.length;
     const inputs: FormInputItem[] = [];
     for (const field of fields) {
@@ -287,7 +320,7 @@ function findForms(root: HTMLElement): FormCandidate[] {
         type: readInputType(field),
         name,
         required: field.hasAttribute('required'),
-        labelText: findInputLabel(form, field),
+        labelText: findInputLabel(root, form, field),
       });
     }
     // Bare <button> inside <form> defaults to type=submit per HTML spec.
@@ -325,7 +358,12 @@ export const parseSnapshot: SnapshotParser = (input) => {
     const meta = readMeta(root);
     const headings = findHeadings(target);
     const ctas = findCtas(target, body);
-    const forms = findForms(target);
+    const forms = findForms(root, target);
+    // Strip <script>, <style>, and <noscript> before hashing — they often
+    // carry per-request noise (nonces, csrf tokens, build hashes, analytics
+    // payloads) that would otherwise drift contentHash on every fetch even
+    // when the visible design is identical.
+    root.querySelectorAll('script, style, noscript').forEach((el) => el.remove());
     const normalized = normalizeHtmlForHash(root);
     const contentHash = createHash('sha256').update(normalized).digest('hex');
 

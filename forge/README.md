@@ -8,9 +8,9 @@ Forge is pre-product. **Phase 1 core** (sufficiency + insights engines, Phase 1 
 
 When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensure migrations are applied). To smoke-test APIs without Postgres: `PORT=3020 DATABASE_URL= PHASE1_STORAGE_DRIVER=blob npm run start`.
 
-**Full product narrative (Phases 0–4):** see [`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md). **Phase 2 evidence contract:** see [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md). For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
+**Full product narrative (Phases 0–4):** see `[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)`. **Phase 2 evidence contract:** see `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`. For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
 
-**Interactive API docs** (marketing-site visuals + particle background): open **`/docs`** on your deployment (e.g. `https://your-app.vercel.app/docs`).
+**Interactive API docs** (marketing-site visuals + particle background): open `**/docs`** on your deployment (e.g. `https://your-app.vercel.app/docs`).
 
 ## What Exists Today
 
@@ -32,14 +32,16 @@ Then open `http://localhost:3000`.
 
 ## Environment Variables
 
-| Variable | Required | Used for |
-| --- | --- | --- |
-| `RESEND_API_KEY` | Yes (for discovery/intake email delivery) | Sends responses from `POST /api/discovery` and `POST /api/intake` |
-| `BLOB_READ_WRITE_TOKEN` | Optional in local dev, required for Vercel Blob persistence | Discovery: one JSON file per response; Phase 1: partitioned JSON per record (see architecture below) |
-| `PHASE1_STORAGE_DRIVER` | Optional (`auto` default) | Selects repository backend: `auto`, `blob`, or `postgres` |
-| `DATABASE_URL` | Required when using `postgres` driver | Neon/Postgres connection string used by Drizzle repository |
-| `NEXT_PUBLIC_DEFAULT_ORG_ID` | Optional (`org_default`) | Fallback organization context when no `organizationId` query/header is provided |
-| `PHASE1_ORG_IDENTITY_MODE` | Optional (`dev` default) | `dev` allows query/body fallback; `header_required` requires `x-org-id` header |
+
+| Variable                     | Required                                                    | Used for                                                                                             |
+| ---------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `RESEND_API_KEY`             | Yes (for discovery/intake email delivery)                   | Sends responses from `POST /api/discovery` and `POST /api/intake`                                    |
+| `BLOB_READ_WRITE_TOKEN`      | Optional in local dev, required for Vercel Blob persistence | Discovery: one JSON file per response; Phase 1: partitioned JSON per record (see architecture below) |
+| `PHASE1_STORAGE_DRIVER`      | Optional (`auto` default)                                   | Selects repository backend: `auto`, `blob`, or `postgres`                                            |
+| `DATABASE_URL`               | Required when using `postgres` driver                       | Neon/Postgres connection string used by Drizzle repository                                           |
+| `NEXT_PUBLIC_DEFAULT_ORG_ID` | Optional (`org_default`)                                    | Fallback organization context when no `organizationId` query/header is provided                      |
+| `PHASE1_ORG_IDENTITY_MODE`   | Optional (`dev` default)                                    | `dev` allows query/body fallback; `header_required` requires `x-org-id` header                       |
+
 
 Phase 2 reuses the same env matrix; no additional secrets are required for the
 spine (rollups + gate + insights run).
@@ -47,9 +49,11 @@ spine (rollups + gate + insights run).
 For provider connectors, **secrets live in env vars referenced by `secretRef`
 on the integration record** — never in DB rows. For PostHog, set:
 
-| Variable | Required | Used for |
-| --- | --- | --- |
+
+| Variable                                     | Required                         | Used for                                                                                                                                                         |
+| -------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POSTHOG_API_KEY__<SITE_OR_INTEGRATION_TAG>` | When using the PostHog connector | Personal API key with read scope on the project; the env var name is stored as `secretRef` on the integration record. Forge resolves it server-side per request. |
+
 
 Without `BLOB_READ_WRITE_TOKEN`, Phase 1 storage falls back to local temporary files.
 
@@ -199,7 +203,7 @@ curl -s -X POST "$BASE_URL/api/phase2/insights/run" \
 ```
 
 The response includes `findings`, `warnings` (gate output), `diagnostics`, and a
-`trustworthy` boolean. See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md)
+`trustworthy` boolean. See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
 for the full contract and what each warning code means.
 
 ### PostHog connector
@@ -238,7 +242,7 @@ curl -s -X POST "$BASE_URL/api/phase2/integrations/$INTEGRATION_ID/sync" \
 ```
 
 Then call `/api/phase2/insights/run` and findings come from real PostHog data.
-Mapping table and credential checklist live in [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §9.
+Mapping table and credential checklist live in `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)` §9.
 
 ### Page DNA snapshots (design audit grounding)
 
@@ -266,8 +270,40 @@ curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots" -H "x-org-id: org_abc123
 curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots?pathRef=/pricing" -H "x-org-id: org_abc123"
 ```
 
-See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §10
+See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)` §10
 for the full snapshot contract and visual-weight scoring rubric.
+
+### Design rules (designer-voiced findings)
+
+With both snapshots and PostHog events on hand, Forge runs a set of
+**design rules** that produce findings naming actual elements:
+
+```jsonc
+{
+  "designReport": {
+    "findings": [
+      {
+        "ruleId": "hero-hierarchy-inversion",
+        "pathRef": "/pricing",
+        "title": "Visual hierarchy inverts user preference on /pricing",
+        "summary": "Most-clicked CTA on /pricing is `Start free trial` (38% of CTA clicks, 1,420 clicks). The visually heaviest CTA is `Book demo` (visual weight 0.82, signals: text-2xl, bg-primary, font-bold).",
+        "recommendation": [
+          "Either reduce the visual weight of `Book demo` or raise `Start free trial` to match. The eye should land where the value lands, and right now those are different places.",
+          "Concretely: drop bg-primary from `Book demo`, or promote `Start free trial` into the same header position and give it text-2xl + bg-primary."
+        ],
+        "evidence": [...]
+      }
+    ],
+    "diagnostics": [...],
+    "groundedInSnapshots": true
+  }
+}
+```
+
+Rules shipping in v1: `hero-hierarchy-inversion`, `above-fold-coverage`,
+`rage-click-target`, `mobile-engagement-asymmetry`, `nav-dispersion`.
+See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
+§§11–12.
 
 ## Architecture (High Level)
 
@@ -290,14 +326,15 @@ for the full snapshot contract and visual-weight scoring rubric.
 - `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run, integrations, page snapshots)
 - `src/lib/phase1` - Core contracts, storage adapter, sufficiency engine, insights engine
 - `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
-- `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution)
+- `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution, elements_chain ancestry parser)
 - `src/lib/phase2/snapshots` - Page DNA static analysis (fetcher, parser, visual-weight scoring, fold guess)
+- `src/lib/phase2/rules` - Design rules: hero-hierarchy-inversion, above-fold-coverage, rage-click-target, mobile-engagement-asymmetry, nav-dispersion
 - `drizzle` - Generated Postgres migrations (`drizzle-kit generate`)
 - `public` - Static assets
 
 ## Roadmap
 
-See **[`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md)** for goals, success criteria, and non-goals per phase.
+See `**[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)`** for goals, success criteria, and non-goals per phase.
 
 - **Phase 0**: Discovery and problem validation
 - **Phase 1**: Data sufficiency, readiness scoring, deterministic insights/recommendations

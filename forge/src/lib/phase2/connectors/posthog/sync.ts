@@ -161,11 +161,7 @@ export async function runPostHogSync(
     });
 
     const remaining = cap - accumulated.length;
-    if (canonical.length > remaining) {
-      for (let i = 0; i < remaining; i++) accumulated.push(canonical[i]);
-    } else {
-      for (const event of canonical) accumulated.push(event);
-    }
+    accumulated.push(...canonical.slice(0, remaining));
 
     const next = page.next ?? null;
     if (next === null || next.length === 0) {
