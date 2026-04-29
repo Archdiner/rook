@@ -194,7 +194,7 @@ function evaluateGroup(
     confidence: clamp(0.4 + Math.log10(Math.max(rageCount, 1)) * 0.25, 0, 0.95),
     priorityScore: clamp(rageRate * 4, 0, 1),
     pathRef: group.pathRef,
-    title: `Rage clicks cluster on ${quote(displayText)} on ${group.pathRef}`,
+    title: `Rage clicks cluster on ${quote(displayText)}`,
     summary,
     recommendation,
     evidence,

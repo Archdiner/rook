@@ -217,7 +217,7 @@ function buildFinding(
     confidence: clamp(0.4 + Math.log10(Math.max(agg.thrashSessions, 1)) * 0.2, 0, 0.95),
     priorityScore: clamp(thrashRate * 4, 0, 1),
     pathRef: agg.pathRef,
-    title: `Return-visit thrash on ${agg.pathRef}`,
+    title: 'Return-visit thrash',
     summary,
     recommendation: [docPara, narrativePara],
     evidence,

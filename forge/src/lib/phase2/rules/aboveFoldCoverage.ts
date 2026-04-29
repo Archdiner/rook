@@ -117,7 +117,7 @@ function evaluatePage(
     confidence: clamp(0.5 + Math.log10(Math.max(totalPageviews, 1)) * 0.15, 0, 0.95),
     priorityScore: clamp(belowFoldShare, 0, 1),
     pathRef,
-    title: `Primary CTA hidden below the fold on ${pathRef}`,
+    title: 'Primary CTA hidden below the fold',
     summary,
     recommendation,
     evidence,

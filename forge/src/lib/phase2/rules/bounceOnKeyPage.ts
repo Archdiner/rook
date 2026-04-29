@@ -191,7 +191,7 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     confidence: clamp(0.5 + Math.log10(Math.max(entries, 1)) * 0.15, 0, 0.95),
     priorityScore: clamp(bounceRate, 0, 1),
     pathRef,
-    title: `High bounce on key page ${pathRef}`,
+    title: 'High bounce on key page',
     summary,
     recommendation,
     evidence,
