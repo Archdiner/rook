@@ -20,10 +20,10 @@ import {
   sanitizeIdSegment,
 } from "./helpers";
 import type {
-  DesignFinding,
-  DesignFindingEvidence,
-  DesignRule,
-  DesignRuleContext,
+  AuditFinding,
+  AuditFindingEvidence,
+  AuditRule,
+  AuditRuleContext,
 } from "./types";
 
 const MIN_RAGE_CLICKS = 5;
@@ -40,12 +40,12 @@ interface RageGroup {
   rageTargetRef: string | null;
 }
 
-export const rageClickTarget: DesignRule = {
+export const rageClickTarget: AuditRule = {
   id: "rage-click-target",
   name: "Rage-click target cluster",
   category: "rage",
 
-  evaluate(ctx: DesignRuleContext): DesignFinding[] {
+  evaluate(ctx: AuditRuleContext): AuditFinding[] {
     const sessionsByPath = countSessionsByPath(ctx.events);
 
     const groups = new Map<string, RageGroup>();
@@ -87,7 +87,7 @@ export const rageClickTarget: DesignRule = {
       group.events.push(event);
     }
 
-    const findings: DesignFinding[] = [];
+    const findings: AuditFinding[] = [];
     const orderedGroupKeys = [...groups.keys()].sort((a, b) => a.localeCompare(b));
     for (const key of orderedGroupKeys) {
       const group = groups.get(key);
@@ -104,8 +104,8 @@ export const rageClickTarget: DesignRule = {
 function evaluateGroup(
   group: RageGroup,
   sessionsByPath: Map<string, number>,
-  ctx: DesignRuleContext,
-): DesignFinding | null {
+  ctx: AuditRuleContext,
+): AuditFinding | null {
   const rageCount = group.events.length;
   if (rageCount < MIN_RAGE_CLICKS) return null;
 
@@ -160,7 +160,7 @@ function evaluateGroup(
     );
   }
 
-  const evidence: DesignFindingEvidence[] = [
+  const evidence: AuditFindingEvidence[] = [
     {
       label: "Rage target",
       value: displayText,

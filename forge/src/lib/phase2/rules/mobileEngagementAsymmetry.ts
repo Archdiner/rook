@@ -18,10 +18,10 @@ import type {
 
 import { clamp, formatCount, modeStringProp, pct } from "./helpers";
 import type {
-  DesignFinding,
-  DesignFindingEvidence,
-  DesignRule,
-  DesignRuleContext,
+  AuditFinding,
+  AuditFindingEvidence,
+  AuditRule,
+  AuditRuleContext,
 } from "./types";
 
 const MIN_MOBILE_STARTS = 50;
@@ -33,12 +33,12 @@ interface CohortStats {
   completes: number;
 }
 
-export const mobileEngagementAsymmetry: DesignRule = {
+export const mobileEngagementAsymmetry: AuditRule = {
   id: "mobile-engagement-asymmetry",
   name: "Mobile engagement asymmetry",
   category: "asymmetry",
 
-  evaluate(ctx: DesignRuleContext): DesignFinding[] {
+  evaluate(ctx: AuditRuleContext): AuditFinding[] {
     const steps = [...ctx.config.onboardingSteps].sort((a, b) => {
       if (a.order !== b.order) return a.order - b.order;
       return a.id.localeCompare(b.id);
@@ -51,7 +51,7 @@ export const mobileEngagementAsymmetry: DesignRule = {
       deviceBySession.set(sid, modeStringProp(events, "device_type"));
     }
 
-    const findings: DesignFinding[] = [];
+    const findings: AuditFinding[] = [];
 
     for (let i = 0; i < steps.length - 1; i += 1) {
       const step = steps[i];
@@ -109,7 +109,7 @@ interface FindingInputs {
   desktopStarts: number;
 }
 
-function buildFinding(inputs: FindingInputs): DesignFinding {
+function buildFinding(inputs: FindingInputs): AuditFinding {
   const { step, mobileRate, desktopRate, gap, mobileStarts, desktopStarts } = inputs;
   const totalStarts = mobileStarts + desktopStarts;
 
@@ -127,7 +127,7 @@ function buildFinding(inputs: FindingInputs): DesignFinding {
       `split is the dominant factor.`,
   ];
 
-  const evidence: DesignFindingEvidence[] = [
+  const evidence: AuditFindingEvidence[] = [
     { label: "Step", value: step.label },
     {
       label: "Mobile completion",

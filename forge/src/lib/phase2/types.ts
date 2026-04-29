@@ -249,7 +249,7 @@ export interface RunInsightsResponse {
    * The shape lives in `@/lib/phase2/rules/types` to avoid a hard
    * dependency from `phase2/types.ts` on the rules module.
    */
-  designReport?: {
+  auditReport?: {
     findings: Array<{
       id: string;
       ruleId: string;

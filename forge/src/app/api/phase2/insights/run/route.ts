@@ -15,7 +15,7 @@ import type {
   RollupContext,
   RunInsightsResponse,
 } from '@/lib/phase2/types';
-import { runDesignRules } from '@/lib/phase2/rules';
+import { runAuditRules } from '@/lib/phase2/rules';
 import type { PageSnapshot } from '@/lib/phase2/snapshots/types';
 import { badConfigRequest, parseTimeWindow } from '../../_shared';
 
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
     const findings = generateFindings(rollup.insightInput, { maxFindings });
 
     const pageSnapshotsByPath = buildSnapshotIndex(pageSnapshots);
-    const designReport = runDesignRules({
+    const auditReport = runAuditRules({
       organizationId: orgContext.organizationId,
       siteId,
       window: window.value,
@@ -128,7 +128,7 @@ export async function POST(request: Request) {
       warnings: gate.warnings,
       diagnostics: rollup.diagnostics,
       trustworthy: gate.ok,
-      designReport,
+      auditReport,
     };
 
     return success(response);
