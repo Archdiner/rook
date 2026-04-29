@@ -8,6 +8,8 @@ Forge is pre-product. **Phase 1 core** (sufficiency + insights engines, Phase 1 
 
 When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensure migrations are applied). To smoke-test APIs without Postgres: `PORT=3020 DATABASE_URL= PHASE1_STORAGE_DRIVER=blob npm run start`.
 
+**Commercial roadmap:** see `[docs/CUSTOMER_READINESS_BACKLOG.md](docs/CUSTOMER_READINESS_BACKLOG.md)` (FORGE-* epics: auth, billing, onboarding, persisted runs).
+
 **Full product narrative (Phases 0–4):** see `[docs/PRODUCT_PRD.md](docs/PRODUCT_PRD.md)`. **Site improver positioning, credibility demos, DNA model, autonomy boundaries:** see `[docs/SITE_IMPROVER_VISION_PRD.md](docs/SITE_IMPROVER_VISION_PRD.md)`. **Phase 2 evidence contract:** see `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`. For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
 
 **Interactive API docs** (marketing-site visuals + particle background): open `**/docs`** on your deployment (e.g. `https://your-app.vercel.app/docs`).
@@ -18,7 +20,7 @@ When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensur
 - Phase 1 API surface for site setup, event ingestion, readiness checks, and recommendations (`src/app/api/phase1`)
 - Data sufficiency engine with deterministic thresholds and readiness scoring (`src/lib/phase1/sufficiency`)
 - Insights engine that ranks evidence-backed findings from behavioral aggregates (`src/lib/phase1/insights`)
-- **Phase 2 spine:** versioned canonical events with `(siteId, source, sourceEventId)` dedupe, per-site config CRUD, rollup pipeline (`src/lib/phase2`), validation gate, and end-to-end `POST /api/phase2/insights/run`
+- **Phase 2 spine:** versioned canonical events with `(siteId, source, sourceEventId)` dedupe, per-site config CRUD, rollup pipeline (`src/lib/phase2`), validation gate, **`POST /api/phase2/insights/run`**, and **`POST /api/phase2/insights/receipt`** (`forge.receipt.v1` exports)
 - **PostHog connector:** first-class provider integration (`src/lib/phase2/connectors/posthog`) with mapping, paginated sync, retry/backoff, validate route, and secret-ref auth (no plaintext tokens in storage)
 
 ## Local Development
@@ -29,6 +31,8 @@ npm run dev
 ```
 
 Then open `http://localhost:3000`.
+
+Before opening a PR, run **`npm run verify`** (lint + TypeScript check + production build).
 
 ## Environment Variables
 
@@ -206,6 +210,34 @@ The response includes `findings`, `warnings` (gate output), `diagnostics`, and a
 `trustworthy` boolean. See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
 for the full contract and what each warning code means.
 
+### Receipt export (`forge.receipt.v1`)
+
+Same POST body as above; wraps the identical run payload in **`{ schemaVersion, exportedAt, run }`**:
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/insights/receipt" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "siteId": "replace-with-site-id",
+    "window": { "start": "2026-04-01T00:00:00Z", "end": "2026-04-22T00:00:00Z" },
+    "maxFindings": 5
+  }'
+```
+
+Download a **Markdown receipt** attachment (credibility demos, Slack/email):
+
+```bash
+curl -s -JO -X POST "$BASE_URL/api/phase2/insights/receipt?format=markdown" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "siteId": "replace-with-site-id",
+    "window": { "start": "2026-04-01T00:00:00Z", "end": "2026-04-22T00:00:00Z" },
+    "maxFindings": 5
+  }'
+```
+
+(`-JO` saves using `Content-Disposition` filename with curl.)
+
 ### PostHog connector
 
 Forge ships a first-class **PostHog** connector. Set the env var first:
@@ -345,7 +377,7 @@ See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
 - `src/app/api/discovery` - Discovery survey API
 - `src/app/api/intake` - General intake API
 - `src/app/api/phase1` - Phase 1 endpoints (health, sites, events, readiness, recommendations, sufficiency, insights)
-- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run, integrations, page snapshots)
+- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run, insights/receipt, integrations, page snapshots)
 - `src/lib/phase1` - Core contracts, storage adapter, sufficiency engine, insights engine
 - `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
 - `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution, elements_chain ancestry parser)

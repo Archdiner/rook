@@ -202,7 +202,7 @@ Aligned with [`PRODUCT_PRD.md`](PRODUCT_PRD.md) — **does not replace** phased 
 | Artifact | Role |
 |---------|------|
 | [`PRODUCT_PRD.md`](PRODUCT_PRD.md) | Phased roadmap, storage, Phase 1–4 scope |
-| [`PHASE2_EVIDENCE_MODEL.md`](PHASE2_EVIDENCE_MODEL.md) | Canonical events, connectors, audits |
+| [`CUSTOMER_READINESS_BACKLOG.md`](CUSTOMER_READINESS_BACKLOG.md) | Commercial epics, FORGE-* stories, phased execution order |
 | **`PHASE2_LIVE_TUNING_PLAYBOOK.md`** *(if present)* | Operator calibration loops |
 | This document (**Site Improver Vision PRD**) | North-star differentiation, demos, autonomy boundaries |
 

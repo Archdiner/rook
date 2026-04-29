@@ -206,6 +206,7 @@ Long-term, Forge pairs deterministic cores with richer integrations and outcome 
 | Topic | Location |
 | --- | --- |
 | **Site Improver Vision & credibility demos** | `forge/docs/SITE_IMPROVER_VISION_PRD.md` |
+| **Customer readiness backlog (commercial epics)** | `forge/docs/CUSTOMER_READINESS_BACKLOG.md` |
 | Evidence model / Phase 2 audits | `forge/docs/PHASE2_EVIDENCE_MODEL.md` |
 | Phase 1 APIs | `src/app/api/phase1/` |
 | Sufficiency engine | `src/lib/phase1/sufficiency/` |

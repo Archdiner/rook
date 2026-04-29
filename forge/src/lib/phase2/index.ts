@@ -22,6 +22,7 @@ export type {
   RunInsightsRequest,
   RunInsightsResponse,
   TimeWindow,
+  ForgeReceiptV1Envelope,
 } from "./types";
 
 export {
@@ -45,3 +46,7 @@ export {
 
 export { runInsightInputGate } from "./validation/insightInputGate";
 export type { RunGateInput } from "./validation/insightInputGate";
+
+export { runPhase2InsightsPipeline } from "./runInsightsPipeline";
+export type { RunPhase2InsightsArgs } from "./runInsightsPipeline";
+export { buildReceiptMarkdown } from "./receiptMarkdown";

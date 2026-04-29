@@ -23,7 +23,7 @@ those shapes natively.** Phase 2 closes the gap with:
   Phase 1 `InsightInput`.
 - A **validation gate** that emits structured warnings when the engine's output
   is underpowered.
-- A single end-to-end route, `POST /api/phase2/insights/run`.
+- End-to-end routes: **`POST /api/phase2/insights/run`** and **`POST /api/phase2/insights/receipt`** (same runner; receipt adds **`forge.receipt.v1`** or Markdown export).
 
 ---
 
@@ -139,7 +139,17 @@ Pipeline server-side:
    `PHASE1_ORG_IDENTITY_MODE`).
 2. Load `Phase2SiteConfig` and windowed events in parallel.
 3. `buildInsightInputFromEvents` → `runInsightInputGate` → `generateFindings`.
-4. Respond with findings, warnings, diagnostics, and `trustworthy`.
+4. `runAuditRules` over rollups + page snapshots (when configured).
+5. Respond with findings, warnings, diagnostics, `trustworthy`, and `auditReport`.
+
+### 6.1 Receipt export
+
+`POST /api/phase2/insights/receipt` — identical request body to §6 (`siteId`,
+`window`, optional `maxFindings`).
+
+- **Default (`format=json`):** resolves `RunInsightsResponse` the same way, then wraps it in **`forge.receipt.v1`**:
+  `{ "schemaVersion": "forge.receipt.v1", "exportedAt": "<ISO8601>", "run": { ... } }` inside the standard `{ success, data }` envelope.
+- **`format=markdown`:** returns `Content-Type: text/markdown` with `Content-Disposition: attachment`, suitable for demos and email.
 
 ---
 
@@ -153,8 +163,7 @@ Pipeline server-side:
 | 4 | Declare site config: `PUT /api/phase2/sites/:siteId/config` | API |
 | 5 | Send canonical events: `POST /api/phase1/events` (with `occurredAt`, `source`, `sourceEventId`) | API |
 | 6 | Run insights: `POST /api/phase2/insights/run` | API |
-
-For the **Postgres** path on existing Forge deployments that already have the
+| 7 | (Optional) Export receipt: `POST /api/phase2/insights/receipt` (`forge.receipt.v1` or Markdown) | API |
 Phase 1 tables, the migration is a baseline + alters. New deployments can
 apply it as-is. Operators should review `drizzle/0000_phase2_canonical_events.sql`
 and either run it or hand-write the additive `ALTER`s.

@@ -274,6 +274,15 @@ export interface RunInsightsResponse {
   };
 }
 
+/**
+ * Credibility artifact — stable envelope for offline export (`forge.receipt.v1`).
+ */
+export interface ForgeReceiptV1Envelope {
+  schemaVersion: 'forge.receipt.v1';
+  exportedAt: ISODateString;
+  run: RunInsightsResponse;
+}
+
 /* ------------------------------------------------------------------ */
 /* Re-exports of Phase 1 aggregate types for convenience                */
 /* ------------------------------------------------------------------ */
