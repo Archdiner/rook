@@ -6,7 +6,6 @@ import {
   mapRouteError,
   parseJsonObject,
   parseString,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
 import { createPhase1Repository } from '@/lib/phase1';
@@ -25,9 +24,7 @@ interface RouteCtx {
   params: Promise<{ id: string }>;
 }
 
-export const config = {
-  runtime: 'nodejs',
-};
+export const runtime = 'nodejs';
 
 function toCreates(
   inputs: CanonicalEventInput[],
@@ -62,17 +59,8 @@ export async function POST(request: Request, context: RouteCtx) {
     const { id } = await context.params;
     if (!id) return badRequest('`integration` id missing.');
 
-    const orgContext = resolveOrganizationContext(request, {
-      bodyOrganizationId: undefined,
-      allowQueryFallback: true,
-    });
-    if (!orgContext.ok) return orgContext.response;
-
     const repository = createPhase1Repository();
-    const integration = await repository.getIntegration({
-      organizationId: orgContext.organizationId,
-      id,
-    });
+    const integration = await repository.getIntegrationById(id);
 
     if (!integration) {
       return NextResponse.json(

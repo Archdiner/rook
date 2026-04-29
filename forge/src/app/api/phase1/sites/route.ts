@@ -6,10 +6,10 @@ import {
   parseJsonObject,
   parseOptionalString,
   parsePositiveInt,
-  resolveOrganizationContext,
   parseString,
   success,
 } from '../_shared';
+import { assertApiKeyHasAnyScope, assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
 
 export async function POST(request: Request) {
   try {
@@ -30,18 +30,20 @@ export async function POST(request: Request) {
     }
 
     const analyticsProvider = parseOptionalString(body.analyticsProvider);
-    const orgContext = resolveOrganizationContext(request, {
+    const actorResult = await resolveForgeActor(request, {
       bodyOrganizationId: body.organizationId,
       allowQueryFallback: false,
     });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'integrations:manage');
+    if (scopeErr) return scopeErr;
 
     const repository = createPhase1Repository();
     const site = {
       id: randomUUID(),
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       name,
       domain: domain.toLowerCase(),
       createdAt: new Date().toISOString(),
@@ -57,14 +59,21 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: true });
+    if (!actorResult.ok) {
+      return actorResult.response;
+    }
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'integrations:manage',
+      'insights:run',
+      'events:write',
+    ]);
+    if (scopeErr) return scopeErr;
+
     const repository = createPhase1Repository();
     const url = new URL(request.url);
     const limit = parsePositiveInt(url.searchParams.get('limit'), 50, 200);
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
-    if (!orgContext.ok) {
-      return orgContext.response;
-    }
-    const sites = await repository.listSites({ organizationId: orgContext.organizationId, limit });
+    const sites = await repository.listSites({ organizationId: actorResult.actor.organizationId, limit });
     return success(sites);
   } catch (error) {
     return mapRouteError(error);

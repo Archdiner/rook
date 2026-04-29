@@ -139,6 +139,24 @@ export const phase2PageSnapshots = pgTable(
   })
 );
 
+export const forgeApiKeys = pgTable(
+  'forge_api_keys',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    name: text('name').notNull(),
+    keyHash: text('key_hash').notNull(),
+    scopes: jsonb('scopes').$type<string[]>().notNull(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => ({
+    hashIdx: uniqueIndex('forge_api_keys_hash_idx').on(table.keyHash),
+    orgIdx: index('forge_api_keys_org_idx').on(table.organizationId),
+  })
+);
+
 export const phase1ReadinessSnapshots = pgTable(
   'phase1_readiness_snapshots',
   {

@@ -82,6 +82,16 @@ export interface ListPhase1SitesInput {
   limit?: number;
 }
 
+export interface GetPhase1SiteInput {
+  organizationId: string;
+  siteId: string;
+}
+
+export interface ListIntegrationsByProviderInput {
+  provider: ConnectorProvider;
+  limit: number;
+}
+
 export interface ListPhase1EventsInput {
   organizationId: string;
   siteId: string;
@@ -140,6 +150,7 @@ export interface Phase1Repository {
   driver: Phase1RepositoryDriver;
   createSite(input: CreatePhase1SiteInput): Promise<Phase1SiteRecord>;
   listSites(input: ListPhase1SitesInput): Promise<Phase1SiteRecord[]>;
+  getSite(input: GetPhase1SiteInput): Promise<Phase1SiteRecord | null>;
   createEvent(input: CreatePhase1EventInput): Promise<Phase1EventRecord>;
   listEvents(input: ListPhase1EventsInput): Promise<Phase1EventRecord[]>;
   createReadinessSnapshot(
@@ -172,6 +183,12 @@ export interface Phase1Repository {
   getIntegration(input: GetIntegrationInput): Promise<IntegrationRecord | null>;
   /** Phase 2: list integrations for an org, ordered by `createdAt` desc. */
   listIntegrations(input: ListIntegrationsInput): Promise<IntegrationRecord[]>;
+  /** Phase 2: fetch integration by row id (any org). Caller must enforce tenant scope. */
+  getIntegrationById(id: string): Promise<IntegrationRecord | null>;
+  /** Phase 2: list integrations for a provider across orgs (scheduled sync, operators). */
+  listIntegrationsByProvider(
+    input: ListIntegrationsByProviderInput
+  ): Promise<IntegrationRecord[]>;
   /**
    * Phase 2: insert or update a page snapshot keyed on `(siteId, pathRef)`.
    * On conflict, the row is replaced (latest snapshot wins) — drift is

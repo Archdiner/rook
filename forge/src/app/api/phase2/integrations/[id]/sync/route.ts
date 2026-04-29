@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { createPhase1Repository } from '@/lib/phase1';
 import {
@@ -6,72 +5,14 @@ import {
   mapRouteError,
   parseJsonObject,
   parseString,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
-import { CANONICAL_EVENT_SCHEMA_VERSION } from '@/lib/phase2/types';
-import type { CanonicalEventInput } from '@/lib/phase2/types';
-import type {
-  CreateCanonicalEventInput,
-  IntegrationRecord,
-} from '@/lib/phase1/repository';
-import type { SyncReport } from '@/lib/phase2/connectors/types';
-import {
-  PostHogConnectorError,
-  resolvePostHogSecret,
-  runPostHogSync,
-} from '@/lib/phase2/connectors/posthog';
+import { assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertIntegrationScopedToOrganization } from '@/lib/auth/tenantScope';
+import { runPostHogPullSyncJob } from '@/lib/phase2/jobs/runPostHogPullSyncJob';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
-}
-
-const DEFAULT_MAX_EVENTS = 5000;
-
-function toCreateInputs(
-  events: CanonicalEventInput[],
-  organizationId: string
-): CreateCanonicalEventInput[] {
-  const now = new Date().toISOString();
-  return events.map((input) => {
-    const createdAt = now;
-    const occurredAt = input.occurredAt ?? createdAt;
-    const out: CreateCanonicalEventInput = {
-      id: randomUUID(),
-      organizationId,
-      siteId: input.siteId,
-      sessionId: input.sessionId,
-      type: input.type,
-      path: input.path,
-      occurredAt,
-      createdAt,
-      source: input.source ?? 'posthog',
-      schemaVersion: CANONICAL_EVENT_SCHEMA_VERSION,
-    };
-    if (input.metrics) out.metrics = input.metrics;
-    if (input.properties) out.properties = input.properties;
-    if (input.anonymousId) out.anonymousId = input.anonymousId;
-    if (input.sourceEventId) out.sourceEventId = input.sourceEventId;
-    return out;
-  });
-}
-
-async function persistSyncOutcome(args: {
-  repository: ReturnType<typeof createPhase1Repository>;
-  integration: IntegrationRecord;
-  cursor: Record<string, unknown> | null;
-  errorCode: string | null;
-}): Promise<IntegrationRecord> {
-  const { repository, integration, cursor, errorCode } = args;
-  return repository.updateIntegrationState({
-    id: integration.id,
-    organizationId: integration.organizationId,
-    cursor,
-    lastSyncedAt: new Date().toISOString(),
-    lastErrorCode: errorCode,
-    status: errorCode ? 'error' : 'active',
-    updatedAt: new Date().toISOString(),
-  });
 }
 
 export async function POST(request: Request, context: RouteContext) {
@@ -81,121 +22,56 @@ export async function POST(request: Request, context: RouteContext) {
       return badRequest('`id` is required.');
     }
 
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: false });
-    if (!orgContext.ok) {
-      return orgContext.response;
-    }
-
     const parsed = await parseJsonObject(request).catch(() => null);
     const body = parsed && parsed.ok ? parsed.value : {};
+
+    const actorResult = await resolveForgeActor(request, {
+      bodyOrganizationId: body.organizationId,
+      allowQueryFallback: false,
+    });
+    if (!actorResult.ok) {
+      return actorResult.response;
+    }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'integrations:manage');
+    if (scopeErr) return scopeErr;
+
     const since = parseString(body.since ?? null);
     const until = parseString(body.until ?? null);
     const maxEventsRaw = body.maxEvents;
     const maxEvents =
       typeof maxEventsRaw === 'number' && Number.isInteger(maxEventsRaw) && maxEventsRaw > 0
         ? Math.min(maxEventsRaw, 25000)
-        : DEFAULT_MAX_EVENTS;
+        : undefined;
 
     const repository = createPhase1Repository();
-    const integration = await repository.getIntegration({
-      organizationId: orgContext.organizationId,
+    const integrationRow = await repository.getIntegration({
+      organizationId: actorResult.actor.organizationId,
       id,
     });
-    if (!integration) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'INTEGRATION_NOT_FOUND', message: 'Integration not found.' },
-        },
-        { status: 404 }
-      );
+    const scoped = assertIntegrationScopedToOrganization(
+      integrationRow,
+      actorResult.actor.organizationId
+    );
+    if (!scoped.ok) {
+      return scoped.response;
     }
 
-    if (integration.provider !== 'posthog') {
-      const hint =
-        integration.provider === 'segment'
-          ? 'Use POST /api/phase2/integrations/:id/segment-webhook for Segment HTTP ingest (webhook), not pull-sync.'
-          : `Sync is only implemented for PostHog; "${integration.provider}" is not yet supported.`;
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: 'UNSUPPORTED_PROVIDER',
-            message: hint,
-          },
-        },
-        { status: 501 }
-      );
-    }
-
-    let secret: string;
-    try {
-      secret = resolvePostHogSecret(integration.secretRef);
-    } catch (error) {
-      if (error instanceof PostHogConnectorError) {
-        await persistSyncOutcome({
-          repository,
-          integration,
-          cursor: integration.cursor,
-          errorCode: error.code,
-        });
-        return NextResponse.json(
-          {
-            success: false,
-            error: { code: error.code, message: error.message },
-          },
-          { status: 401 }
-        );
-      }
-      throw error;
-    }
-
-    let runResult;
-    try {
-      runResult = await runPostHogSync({
-        integration,
-        secret,
-        since,
-        until,
-        maxEvents,
-      });
-    } catch (error) {
-      const code =
-        error instanceof PostHogConnectorError ? error.code : 'POSTHOG_HTTP';
-      const message = error instanceof Error ? error.message : 'Sync failed.';
-      await persistSyncOutcome({
-        repository,
-        integration,
-        cursor: integration.cursor,
-        errorCode: code,
-      });
-      return NextResponse.json(
-        { success: false, error: { code, message } },
-        { status: 502 }
-      );
-    }
-
-    const inputs = toCreateInputs(runResult.events, integration.organizationId);
-    const insertResult = await repository.createCanonicalEventsBatch(inputs);
-
-    await persistSyncOutcome({
+    const outcome = await runPostHogPullSyncJob({
       repository,
-      integration,
-      cursor: runResult.cursor,
-      errorCode: null,
+      integration: scoped.integration,
+      since,
+      until,
+      maxEvents,
     });
 
-    const report: SyncReport = {
-      fetched: runResult.events.length,
-      inserted: insertResult.inserted,
-      deduped: insertResult.deduped,
-      skipped: [],
-      errors: [],
-      cursor: runResult.cursor,
-      hasMore: runResult.hasMore,
-    };
+    if (!outcome.ok) {
+      return NextResponse.json(
+        { success: false, error: { code: outcome.code, message: outcome.message } },
+        { status: outcome.httpStatus }
+      );
+    }
 
-    return success(report);
+    return success(outcome.report);
   } catch (error) {
     return mapRouteError(error);
   }

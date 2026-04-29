@@ -418,6 +418,12 @@ export default function Home() {
           >
             Phase 1
           </Link>
+          <Link
+            href="/onboarding"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+          >
+            Setup
+          </Link>
         </nav>
         <div className="hidden lg:block sans-text font-bold tracking-widest uppercase text-xs text-[#6B6B6B]">
           Precision Engineering

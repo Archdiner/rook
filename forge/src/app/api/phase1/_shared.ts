@@ -45,6 +45,22 @@ export function unauthorized(
   );
 }
 
+export function forbidden(
+  message: string,
+  code = 'FORBIDDEN'
+): NextResponse<ApiEnvelope<never>> {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code,
+        message,
+      },
+    },
+    { status: 403 }
+  );
+}
+
 export function serverError(message = 'Internal server error.'): NextResponse<ApiEnvelope<never>> {
   return NextResponse.json(
     {

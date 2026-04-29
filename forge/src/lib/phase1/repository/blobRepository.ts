@@ -28,8 +28,10 @@ import type {
   CreatePhase1SiteInput,
   GetIntegrationInput,
   GetLatestPhase1ReadinessSnapshotInput,
+  GetPhase1SiteInput,
   GetPhase2SiteConfigInput,
   ListEventsInWindowInput,
+  ListIntegrationsByProviderInput,
   ListIntegrationsInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
@@ -224,6 +226,20 @@ export function createBlobPhase1Repository(): Phase1Repository {
         ...site,
         organizationId: site.organizationId ?? DEFAULT_ORG_ID,
       }));
+    },
+    async getSite(input: GetPhase1SiteInput): Promise<Phase1SiteRecord | null> {
+      const sites = await readJsonlRecords<Phase1SiteRecord & { organizationId?: string }>('sites', {
+        limit: 500,
+        monthsToScan: 6,
+        filter: (record) =>
+          isOrgMatch(record.organizationId, input.organizationId) && record.id === input.siteId,
+      });
+      const site = sites[0];
+      if (!site) return null;
+      return {
+        ...site,
+        organizationId: site.organizationId ?? DEFAULT_ORG_ID,
+      };
     },
     async createEvent(input: CreatePhase1EventInput): Promise<Phase1EventRecord> {
       const event: Phase1EventRecord = {
@@ -568,6 +584,16 @@ export function createBlobPhase1Repository(): Phase1Repository {
       if (!latest) return null;
       return toIntegrationRecord(latest);
     },
+    async getIntegrationById(integrationId: string): Promise<IntegrationRecord | null> {
+      const matches = await readJsonlRecords<StoredIntegrationRecord>('integrations', {
+        monthsToScan: 6,
+        limit: DEDUPE_SCAN_LIMIT,
+        filter: (record) => record.integrationId === integrationId,
+      });
+      const latest = matches[0];
+      if (!latest) return null;
+      return toIntegrationRecord(latest);
+    },
     async listIntegrations(
       input: ListIntegrationsInput
     ): Promise<IntegrationRecord[]> {
@@ -598,6 +624,29 @@ export function createBlobPhase1Repository(): Phase1Repository {
 
       const limit = Math.max(input.limit ?? DEFAULT_INTEGRATIONS_LIMIT, 1);
       return latest.slice(0, limit).map(toIntegrationRecord);
+    },
+    async listIntegrationsByProvider(
+      input: ListIntegrationsByProviderInput
+    ): Promise<IntegrationRecord[]> {
+      const records = await readJsonlRecords<StoredIntegrationRecord>('integrations', {
+        monthsToScan: 6,
+        limit: DEDUPE_SCAN_LIMIT,
+        filter: (record) => record.provider === input.provider,
+      });
+      const seen = new Set<string>();
+      const pick: StoredIntegrationRecord[] = [];
+      for (const record of records) {
+        if (seen.has(record.integrationId)) continue;
+        seen.add(record.integrationId);
+        pick.push(record);
+      }
+      pick.sort((a, b) => {
+        const ta = a.lastSyncedAt ? Date.parse(a.lastSyncedAt) : 0;
+        const tb = b.lastSyncedAt ? Date.parse(b.lastSyncedAt) : 0;
+        return ta - tb;
+      });
+      const cap = Math.min(Math.max(input.limit, 1), 200);
+      return pick.slice(0, cap).map(toIntegrationRecord);
     },
     /**
      * Append a new page snapshot record. The blob driver is append-only, so

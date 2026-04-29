@@ -39,8 +39,10 @@ import type {
   CreatePhase1SiteInput,
   GetIntegrationInput,
   GetLatestPhase1ReadinessSnapshotInput,
+  GetPhase1SiteInput,
   GetPhase2SiteConfigInput,
   ListEventsInWindowInput,
+  ListIntegrationsByProviderInput,
   ListIntegrationsInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
@@ -203,6 +205,25 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         createdAt: site.createdAt.toISOString(),
         ...(site.analyticsProvider ? { analyticsProvider: site.analyticsProvider } : {}),
       }));
+    },
+    async getSite(input: GetPhase1SiteInput): Promise<Phase1SiteRecord | null> {
+      const db = getDb();
+      const [site] = await db
+        .select()
+        .from(phase1Sites)
+        .where(
+          and(eq(phase1Sites.id, input.siteId), eq(phase1Sites.organizationId, input.organizationId))
+        )
+        .limit(1);
+      if (!site) return null;
+      return {
+        id: site.id,
+        organizationId: site.organizationId,
+        name: site.name,
+        domain: site.domain,
+        createdAt: site.createdAt.toISOString(),
+        ...(site.analyticsProvider ? { analyticsProvider: site.analyticsProvider } : {}),
+      };
     },
     async createEvent(input: CreatePhase1EventInput): Promise<Phase1EventRecord> {
       const db = getDb();
@@ -532,6 +553,17 @@ export function createPostgresPhase1Repository(): Phase1Repository {
       if (!row) return null;
       return mapRowToIntegrationRecord(row);
     },
+    async getIntegrationById(id: string): Promise<IntegrationRecord | null> {
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(phase2Integrations)
+        .where(eq(phase2Integrations.id, id))
+        .limit(1);
+      const row = rows[0];
+      if (!row) return null;
+      return mapRowToIntegrationRecord(row);
+    },
     async listIntegrations(
       input: ListIntegrationsInput
     ): Promise<IntegrationRecord[]> {
@@ -547,6 +579,19 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         .orderBy(desc(phase2Integrations.createdAt))
         .limit(input.limit ?? DEFAULT_INTEGRATIONS_LIMIT);
 
+      return rows.map(mapRowToIntegrationRecord);
+    },
+    async listIntegrationsByProvider(
+      input: ListIntegrationsByProviderInput
+    ): Promise<IntegrationRecord[]> {
+      const db = getDb();
+      const cap = Math.min(Math.max(input.limit, 1), 200);
+      const rows = await db
+        .select()
+        .from(phase2Integrations)
+        .where(eq(phase2Integrations.provider, input.provider))
+        .orderBy(sql`${phase2Integrations.lastSyncedAt} asc nulls first`)
+        .limit(cap);
       return rows.map(mapRowToIntegrationRecord);
     },
     async upsertPageSnapshot(input: UpsertPageSnapshotInput): Promise<PageSnapshot> {

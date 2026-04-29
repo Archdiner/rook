@@ -3,7 +3,6 @@ import {
   badRequest,
   mapRouteError,
   parseJsonObject,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
 import {
@@ -11,6 +10,8 @@ import {
   buildSiteConfig,
   parsePhase2SiteConfigBody,
 } from '../../../_shared';
+import { assertApiKeyHasAnyScope, assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 
 interface RouteContext {
   params: Promise<{ siteId: string }>;
@@ -23,14 +24,26 @@ export async function GET(request: Request, context: RouteContext) {
       return badRequest('`siteId` is required.');
     }
 
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: true });
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'integrations:manage',
+      'insights:run',
+    ]);
+    if (scopeErr) return scopeErr;
 
     const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
     const config = await repository.getPhase2SiteConfig({
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       siteId,
     });
 
@@ -55,13 +68,15 @@ export async function PUT(request: Request, context: RouteContext) {
       return badRequest(parsed.message);
     }
 
-    const orgContext = resolveOrganizationContext(request, {
+    const actorResult = await resolveForgeActor(request, {
       bodyOrganizationId: parsed.value.organizationId,
       allowQueryFallback: false,
     });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'integrations:manage');
+    if (scopeErr) return scopeErr;
 
     const parsedBody = parsePhase2SiteConfigBody(parsed.value);
     if (!parsedBody.ok) {
@@ -69,10 +84,17 @@ export async function PUT(request: Request, context: RouteContext) {
     }
 
     const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
     const config = await repository.upsertPhase2SiteConfig(
       buildSiteConfig({
         siteId,
-        organizationId: orgContext.organizationId,
+        organizationId: actorResult.actor.organizationId,
         body: parsedBody.value,
       })
     );

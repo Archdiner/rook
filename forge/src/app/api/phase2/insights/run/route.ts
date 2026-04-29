@@ -2,10 +2,12 @@ import {
   badRequest,
   mapRouteError,
   parseJsonObject,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
 import { badConfigRequest, parseTimeWindow } from '../../_shared';
+import { assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
+import { createPhase1Repository } from '@/lib/phase1';
 import { runPhase2InsightsPipeline } from '@/lib/phase2';
 
 const DEFAULT_MAX_FINDINGS = 3;
@@ -39,16 +41,26 @@ export async function POST(request: Request) {
       return badConfigRequest('`maxFindings` must be a positive integer when provided.');
     }
 
-    const orgContext = resolveOrganizationContext(request, {
+    const actorResult = await resolveForgeActor(request, {
       bodyOrganizationId: body.organizationId,
       allowQueryFallback: false,
     });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'insights:run');
+    if (scopeErr) return scopeErr;
+
+    const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
 
     const response = await runPhase2InsightsPipeline({
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       siteId,
       window: window.value,
       maxFindings,

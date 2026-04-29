@@ -5,10 +5,11 @@ import {
   mapRouteError,
   parseJsonObject,
   parseString,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
 import type { ConnectorProvider } from '@/lib/phase2/connectors/types';
+import { assertApiKeyHasAnyScope, assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 import { badConfigRequest } from '../_shared';
 
 const VALID_PROVIDERS: ReadonlySet<ConnectorProvider> = new Set([
@@ -115,13 +116,15 @@ export async function POST(request: Request) {
       return badRequest(parsed.message);
     }
 
-    const orgContext = resolveOrganizationContext(request, {
+    const actorResult = await resolveForgeActor(request, {
       bodyOrganizationId: parsed.value.organizationId,
       allowQueryFallback: false,
     });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'integrations:manage');
+    if (scopeErr) return scopeErr;
 
     const parsedBody = parseCreateBody(parsed.value);
     if (!parsedBody.ok) {
@@ -129,9 +132,16 @@ export async function POST(request: Request) {
     }
 
     const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId: parsedBody.value.siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
     const integration = await repository.createIntegration({
       id: randomUUID(),
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       siteId: parsedBody.value.siteId,
       provider: parsedBody.value.provider,
       config: parsedBody.value.config,
@@ -147,10 +157,15 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: true });
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'integrations:manage',
+      'insights:run',
+    ]);
+    if (scopeErr) return scopeErr;
 
     const url = new URL(request.url);
     const siteId = parseString(url.searchParams.get('siteId')) ?? undefined;
@@ -162,7 +177,7 @@ export async function GET(request: Request) {
 
     const repository = createPhase1Repository();
     const items = await repository.listIntegrations({
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       ...(siteId ? { siteId } : {}),
       ...(provider ? { provider } : {}),
     });

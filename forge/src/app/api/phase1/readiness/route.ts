@@ -5,9 +5,10 @@ import {
   mapRouteError,
   parseJsonObject,
   parseString,
-  resolveOrganizationContext,
   success,
 } from '../_shared';
+import { assertApiKeyHasAnyScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 
 interface ReadinessData {
   snapshot: Phase1ReadinessSnapshot;
@@ -80,11 +81,26 @@ export async function GET(request: Request) {
     if (!siteId) {
       return badRequest('`siteId` query param is required.');
     }
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: true });
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
-    return await buildReadinessResponse(siteId, orgContext.organizationId);
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'insights:run',
+      'events:write',
+      'integrations:manage',
+    ]);
+    if (scopeErr) return scopeErr;
+
+    const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
+    return await buildReadinessResponse(siteId, actorResult.actor.organizationId);
   } catch (error) {
     return mapRouteError(error);
   }
@@ -97,15 +113,29 @@ export async function POST(request: Request) {
       return parsedSiteId.error;
     }
 
-    const orgContext = resolveOrganizationContext(request, {
+    const actorResult = await resolveForgeActor(request, {
       bodyOrganizationId: parsedSiteId.organizationId,
       allowQueryFallback: false,
     });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'insights:run',
+      'events:write',
+      'integrations:manage',
+    ]);
+    if (scopeErr) return scopeErr;
 
-    return await buildReadinessResponse(parsedSiteId.siteId, orgContext.organizationId);
+    const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId: parsedSiteId.siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
+    return await buildReadinessResponse(parsedSiteId.siteId, actorResult.actor.organizationId);
   } catch (error) {
     return mapRouteError(error);
   }

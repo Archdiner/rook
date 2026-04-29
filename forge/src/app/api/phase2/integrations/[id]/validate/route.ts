@@ -3,9 +3,10 @@ import { createPhase1Repository } from '@/lib/phase1';
 import {
   badRequest,
   mapRouteError,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
+import { assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertIntegrationScopedToOrganization } from '@/lib/auth/tenantScope';
 import {
   PostHogConnectorError,
   resolvePostHogSecret,
@@ -23,26 +24,20 @@ export async function POST(request: Request, context: RouteContext) {
       return badRequest('`id` is required.');
     }
 
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: false });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: false });
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'integrations:manage');
+    if (scopeErr) return scopeErr;
 
     const repository = createPhase1Repository();
-    const integration = await repository.getIntegration({
-      organizationId: orgContext.organizationId,
-      id,
-    });
-    if (!integration) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: { code: 'INTEGRATION_NOT_FOUND', message: 'Integration not found.' },
-        },
-        { status: 404 }
-      );
+    const row = await repository.getIntegrationById(id);
+    const scoped = assertIntegrationScopedToOrganization(row, actorResult.actor.organizationId);
+    if (!scoped.ok) {
+      return scoped.response;
     }
-
+    const integration = scoped.integration;
     if (integration.provider !== 'posthog') {
       return NextResponse.json(
         {

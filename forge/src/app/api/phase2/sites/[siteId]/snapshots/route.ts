@@ -3,9 +3,14 @@ import {
   badRequest,
   mapRouteError,
   parseJsonObject,
-  resolveOrganizationContext,
   success,
 } from '@/app/api/phase1/_shared';
+import {
+  assertApiKeyHasAnyScope,
+  assertApiKeyHasScope,
+  resolveForgeActor,
+} from '@/lib/auth/forgeActor';
+import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 import {
   normalizePathRef,
   runSnapshot,
@@ -70,13 +75,15 @@ export async function POST(request: Request, context: RouteContext) {
       return badRequest(parsed.message);
     }
 
-    const orgContext = resolveOrganizationContext(request, {
+    const actorResult = await resolveForgeActor(request, {
       bodyOrganizationId: parsed.value.organizationId,
       allowQueryFallback: false,
     });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasScope(actorResult.actor, 'integrations:manage');
+    if (scopeErr) return scopeErr;
 
     const body = parsed.value;
     const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
@@ -112,6 +119,13 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
     const results: SnapshotRunPathResult[] = [];
 
     for (const rawPath of paths) {
@@ -134,7 +148,7 @@ export async function POST(request: Request, context: RouteContext) {
         const fetched = await runSnapshot(absoluteUrl, options);
         const pathRef = normalizePathRef(fetched.finalUrl);
         const snapshot = await repository.upsertPageSnapshot({
-          organizationId: orgContext.organizationId,
+          organizationId: actorResult.actor.organizationId,
           siteId,
           pathRef,
           url: fetched.finalUrl,
@@ -181,16 +195,27 @@ export async function GET(request: Request, context: RouteContext) {
       return badRequest('`siteId` is required.');
     }
 
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: true });
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'integrations:manage',
+      'insights:run',
+    ]);
+    if (scopeErr) return scopeErr;
 
     const url = new URL(request.url);
     const pathRefParam = url.searchParams.get('pathRef');
     const limitParam = url.searchParams.get('limit');
 
     const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
 
     if (pathRefParam) {
       let pathRef: string;
@@ -204,7 +229,7 @@ export async function GET(request: Request, context: RouteContext) {
         return badRequest('`pathRef` is not a valid path or URL.');
       }
       const snapshot = await repository.getPageSnapshot({
-        organizationId: orgContext.organizationId,
+        organizationId: actorResult.actor.organizationId,
         siteId,
         pathRef,
       });
@@ -216,7 +241,7 @@ export async function GET(request: Request, context: RouteContext) {
 
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 500) : 100;
     const snapshots = await repository.listPageSnapshots({
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       siteId,
       limit,
     });
@@ -227,7 +252,4 @@ export async function GET(request: Request, context: RouteContext) {
 }
 
 export const maxDuration = 60;
-
-export const config = {
-  runtime: 'nodejs',
-};
+export const runtime = 'nodejs';

@@ -8,10 +8,11 @@ import {
   mapRouteError,
   parseJsonObject,
   parsePositiveInt,
-  resolveOrganizationContext,
   parseString,
   success,
 } from '../_shared';
+import { assertApiKeyHasAnyScope, assertApiKeyHasScope, resolveForgeActor } from '@/lib/auth/forgeActor';
+import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 
 const VALID_SOURCES: ReadonlySet<CanonicalEventSource> = new Set([
   'api',
@@ -125,21 +126,30 @@ export async function POST(request: Request) {
     const anonymousId = parseString(body.anonymousId) ?? undefined;
     const occurredAtRaw = parseIsoDate(body.occurredAt);
 
-    const orgContext = resolveOrganizationContext(request, {
+    const orgContext = await resolveForgeActor(request, {
       bodyOrganizationId: body.organizationId,
       allowQueryFallback: false,
     });
     if (!orgContext.ok) {
       return orgContext.response;
     }
+    const scopeErr = assertApiKeyHasScope(orgContext.actor, 'events:write');
+    if (scopeErr) return scopeErr;
 
     const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: orgContext.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
     const createdAt = new Date().toISOString();
     const occurredAt = occurredAtRaw ?? createdAt;
 
     const created = await repository.createCanonicalEvent({
       id: randomUUID(),
-      organizationId: orgContext.organizationId,
+      organizationId: orgContext.actor.organizationId,
       siteId,
       sessionId,
       type,
@@ -161,7 +171,6 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
-    const repository = createPhase1Repository();
     const url = new URL(request.url);
     const siteId = parseString(url.searchParams.get('siteId'));
     if (!siteId) {
@@ -169,12 +178,27 @@ export async function GET(request: Request) {
     }
 
     const limit = parsePositiveInt(url.searchParams.get('limit'), 100, 500);
-    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
-    if (!orgContext.ok) {
-      return orgContext.response;
+    const actorResult = await resolveForgeActor(request, { allowQueryFallback: true });
+    if (!actorResult.ok) {
+      return actorResult.response;
     }
+    const scopeErr = assertApiKeyHasAnyScope(actorResult.actor, [
+      'events:write',
+      'insights:run',
+      'integrations:manage',
+    ]);
+    if (scopeErr) return scopeErr;
+
+    const repository = createPhase1Repository();
+    const siteGate = await assertSiteInOrganization({
+      repository,
+      organizationId: actorResult.actor.organizationId,
+      siteId,
+    });
+    if (!siteGate.ok) return siteGate.response;
+
     const events = await repository.listEvents({
-      organizationId: orgContext.organizationId,
+      organizationId: actorResult.actor.organizationId,
       siteId,
       limit,
     });

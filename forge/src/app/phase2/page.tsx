@@ -6,7 +6,7 @@
  */
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const INK = "#111111";
 const MUTED = "#6B6B6B";
@@ -42,7 +42,38 @@ type DiagnosticsRow = {
 export default function Phase2InsightsPage(): React.ReactElement {
   const defaultOrg = useMemo(() => process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? "org_default", []);
 
+  const clerkEnabled = useMemo(() => process.env.NEXT_PUBLIC_FORGE_CLERK_ENABLED === "true", []);
+
   const [organizationId] = useState(defaultOrg);
+
+  const apiFetch = useCallback(
+    (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const baseHeaders: HeadersInit = {
+        ...(init?.headers as Record<string, string> | undefined),
+      };
+      const headers = new Headers(baseHeaders);
+      if (!clerkEnabled) {
+        headers.set("x-org-id", organizationId);
+      }
+      if (
+        !headers.has("Content-Type") &&
+        init?.method &&
+        init.method !== "GET" &&
+        init.method !== "HEAD"
+      ) {
+        const hasBody = init.body !== undefined && init.body !== null;
+        if (hasBody && typeof init.body === "string") {
+          headers.set("Content-Type", "application/json");
+        }
+      }
+      return fetch(input, {
+        ...init,
+        credentials: clerkEnabled ? "include" : "same-origin",
+        headers,
+      });
+    },
+    [clerkEnabled, organizationId],
+  );
 
   type SiteMini = { id: string; name: string };
 
@@ -63,9 +94,7 @@ export default function Phase2InsightsPage(): React.ReactElement {
     async function boot() {
       setSitesState("loading");
       try {
-        const res = await fetch("/api/phase1/sites", {
-          headers: { "x-org-id": organizationId },
-        });
+        const res = await apiFetch("/api/phase1/sites");
         const json = (await res.json()) as { success?: boolean; data?: unknown };
         let list: unknown[] = [];
         if (json.success === true && Array.isArray(json.data)) {
@@ -98,7 +127,7 @@ export default function Phase2InsightsPage(): React.ReactElement {
       }
     }
     void boot();
-  }, [organizationId]);
+  }, [organizationId, apiFetch]);
 
   async function runInsights(event: React.FormEvent) {
     event.preventDefault();
@@ -108,11 +137,10 @@ export default function Phase2InsightsPage(): React.ReactElement {
     const endMs = Date.now();
     const startMs = endMs - days * 86400000;
     try {
-      const res = await fetch("/api/phase2/insights/run", {
+      const res = await apiFetch("/api/phase2/insights/run", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-org-id": organizationId,
         },
         body: JSON.stringify({
           siteId,
