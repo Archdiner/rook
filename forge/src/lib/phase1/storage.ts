@@ -13,8 +13,15 @@ import path from 'node:path';
  * - `snapshots`: Phase 1 readiness snapshots.
  * - `siteConfigs`: per-site Phase 2 config snapshots. Latest record wins (storage
  *   sorts by `updatedAt` desc on read).
+ * - `integrations`: Phase 2 connector integration records. Append-only; latest
+ *   write per logical integration id wins on read (callers reduce in memory).
  */
-export type Phase1Collection = 'sites' | 'events' | 'snapshots' | 'siteConfigs';
+export type Phase1Collection =
+  | 'sites'
+  | 'events'
+  | 'snapshots'
+  | 'siteConfigs'
+  | 'integrations';
 
 export interface Phase1Site {
   id: string;
@@ -141,6 +148,8 @@ function recordBlobPathname(
       }
       return `${PHASE1_PREFIX}/siteConfigs/${month}/${siteId}/${id}.json`;
     }
+    case 'integrations':
+      return `${PHASE1_PREFIX}/integrations/${month}/${id}.json`;
   }
 }
 
@@ -560,6 +569,13 @@ async function readPhase1RecordsLocal<T>(
         if (collected.length >= limit) break;
         collected.push(row);
       }
+      continue;
+    }
+
+    if (collection === 'integrations') {
+      const rel = `${PHASE1_PREFIX}/integrations/${month}`;
+      const batch = await readLocalJsonFiles<T>(rel, filter, limit - collected.length);
+      collected.push(...batch);
       continue;
     }
 

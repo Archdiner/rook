@@ -40,6 +40,8 @@ export interface CreateIntegrationInput {
   config: Record<string, unknown>;
   secretRef: string | null;
   createdAt: ISODateString;
+  /** Optional initial status; drivers default to "pending". */
+  status?: IntegrationStatus;
 }
 
 export interface UpdateIntegrationStateInput {
@@ -79,6 +81,8 @@ export interface SyncReport {
   fetched: number;
   inserted: number;
   deduped: number;
+  /** Per-reason counts for events that failed mapping and were skipped. */
+  skipped: Array<{ code: string; count: number }>;
   errors: Array<{ code: string; message: string }>;
   /** Final persisted cursor after sync. */
   cursor: Record<string, unknown> | null;

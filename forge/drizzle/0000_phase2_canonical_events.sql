@@ -48,6 +48,8 @@ CREATE TABLE "phase2_integrations" (
 	"site_id" text NOT NULL,
 	"provider" text NOT NULL,
 	"status" text NOT NULL,
+	"config" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"secret_ref" text,
 	"cursor" jsonb,
 	"last_synced_at" timestamp with time zone,
 	"last_error_code" text,
@@ -76,4 +78,5 @@ CREATE INDEX "phase1_readiness_snapshots_site_idx" ON "phase1_readiness_snapshot
 CREATE INDEX "phase1_sites_org_idx" ON "phase1_sites" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "phase2_integrations_org_idx" ON "phase2_integrations" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "phase2_integrations_site_idx" ON "phase2_integrations" USING btree ("site_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "phase2_integrations_site_provider_idx" ON "phase2_integrations" USING btree ("site_id","provider");--> statement-breakpoint
 CREATE INDEX "phase2_site_configs_org_idx" ON "phase2_site_configs" USING btree ("organization_id");

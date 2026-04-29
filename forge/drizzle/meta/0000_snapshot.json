@@ -1,5 +1,5 @@
 {
-  "id": "a5fe3d73-a060-4c1c-b3bd-a1a5184ef25c",
+  "id": "633d2870-2326-4c8d-a08a-c9f6152848ca",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -426,6 +426,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "secret_ref": {
+          "name": "secret_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "cursor": {
           "name": "cursor",
           "type": "jsonb",
@@ -486,6 +499,27 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "phase2_integrations_site_provider_idx": {
+          "name": "phase2_integrations_site_provider_idx",
+          "columns": [
+            {
+              "expression": "site_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

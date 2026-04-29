@@ -5,8 +5,16 @@ import {
   phase1Events,
   phase1ReadinessSnapshots,
   phase1Sites,
+  phase2Integrations,
   phase2SiteConfigs,
 } from '@/lib/db/schema';
+import type {
+  ConnectorProvider,
+  CreateIntegrationInput,
+  IntegrationRecord,
+  IntegrationStatus,
+  UpdateIntegrationStateInput,
+} from '@/lib/phase2/connectors/types';
 import type {
   CanonicalEvent,
   CanonicalEventSchemaVersion,
@@ -19,9 +27,11 @@ import type {
   CreatePhase1EventInput,
   CreatePhase1ReadinessSnapshotInput,
   CreatePhase1SiteInput,
+  GetIntegrationInput,
   GetLatestPhase1ReadinessSnapshotInput,
   GetPhase2SiteConfigInput,
   ListEventsInWindowInput,
+  ListIntegrationsInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
   Phase1EventRecord,
@@ -33,6 +43,9 @@ import type {
 
 type Phase1EventRow = typeof phase1Events.$inferSelect;
 type Phase2SiteConfigRow = typeof phase2SiteConfigs.$inferSelect;
+type Phase2IntegrationRow = typeof phase2Integrations.$inferSelect;
+
+const DEFAULT_INTEGRATIONS_LIMIT = 100;
 
 const LIST_WINDOW_LIMIT = 5000;
 
@@ -82,6 +95,23 @@ function mapRowToPhase2SiteConfig(row: Phase2SiteConfigRow): Phase2SiteConfig {
     config.conversionEventTypes = row.conversionEventTypes;
   }
   return config;
+}
+
+function mapRowToIntegrationRecord(row: Phase2IntegrationRow): IntegrationRecord {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    siteId: row.siteId,
+    provider: row.provider as ConnectorProvider,
+    status: row.status as IntegrationStatus,
+    config: (row.config ?? {}) as Record<string, unknown>,
+    secretRef: row.secretRef ?? null,
+    cursor: (row.cursor ?? null) as Record<string, unknown> | null,
+    lastSyncedAt: row.lastSyncedAt ? row.lastSyncedAt.toISOString() : null,
+    lastErrorCode: row.lastErrorCode ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 function toCanonicalInsertValues(input: CreateCanonicalEventInput) {
@@ -393,6 +423,102 @@ export function createPostgresPhase1Repository(): Phase1Repository {
       const row = rows[0];
       if (!row) return null;
       return mapRowToPhase2SiteConfig(row);
+    },
+    async createIntegration(input: CreateIntegrationInput): Promise<IntegrationRecord> {
+      const db = getDb();
+      const ts = new Date(input.createdAt);
+      const [row] = await db
+        .insert(phase2Integrations)
+        .values({
+          id: input.id,
+          organizationId: input.organizationId,
+          siteId: input.siteId,
+          provider: input.provider,
+          status: 'pending',
+          config: input.config,
+          secretRef: input.secretRef ?? null,
+          cursor: null,
+          lastSyncedAt: null,
+          lastErrorCode: null,
+          createdAt: ts,
+          updatedAt: ts,
+        })
+        .onConflictDoUpdate({
+          target: [phase2Integrations.siteId, phase2Integrations.provider],
+          set: {
+            config: input.config,
+            secretRef: input.secretRef ?? null,
+            updatedAt: ts,
+          },
+        })
+        .returning();
+
+      return mapRowToIntegrationRecord(row);
+    },
+    async updateIntegrationState(
+      input: UpdateIntegrationStateInput
+    ): Promise<IntegrationRecord> {
+      const db = getDb();
+      const set: Partial<typeof phase2Integrations.$inferInsert> = {
+        updatedAt: new Date(input.updatedAt),
+      };
+      if (input.status !== undefined) set.status = input.status;
+      if (input.cursor !== undefined) set.cursor = input.cursor;
+      if (input.lastSyncedAt !== undefined) {
+        set.lastSyncedAt = input.lastSyncedAt ? new Date(input.lastSyncedAt) : null;
+      }
+      if (input.lastErrorCode !== undefined) set.lastErrorCode = input.lastErrorCode;
+
+      const updated = await db
+        .update(phase2Integrations)
+        .set(set)
+        .where(
+          and(
+            eq(phase2Integrations.id, input.id),
+            eq(phase2Integrations.organizationId, input.organizationId)
+          )
+        )
+        .returning();
+
+      const row = updated[0];
+      if (!row) throw new Error('Integration not found');
+      return mapRowToIntegrationRecord(row);
+    },
+    async getIntegration(
+      input: GetIntegrationInput
+    ): Promise<IntegrationRecord | null> {
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(phase2Integrations)
+        .where(
+          and(
+            eq(phase2Integrations.id, input.id),
+            eq(phase2Integrations.organizationId, input.organizationId)
+          )
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+      return mapRowToIntegrationRecord(row);
+    },
+    async listIntegrations(
+      input: ListIntegrationsInput
+    ): Promise<IntegrationRecord[]> {
+      const db = getDb();
+      const conditions = [eq(phase2Integrations.organizationId, input.organizationId)];
+      if (input.siteId) conditions.push(eq(phase2Integrations.siteId, input.siteId));
+      if (input.provider) conditions.push(eq(phase2Integrations.provider, input.provider));
+
+      const rows = await db
+        .select()
+        .from(phase2Integrations)
+        .where(and(...conditions))
+        .orderBy(desc(phase2Integrations.createdAt))
+        .limit(input.limit ?? DEFAULT_INTEGRATIONS_LIMIT);
+
+      return rows.map(mapRowToIntegrationRecord);
     },
   };
 }

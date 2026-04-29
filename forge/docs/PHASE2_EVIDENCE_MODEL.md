@@ -173,11 +173,101 @@ and either run it or hand-write the additive `ALTER`s.
 
 ---
 
-## 9. Out of scope for Phase 2 (deferred)
+## 9. PostHog connector (first-class provider)
 
-- Provider connectors (Shopify Admin, Segment write-key receiver, GA4 BigQuery
-  export). These reuse the same canonical event ingestion path.
-- Cron orchestration (`/api/phase2/sync`, `phase2_integrations` table is
-  defined but not yet used).
+PostHog is the first integrated provider. Mapping lives in
+`src/lib/phase2/connectors/posthog/` and is pure — connectors only do network
+I/O; transformation is testable in isolation.
+
+### 9.1 Credential & config checklist
+
+A pilot using PostHog must provide:
+
+| Item | Where it lives |
+| --- | --- |
+| **Personal API key** with read scope on the project | env var, name documented in `secretRef` (e.g. `POSTHOG_API_KEY__SITE_ABC`) — never in DB |
+| **Project id** | `phase2_integrations.config.projectId` |
+| **Host** | `phase2_integrations.config.host` (e.g. `https://us.posthog.com`) |
+| **Forge site id** | created earlier via `POST /api/phase1/sites` |
+
+The Forge service reads only the env-var name (`secretRef`) from the DB and
+resolves the secret server-side at request time. The secret value is never
+logged, never returned to clients, and never stored in JSONL.
+
+### 9.2 PostHog → Canonical mapping
+
+| PostHog field | Canonical event field | Notes |
+| --- | --- | --- |
+| `event` | `type` | `$pageview`→`page_view`, `$pageleave`→`page_leave`, `$autocapture`→`cta_click`, `$rageclick`→`rage_click`. Custom events pass through. |
+| `timestamp` | `occurredAt` | Re-emitted as ISO. |
+| `uuid` (or `id`) | `sourceEventId` | Powers `(siteId, source, sourceEventId)` dedupe. |
+| `distinct_id` (or `person.distinct_id`) | `anonymousId` | Stable visitor handle. |
+| `properties.$session_id` → `$window_id` → `session_id` → `distinct_id` | `sessionId` | Falls back to `"unknown_session"`. |
+| `properties.$pathname` (or parsed `$current_url`) | `path` | Always begins with `/`. |
+| `properties.$duration × 1000` (or `dwell_ms`) | `metrics.dwellMs` | |
+| `properties.$scroll_percentage` | `metrics.scrollPct` | |
+| `properties.intent` | `metrics.intent` | Clamped 0..1. |
+| `$rageclick` event OR `$rage_click_count` | `metrics.rage` | |
+| `properties.$revenue` finite | `metrics.conversion = 1` | Documented proxy; see `mapping.ts`. |
+| `utm_*`, `$browser`, `$device_type`, `$referrer`, `$host` | `properties.*` | Renamed without `$`. |
+| Autocapture: `$el_text`, `$el_attr__data-attr`, `tag_name` | `properties.cta_text`, `properties.cta_id`, `properties.cta_tag` | Powers `CtaConfig.match.property-equals`. |
+
+PII guardrail: `$ip`, `$user_agent`, `email`, `name`, `phone`, raw cookies are
+**never** copied across.
+
+### 9.3 Connector API
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/phase2/integrations` | Create or upsert by `(siteId, provider)`. Body: `{ siteId, provider, config, secretRef }`. |
+| `GET /api/phase2/integrations` | List for the org; optional `siteId`/`provider` filters. |
+| `GET /api/phase2/integrations/:id` | Fetch one. |
+| `POST /api/phase2/integrations/:id/validate` | Read-only connectivity probe. Returns `{ ok, sampleEvents, recentEventTypes, warnings }`. |
+| `POST /api/phase2/integrations/:id/sync` | Pull events, batch-insert with dedupe, advance cursor. Body: `{ since?, until?, maxEvents? }`. |
+
+### 9.4 Sync semantics
+
+- Cursor is `{ lastTimestamp, lastUuid }` persisted in `phase2_integrations.cursor`.
+- On 401/403 the integration is marked `status="error"` with code
+  `POSTHOG_AUTH`; cursor is preserved.
+- 429/5xx are retried with exponential backoff inside the connector
+  (`200ms → 800ms → 2400ms`); persistent failures surface as 502 with
+  `lastErrorCode` set.
+- Per-request timeout: 15s. Sync is page-atomic — partial progress is preserved
+  via cursor advancement only after a page is mapped successfully.
+
+### 9.5 Worked example
+
+```bash
+curl -X POST $BASE_URL/api/phase2/integrations \
+  -H "Content-Type: application/json" \
+  -d '{
+    "siteId": "site_123",
+    "provider": "posthog",
+    "config": { "host": "https://us.posthog.com", "projectId": "12345" },
+    "secretRef": "POSTHOG_API_KEY__SITE_123"
+  }'
+
+# returns { id, ... }; export it
+INTEGRATION_ID=...
+
+curl -X POST $BASE_URL/api/phase2/integrations/$INTEGRATION_ID/validate
+# { ok: true, sampleEvents: 42, recentEventTypes: ["cta_click","page_view","rage_click"], warnings: [] }
+
+curl -X POST $BASE_URL/api/phase2/integrations/$INTEGRATION_ID/sync \
+  -H "Content-Type: application/json" -d '{ "maxEvents": 1000 }'
+# { fetched, inserted, deduped, skipped, errors, cursor, hasMore }
+```
+
+After sync, run `POST /api/phase2/insights/run` (§6) and findings are derived
+from real PostHog data.
+
+---
+
+## 10. Out of scope for Phase 2 (deferred)
+
+- Other providers (Shopify Admin, Segment write-key receiver, GA4 BigQuery
+  export). They reuse the same `Phase2Connector`-shaped path.
+- Cron orchestration (Vercel Cron → `/api/phase2/integrations/:id/sync`).
 - Identity stitching beyond the `anonymousId` carrier field.
 - Outcome/experiment loop (Phase 3).

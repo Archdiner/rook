@@ -7,9 +7,11 @@ export type {
   CreatePhase1EventInput,
   CreatePhase1ReadinessSnapshotInput,
   CreatePhase1SiteInput,
+  GetIntegrationInput,
   GetLatestPhase1ReadinessSnapshotInput,
   GetPhase2SiteConfigInput,
   ListEventsInWindowInput,
+  ListIntegrationsInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
   Phase1EventRecord,
@@ -20,3 +22,10 @@ export type {
   Phase1StorageDriverSetting,
   UpsertPhase2SiteConfigInput,
 } from './types';
+
+export type {
+  ConnectorProvider,
+  CreateIntegrationInput,
+  IntegrationRecord,
+  UpdateIntegrationStateInput,
+} from '@/lib/phase2/connectors/types';
