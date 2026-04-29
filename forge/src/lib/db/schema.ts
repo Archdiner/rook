@@ -112,6 +112,33 @@ export const phase2Integrations = pgTable(
   })
 );
 
+export const phase2PageSnapshots = pgTable(
+  'phase2_page_snapshots',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    /** Canonical path key (no query, no trailing slash) — `/`, `/pricing`, etc. */
+    pathRef: text('path_ref').notNull(),
+    /** Fully-qualified URL we fetched (final URL after redirects). */
+    url: text('url').notNull(),
+    /** Parsed snapshot payload (PageSnapshotData). */
+    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+    /** sha256 hex of the normalized HTML — drift detector across re-fetches. */
+    contentHash: text('content_hash').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index('phase2_page_snapshots_org_idx').on(table.organizationId),
+    siteIdx: index('phase2_page_snapshots_site_idx').on(table.siteId),
+    sitePathIdx: uniqueIndex('phase2_page_snapshots_site_path_idx').on(
+      table.siteId,
+      table.pathRef
+    ),
+  })
+);
+
 export const phase1ReadinessSnapshots = pgTable(
   'phase1_readiness_snapshots',
   {

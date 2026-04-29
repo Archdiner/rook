@@ -4,6 +4,18 @@ import type {
   Phase2SiteConfig,
   TimeWindow,
 } from '@/lib/phase2/types';
+import type {
+  ConnectorProvider,
+  CreateIntegrationInput,
+  IntegrationRecord,
+  UpdateIntegrationStateInput,
+} from '@/lib/phase2/connectors/types';
+import type {
+  GetPageSnapshotInput,
+  ListPageSnapshotsInput,
+  PageSnapshot,
+  UpsertPageSnapshotInput,
+} from '@/lib/phase2/snapshots/types';
 
 export type Phase1RepositoryDriver = 'blob' | 'postgres';
 
@@ -112,6 +124,18 @@ export interface GetPhase2SiteConfigInput {
   siteId: string;
 }
 
+export interface ListIntegrationsInput {
+  organizationId: string;
+  siteId?: string;
+  provider?: ConnectorProvider;
+  limit?: number;
+}
+
+export interface GetIntegrationInput {
+  organizationId: string;
+  id: string;
+}
+
 export interface Phase1Repository {
   driver: Phase1RepositoryDriver;
   createSite(input: CreatePhase1SiteInput): Promise<Phase1SiteRecord>;
@@ -136,4 +160,26 @@ export interface Phase1Repository {
   upsertPhase2SiteConfig(input: UpsertPhase2SiteConfigInput): Promise<Phase2SiteConfig>;
   /** Phase 2: fetch the latest per-site config for `(organizationId, siteId)`. */
   getPhase2SiteConfig(input: GetPhase2SiteConfigInput): Promise<Phase2SiteConfig | null>;
+  /**
+   * Phase 2: create (or PUT-style upsert) a connector integration for `(siteId, provider)`.
+   * On conflict, only `config`, `secretRef`, and `updatedAt` are refreshed; sync state
+   * (`status`, `cursor`, `lastSyncedAt`, `lastErrorCode`) is preserved.
+   */
+  createIntegration(input: CreateIntegrationInput): Promise<IntegrationRecord>;
+  /** Phase 2: patch sync state on an existing integration; throws when not found. */
+  updateIntegrationState(input: UpdateIntegrationStateInput): Promise<IntegrationRecord>;
+  /** Phase 2: fetch one integration scoped by `(organizationId, id)`. */
+  getIntegration(input: GetIntegrationInput): Promise<IntegrationRecord | null>;
+  /** Phase 2: list integrations for an org, ordered by `createdAt` desc. */
+  listIntegrations(input: ListIntegrationsInput): Promise<IntegrationRecord[]>;
+  /**
+   * Phase 2: insert or update a page snapshot keyed on `(siteId, pathRef)`.
+   * On conflict, the row is replaced (latest snapshot wins) — drift is
+   * tracked via `data.contentHash`, not separate rows.
+   */
+  upsertPageSnapshot(input: UpsertPageSnapshotInput): Promise<PageSnapshot>;
+  /** Phase 2: fetch one snapshot for `(organizationId, siteId, pathRef)`. */
+  getPageSnapshot(input: GetPageSnapshotInput): Promise<PageSnapshot | null>;
+  /** Phase 2: list snapshots for a site, ordered by `fetchedAt` desc. */
+  listPageSnapshots(input: ListPageSnapshotsInput): Promise<PageSnapshot[]>;
 }

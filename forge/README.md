@@ -19,6 +19,7 @@ When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensur
 - Data sufficiency engine with deterministic thresholds and readiness scoring (`src/lib/phase1/sufficiency`)
 - Insights engine that ranks evidence-backed findings from behavioral aggregates (`src/lib/phase1/insights`)
 - **Phase 2 spine:** versioned canonical events with `(siteId, source, sourceEventId)` dedupe, per-site config CRUD, rollup pipeline (`src/lib/phase2`), validation gate, and end-to-end `POST /api/phase2/insights/run`
+- **PostHog connector:** first-class provider integration (`src/lib/phase2/connectors/posthog`) with mapping, paginated sync, retry/backoff, validate route, and secret-ref auth (no plaintext tokens in storage)
 
 ## Local Development
 
@@ -41,8 +42,14 @@ Then open `http://localhost:3000`.
 | `PHASE1_ORG_IDENTITY_MODE` | Optional (`dev` default) | `dev` allows query/body fallback; `header_required` requires `x-org-id` header |
 
 Phase 2 reuses the same env matrix; no additional secrets are required for the
-spine (rollups + gate + insights run). Provider connectors will introduce
-provider-specific secrets when they ship.
+spine (rollups + gate + insights run).
+
+For provider connectors, **secrets live in env vars referenced by `secretRef`
+on the integration record** — never in DB rows. For PostHog, set:
+
+| Variable | Required | Used for |
+| --- | --- | --- |
+| `POSTHOG_API_KEY__<SITE_OR_INTEGRATION_TAG>` | When using the PostHog connector | Personal API key with read scope on the project; the env var name is stored as `secretRef` on the integration record. Forge resolves it server-side per request. |
 
 Without `BLOB_READ_WRITE_TOKEN`, Phase 1 storage falls back to local temporary files.
 
@@ -195,6 +202,73 @@ The response includes `findings`, `warnings` (gate output), `diagnostics`, and a
 `trustworthy` boolean. See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md)
 for the full contract and what each warning code means.
 
+### PostHog connector
+
+Forge ships a first-class **PostHog** connector. Set the env var first:
+
+```bash
+export POSTHOG_API_KEY__SITE_123="phx_..."
+```
+
+Then create the integration:
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/integrations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "siteId": "replace-with-site-id",
+    "provider": "posthog",
+    "config": { "host": "https://us.posthog.com", "projectId": "12345" },
+    "secretRef": "POSTHOG_API_KEY__SITE_123"
+  }'
+```
+
+Validate the connection (no writes):
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/integrations/$INTEGRATION_ID/validate"
+```
+
+Pull events into Forge (idempotent on PostHog `uuid`):
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/integrations/$INTEGRATION_ID/sync" \
+  -H "Content-Type: application/json" \
+  -d '{ "maxEvents": 1000 }'
+```
+
+Then call `/api/phase2/insights/run` and findings come from real PostHog data.
+Mapping table and credential checklist live in [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §9.
+
+### Page DNA snapshots (design audit grounding)
+
+To make findings *tasteful* — naming the actual H1, the actual button,
+the actual class signals — Forge takes static snapshots of customer
+pages. Each snapshot stores meta tags, heading hierarchy, CTA inventory
+(with visual-weight signals), and forms.
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/sites/replace-with-site-id/snapshots" \
+  -H "Content-Type: application/json" \
+  -H "x-org-id: org_abc123" \
+  --data '{
+    "baseUrl": "https://example.com",
+    "paths":   ["/", "/pricing", "/signup"]
+  }'
+```
+
+Returns a per-path report; failures are non-fatal and tagged with a
+structured `errorCode` (`TIMEOUT`, `BLOCKED_BY_ROBOTS`, `NON_HTML`, ...).
+List snapshots or fetch a single page:
+
+```bash
+curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots" -H "x-org-id: org_abc123"
+curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots?pathRef=/pricing" -H "x-org-id: org_abc123"
+```
+
+See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §10
+for the full snapshot contract and visual-weight scoring rubric.
+
 ## Architecture (High Level)
 
 - Next.js App Router app with UI routes and API routes in a single service
@@ -213,9 +287,11 @@ for the full contract and what each warning code means.
 - `src/app/api/discovery` - Discovery survey API
 - `src/app/api/intake` - General intake API
 - `src/app/api/phase1` - Phase 1 endpoints (health, sites, events, readiness, recommendations, sufficiency, insights)
-- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run)
+- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run, integrations, page snapshots)
 - `src/lib/phase1` - Core contracts, storage adapter, sufficiency engine, insights engine
 - `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
+- `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution)
+- `src/lib/phase2/snapshots` - Page DNA static analysis (fetcher, parser, visual-weight scoring, fold guess)
 - `drizzle` - Generated Postgres migrations (`drizzle-kit generate`)
 - `public` - Static assets
 

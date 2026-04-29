@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { and, desc, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db/client';
@@ -5,8 +7,24 @@ import {
   phase1Events,
   phase1ReadinessSnapshots,
   phase1Sites,
+  phase2Integrations,
+  phase2PageSnapshots,
   phase2SiteConfigs,
 } from '@/lib/db/schema';
+import type {
+  ConnectorProvider,
+  CreateIntegrationInput,
+  IntegrationRecord,
+  IntegrationStatus,
+  UpdateIntegrationStateInput,
+} from '@/lib/phase2/connectors/types';
+import type {
+  GetPageSnapshotInput,
+  ListPageSnapshotsInput,
+  PageSnapshot,
+  PageSnapshotData,
+  UpsertPageSnapshotInput,
+} from '@/lib/phase2/snapshots/types';
 import type {
   CanonicalEvent,
   CanonicalEventSchemaVersion,
@@ -19,9 +37,11 @@ import type {
   CreatePhase1EventInput,
   CreatePhase1ReadinessSnapshotInput,
   CreatePhase1SiteInput,
+  GetIntegrationInput,
   GetLatestPhase1ReadinessSnapshotInput,
   GetPhase2SiteConfigInput,
   ListEventsInWindowInput,
+  ListIntegrationsInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
   Phase1EventRecord,
@@ -33,8 +53,15 @@ import type {
 
 type Phase1EventRow = typeof phase1Events.$inferSelect;
 type Phase2SiteConfigRow = typeof phase2SiteConfigs.$inferSelect;
+type Phase2IntegrationRow = typeof phase2Integrations.$inferSelect;
+type Phase2PageSnapshotRow = typeof phase2PageSnapshots.$inferSelect;
+
+const DEFAULT_INTEGRATIONS_LIMIT = 100;
 
 const LIST_WINDOW_LIMIT = 5000;
+
+const DEFAULT_PAGE_SNAPSHOTS_LIMIT = 100;
+const MAX_PAGE_SNAPSHOTS_LIMIT = 500;
 
 function mapEventRowToCanonicalEvent(row: Phase1EventRow): CanonicalEvent {
   // Legacy rows (pre Phase 2) lack occurredAt/source/schemaVersion; fall back without
@@ -82,6 +109,36 @@ function mapRowToPhase2SiteConfig(row: Phase2SiteConfigRow): Phase2SiteConfig {
     config.conversionEventTypes = row.conversionEventTypes;
   }
   return config;
+}
+
+function mapPageSnapshotRow(row: Phase2PageSnapshotRow): PageSnapshot {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    siteId: row.siteId,
+    pathRef: row.pathRef,
+    url: row.url,
+    data: row.data as unknown as PageSnapshotData,
+    fetchedAt: row.fetchedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function mapRowToIntegrationRecord(row: Phase2IntegrationRow): IntegrationRecord {
+  return {
+    id: row.id,
+    organizationId: row.organizationId,
+    siteId: row.siteId,
+    provider: row.provider as ConnectorProvider,
+    status: row.status as IntegrationStatus,
+    config: (row.config ?? {}) as Record<string, unknown>,
+    secretRef: row.secretRef ?? null,
+    cursor: (row.cursor ?? null) as Record<string, unknown> | null,
+    lastSyncedAt: row.lastSyncedAt ? row.lastSyncedAt.toISOString() : null,
+    lastErrorCode: row.lastErrorCode ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
 }
 
 function toCanonicalInsertValues(input: CreateCanonicalEventInput) {
@@ -393,6 +450,174 @@ export function createPostgresPhase1Repository(): Phase1Repository {
       const row = rows[0];
       if (!row) return null;
       return mapRowToPhase2SiteConfig(row);
+    },
+    async createIntegration(input: CreateIntegrationInput): Promise<IntegrationRecord> {
+      const db = getDb();
+      const ts = new Date(input.createdAt);
+      const [row] = await db
+        .insert(phase2Integrations)
+        .values({
+          id: input.id,
+          organizationId: input.organizationId,
+          siteId: input.siteId,
+          provider: input.provider,
+          status: 'pending',
+          config: input.config,
+          secretRef: input.secretRef ?? null,
+          cursor: null,
+          lastSyncedAt: null,
+          lastErrorCode: null,
+          createdAt: ts,
+          updatedAt: ts,
+        })
+        .onConflictDoUpdate({
+          target: [phase2Integrations.siteId, phase2Integrations.provider],
+          set: {
+            config: input.config,
+            secretRef: input.secretRef ?? null,
+            updatedAt: ts,
+          },
+        })
+        .returning();
+
+      return mapRowToIntegrationRecord(row);
+    },
+    async updateIntegrationState(
+      input: UpdateIntegrationStateInput
+    ): Promise<IntegrationRecord> {
+      const db = getDb();
+      const set: Partial<typeof phase2Integrations.$inferInsert> = {
+        updatedAt: new Date(input.updatedAt),
+      };
+      if (input.status !== undefined) set.status = input.status;
+      if (input.cursor !== undefined) set.cursor = input.cursor;
+      if (input.lastSyncedAt !== undefined) {
+        set.lastSyncedAt = input.lastSyncedAt ? new Date(input.lastSyncedAt) : null;
+      }
+      if (input.lastErrorCode !== undefined) set.lastErrorCode = input.lastErrorCode;
+
+      const updated = await db
+        .update(phase2Integrations)
+        .set(set)
+        .where(
+          and(
+            eq(phase2Integrations.id, input.id),
+            eq(phase2Integrations.organizationId, input.organizationId)
+          )
+        )
+        .returning();
+
+      const row = updated[0];
+      if (!row) throw new Error('Integration not found');
+      return mapRowToIntegrationRecord(row);
+    },
+    async getIntegration(
+      input: GetIntegrationInput
+    ): Promise<IntegrationRecord | null> {
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(phase2Integrations)
+        .where(
+          and(
+            eq(phase2Integrations.id, input.id),
+            eq(phase2Integrations.organizationId, input.organizationId)
+          )
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+      return mapRowToIntegrationRecord(row);
+    },
+    async listIntegrations(
+      input: ListIntegrationsInput
+    ): Promise<IntegrationRecord[]> {
+      const db = getDb();
+      const conditions = [eq(phase2Integrations.organizationId, input.organizationId)];
+      if (input.siteId) conditions.push(eq(phase2Integrations.siteId, input.siteId));
+      if (input.provider) conditions.push(eq(phase2Integrations.provider, input.provider));
+
+      const rows = await db
+        .select()
+        .from(phase2Integrations)
+        .where(and(...conditions))
+        .orderBy(desc(phase2Integrations.createdAt))
+        .limit(input.limit ?? DEFAULT_INTEGRATIONS_LIMIT);
+
+      return rows.map(mapRowToIntegrationRecord);
+    },
+    async upsertPageSnapshot(input: UpsertPageSnapshotInput): Promise<PageSnapshot> {
+      const db = getDb();
+      const id = `phase2_page_snapshot_${randomUUID()}`;
+      const data = input.data as unknown as Record<string, unknown>;
+      const [row] = await db
+        .insert(phase2PageSnapshots)
+        .values({
+          id,
+          organizationId: input.organizationId,
+          siteId: input.siteId,
+          pathRef: input.pathRef,
+          url: input.url,
+          data,
+          contentHash: input.data.contentHash,
+          fetchedAt: input.fetchedAt,
+        })
+        .onConflictDoUpdate({
+          target: [phase2PageSnapshots.siteId, phase2PageSnapshots.pathRef],
+          set: {
+            url: input.url,
+            data,
+            contentHash: input.data.contentHash,
+            fetchedAt: input.fetchedAt,
+            // createdAt is preserved on conflict (omitted from set clause).
+          },
+        })
+        .returning();
+
+      return mapPageSnapshotRow(row);
+    },
+    async getPageSnapshot(
+      input: GetPageSnapshotInput
+    ): Promise<PageSnapshot | null> {
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(phase2PageSnapshots)
+        .where(
+          and(
+            eq(phase2PageSnapshots.organizationId, input.organizationId),
+            eq(phase2PageSnapshots.siteId, input.siteId),
+            eq(phase2PageSnapshots.pathRef, input.pathRef)
+          )
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+      return mapPageSnapshotRow(row);
+    },
+    async listPageSnapshots(
+      input: ListPageSnapshotsInput
+    ): Promise<PageSnapshot[]> {
+      const db = getDb();
+      const limit = Math.min(
+        Math.max(input.limit ?? DEFAULT_PAGE_SNAPSHOTS_LIMIT, 1),
+        MAX_PAGE_SNAPSHOTS_LIMIT
+      );
+      const rows = await db
+        .select()
+        .from(phase2PageSnapshots)
+        .where(
+          and(
+            eq(phase2PageSnapshots.organizationId, input.organizationId),
+            eq(phase2PageSnapshots.siteId, input.siteId)
+          )
+        )
+        .orderBy(desc(phase2PageSnapshots.fetchedAt))
+        .limit(limit);
+
+      return rows.map(mapPageSnapshotRow);
     },
   };
 }

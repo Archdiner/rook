@@ -1,4 +1,19 @@
+import { randomUUID } from 'node:crypto';
+
 import { appendJsonlRecord, readJsonlRecords } from '@/lib/phase1/storage';
+import type {
+  CreateIntegrationInput,
+  IntegrationRecord,
+  IntegrationStatus,
+  UpdateIntegrationStateInput,
+} from '@/lib/phase2/connectors/types';
+import type {
+  GetPageSnapshotInput,
+  ListPageSnapshotsInput,
+  PageSnapshot,
+  PageSnapshotData,
+  UpsertPageSnapshotInput,
+} from '@/lib/phase2/snapshots/types';
 import type {
   CanonicalEvent,
   CanonicalEventSchemaVersion,
@@ -11,9 +26,11 @@ import type {
   CreatePhase1EventInput,
   CreatePhase1ReadinessSnapshotInput,
   CreatePhase1SiteInput,
+  GetIntegrationInput,
   GetLatestPhase1ReadinessSnapshotInput,
   GetPhase2SiteConfigInput,
   ListEventsInWindowInput,
+  ListIntegrationsInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
   Phase1EventRecord,
@@ -26,8 +43,22 @@ import type {
 const DEFAULT_ORG_ID = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? 'org_default';
 const DEFAULT_SITES_LIMIT = 50;
 const DEFAULT_EVENTS_LIMIT = 100;
+const DEFAULT_INTEGRATIONS_LIMIT = 100;
 const WINDOW_EVENTS_LIMIT = 5000;
 const DEDUPE_SCAN_LIMIT = 5000;
+
+const DEFAULT_PAGE_SNAPSHOTS_LIMIT = 100;
+const MAX_PAGE_SNAPSHOTS_LIMIT = 500;
+/** Months scanned when listing/reading page snapshots from blob storage. */
+const PAGE_SNAPSHOTS_MONTHS_TO_SCAN = 12;
+/** Per-pathRef recent-history cap when reading a single snapshot. */
+const PAGE_SNAPSHOTS_GET_LIMIT = 200;
+/**
+ * Multiplier applied to the caller's `limit` when listing snapshots. Records
+ * are append-only, so we may need to scan past older entries to find the
+ * latest write per pathRef.
+ */
+const PAGE_SNAPSHOTS_LIST_OVERSCAN = 5;
 
 type StoredCanonicalEvent = CanonicalEvent & {
   organizationId?: string;
@@ -36,6 +67,43 @@ type StoredCanonicalEvent = CanonicalEvent & {
 type StoredPhase2SiteConfig = Phase2SiteConfig & {
   id: string;
   organizationId?: string;
+};
+
+/**
+ * Persisted shape for an integration record in the blob store.
+ *
+ * The blob layer uses `id` as the unique path component for `appendJsonlRecord`
+ * (`phase1/integrations/{month}/{id}.json`); `integrationId` carries the stable
+ * logical id surfaced to callers as `IntegrationRecord.id`. Each write
+ * synthesizes a fresh `id` so concurrent writes for the same logical
+ * integration never collide on the blob path.
+ *
+ * `(siteId, provider)` uniqueness is best-effort on this driver: two concurrent
+ * `createIntegration` calls for the same `(siteId, provider)` may both win and
+ * surface as two distinct logical ids in `listIntegrations`. Single-writer
+ * ingestion or the Postgres driver should be used when strict uniqueness is
+ * required.
+ */
+type StoredIntegrationRecord = Omit<IntegrationRecord, 'id'> & {
+  id: string;
+  integrationId: string;
+};
+
+/**
+ * Persisted shape for a page snapshot in the blob store. Append-only; the
+ * latest write per `(siteId, pathRef)` wins on read (blob layer sorts by
+ * `fetchedAt` desc within the partition).
+ */
+type StoredPageSnapshot = {
+  id: string;
+  organizationId: string;
+  siteId: string;
+  pathRef: string;
+  url: string;
+  data: PageSnapshotData;
+  contentHash: string;
+  fetchedAt: string;
+  createdAt: string;
 };
 
 function toCanonicalEvent(record: StoredCanonicalEvent): CanonicalEvent {
@@ -88,6 +156,45 @@ function isOrgMatch(recordOrgId: string | undefined, requestedOrgId: string): bo
   // Older blob/local records do not include organizationId; treat them as default org.
   const normalizedOrgId = recordOrgId ?? DEFAULT_ORG_ID;
   return normalizedOrgId === requestedOrgId;
+}
+
+function makeIntegrationBlobId(): string {
+  // Per-write unique id keeps `appendJsonlRecord` from clashing on the blob
+  // path (`allowOverwrite: false`). `readJsonlRecords` sorts entries by path
+  // desc, so the lexicographically larger writeStamp lands first on read.
+  const writeStamp = Date.now();
+  const randomSuffix = Math.random().toString(36).slice(2, 10);
+  return `${writeStamp}-${randomSuffix}`;
+}
+
+function toPageSnapshot(record: StoredPageSnapshot): PageSnapshot {
+  return {
+    id: record.id,
+    organizationId: record.organizationId,
+    siteId: record.siteId,
+    pathRef: record.pathRef,
+    url: record.url,
+    data: record.data,
+    fetchedAt: new Date(record.fetchedAt),
+    createdAt: new Date(record.createdAt),
+  };
+}
+
+function toIntegrationRecord(record: StoredIntegrationRecord): IntegrationRecord {
+  return {
+    id: record.integrationId,
+    organizationId: record.organizationId ?? DEFAULT_ORG_ID,
+    siteId: record.siteId,
+    provider: record.provider,
+    status: record.status,
+    config: record.config ?? {},
+    secretRef: record.secretRef ?? null,
+    cursor: record.cursor ?? null,
+    lastSyncedAt: record.lastSyncedAt ?? null,
+    lastErrorCode: record.lastErrorCode ?? null,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+  };
 }
 
 export function createBlobPhase1Repository(): Phase1Repository {
@@ -335,6 +442,200 @@ export function createBlobPhase1Repository(): Phase1Repository {
         config.conversionEventTypes = record.conversionEventTypes;
       }
       return config;
+    },
+    /**
+     * Append-only PUT-style upsert. When a prior record exists for
+     * `(organizationId, siteId, provider)` we reuse its logical `integrationId`
+     * and `createdAt` and refresh `config` / `secretRef` / `updatedAt`; sync
+     * state (`status`, `cursor`, `lastSyncedAt`, `lastErrorCode`) is preserved.
+     * Brand-new records start at `status: 'pending'`.
+     *
+     * `(siteId, provider)` uniqueness is best-effort under concurrent writes —
+     * see {@link StoredIntegrationRecord}. The Postgres driver is the strict
+     * source of truth.
+     */
+    async createIntegration(input: CreateIntegrationInput): Promise<IntegrationRecord> {
+      const matches = await readJsonlRecords<StoredIntegrationRecord>('integrations', {
+        monthsToScan: 6,
+        limit: 1,
+        filter: (record) =>
+          isOrgMatch(record.organizationId, input.organizationId) &&
+          record.siteId === input.siteId &&
+          record.provider === input.provider,
+      });
+      const existing = matches[0];
+
+      const integrationId = existing ? existing.integrationId : input.id;
+      const createdAt = existing ? existing.createdAt : input.createdAt;
+      const status: IntegrationStatus = existing ? existing.status : 'pending';
+
+      const stored: StoredIntegrationRecord = {
+        id: makeIntegrationBlobId(),
+        integrationId,
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        provider: input.provider,
+        status,
+        config: input.config,
+        secretRef: input.secretRef ?? null,
+        cursor: existing ? existing.cursor : null,
+        lastSyncedAt: existing ? existing.lastSyncedAt : null,
+        lastErrorCode: existing ? existing.lastErrorCode : null,
+        createdAt,
+        updatedAt: input.createdAt,
+      };
+
+      await appendJsonlRecord('integrations', stored);
+      return toIntegrationRecord(stored);
+    },
+    async updateIntegrationState(
+      input: UpdateIntegrationStateInput
+    ): Promise<IntegrationRecord> {
+      const matches = await readJsonlRecords<StoredIntegrationRecord>('integrations', {
+        monthsToScan: 6,
+        limit: 1,
+        filter: (record) =>
+          record.integrationId === input.id &&
+          isOrgMatch(record.organizationId, input.organizationId),
+      });
+      const latest = matches[0];
+      if (!latest) throw new Error('Integration not found');
+
+      const merged: StoredIntegrationRecord = {
+        ...latest,
+        id: makeIntegrationBlobId(),
+        integrationId: latest.integrationId,
+        organizationId: input.organizationId,
+        updatedAt: input.updatedAt,
+      };
+      if (input.status !== undefined) merged.status = input.status;
+      if (input.cursor !== undefined) merged.cursor = input.cursor;
+      if (input.lastSyncedAt !== undefined) merged.lastSyncedAt = input.lastSyncedAt;
+      if (input.lastErrorCode !== undefined) merged.lastErrorCode = input.lastErrorCode;
+
+      await appendJsonlRecord('integrations', merged);
+      return toIntegrationRecord(merged);
+    },
+    async getIntegration(
+      input: GetIntegrationInput
+    ): Promise<IntegrationRecord | null> {
+      const matches = await readJsonlRecords<StoredIntegrationRecord>('integrations', {
+        monthsToScan: 6,
+        limit: 1,
+        filter: (record) =>
+          record.integrationId === input.id &&
+          isOrgMatch(record.organizationId, input.organizationId),
+      });
+      const latest = matches[0];
+      if (!latest) return null;
+      return toIntegrationRecord(latest);
+    },
+    async listIntegrations(
+      input: ListIntegrationsInput
+    ): Promise<IntegrationRecord[]> {
+      const records = await readJsonlRecords<StoredIntegrationRecord>('integrations', {
+        monthsToScan: 6,
+        limit: DEDUPE_SCAN_LIMIT,
+        filter: (record) => {
+          if (!isOrgMatch(record.organizationId, input.organizationId)) return false;
+          if (input.siteId && record.siteId !== input.siteId) return false;
+          if (input.provider && record.provider !== input.provider) return false;
+          return true;
+        },
+      });
+
+      // Records arrive newest-first (sorted by blob path desc, which encodes
+      // writeStamp). Take the first hit per logical integrationId.
+      const seen = new Set<string>();
+      const latest: StoredIntegrationRecord[] = [];
+      for (const record of records) {
+        if (seen.has(record.integrationId)) continue;
+        seen.add(record.integrationId);
+        latest.push(record);
+      }
+
+      latest.sort(
+        (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)
+      );
+
+      const limit = Math.max(input.limit ?? DEFAULT_INTEGRATIONS_LIMIT, 1);
+      return latest.slice(0, limit).map(toIntegrationRecord);
+    },
+    /**
+     * Append a new page snapshot record. The blob driver is append-only, so
+     * "upsert" semantics here mean: every fetch lands as its own blob, and
+     * `getPageSnapshot` / `listPageSnapshots` reduce to the latest write per
+     * `(siteId, pathRef)` (sorted by `fetchedAt` desc on read).
+     */
+    async upsertPageSnapshot(input: UpsertPageSnapshotInput): Promise<PageSnapshot> {
+      const id = `phase2_page_snapshot_${randomUUID()}`;
+      const now = new Date();
+      const stored: StoredPageSnapshot = {
+        id,
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        pathRef: input.pathRef,
+        url: input.url,
+        data: input.data,
+        contentHash: input.data.contentHash,
+        fetchedAt: input.fetchedAt.toISOString(),
+        createdAt: now.toISOString(),
+      };
+
+      await appendJsonlRecord('pageSnapshots', stored);
+
+      return {
+        id,
+        organizationId: input.organizationId,
+        siteId: input.siteId,
+        pathRef: input.pathRef,
+        url: input.url,
+        data: input.data,
+        fetchedAt: input.fetchedAt,
+        createdAt: now,
+      };
+    },
+    async getPageSnapshot(
+      input: GetPageSnapshotInput
+    ): Promise<PageSnapshot | null> {
+      const records = await readJsonlRecords<StoredPageSnapshot>('pageSnapshots', {
+        siteId: input.siteId,
+        monthsToScan: PAGE_SNAPSHOTS_MONTHS_TO_SCAN,
+        limit: PAGE_SNAPSHOTS_GET_LIMIT,
+        filter: (record) =>
+          record.organizationId === input.organizationId &&
+          record.pathRef === input.pathRef,
+      });
+
+      const latest = records[0];
+      if (!latest) return null;
+      return toPageSnapshot(latest);
+    },
+    async listPageSnapshots(
+      input: ListPageSnapshotsInput
+    ): Promise<PageSnapshot[]> {
+      const cap = Math.min(
+        Math.max(input.limit ?? DEFAULT_PAGE_SNAPSHOTS_LIMIT, 1),
+        MAX_PAGE_SNAPSHOTS_LIMIT
+      );
+
+      const records = await readJsonlRecords<StoredPageSnapshot>('pageSnapshots', {
+        siteId: input.siteId,
+        monthsToScan: PAGE_SNAPSHOTS_MONTHS_TO_SCAN,
+        limit: cap * PAGE_SNAPSHOTS_LIST_OVERSCAN,
+        filter: (record) => record.organizationId === input.organizationId,
+      });
+
+      // Records arrive sorted by `fetchedAt` desc; take the first hit per pathRef.
+      const seen = new Set<string>();
+      const out: PageSnapshot[] = [];
+      for (const record of records) {
+        if (seen.has(record.pathRef)) continue;
+        seen.add(record.pathRef);
+        out.push(toPageSnapshot(record));
+        if (out.length >= cap) break;
+      }
+      return out;
     },
   };
 }

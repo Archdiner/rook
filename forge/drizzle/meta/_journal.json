@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1777445088624,
+      "when": 1777446622472,
       "tag": "0000_phase2_canonical_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777447779094,
+      "tag": "0001_phase2_page_snapshots",
       "breakpoints": true
     }
   ]
