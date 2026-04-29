@@ -17,7 +17,8 @@ const newsreader = Newsreader({
 
 export const metadata: Metadata = {
   title: "Forge — Clarity over intuition",
-  description: "Forge transforms how real users move through your product into the precise, evidenced changes that move your conversion. Raw signal becomes structured intelligence.",
+  description:
+    "Forge turns real user behavior into ranked product and UX changes aimed at actual pain—stalls, confusion, drop-offs—not generic redesigns. Behavior-first decisions your team can explain.",
 };
 
 export default function RootLayout({
