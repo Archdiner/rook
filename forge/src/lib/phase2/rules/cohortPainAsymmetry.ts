@@ -187,7 +187,7 @@ function buildFinding(inputs: Inputs): AuditFinding {
   const summary =
     `On dimension ${quote(dim.label)}, the cohort ${quote(top.label)} has a composite pain index of ${round(top.composite, 3)} ` +
     `(rage ${round(top.rageRate, 3)} / sess, errors ${round(top.errorRate, 3)}, ${stagnationPct} shallow-session ` +
-    `stagnation) — ${round(multiple, 1)}× the site median (${round(medianComposite, 3)}). ` +
+    `stagnation) — ${round(multiple, 1)}× the cross-cohort median (${round(medianComposite, 3)}). ` +
     `${formatCount(top.sessions.length)} sessions in this cohort.`;
 
   const para1 =
@@ -199,7 +199,8 @@ function buildFinding(inputs: Inputs): AuditFinding {
     `This cohort-level pattern responds to differentiated proof points and onboarding — a single shallow page tweak ` +
     `won't erase the gap. Benchmark against cohort ${quote(referenceRow.label)} (${round(referenceRow.composite, 3)} composite pain).`;
 
-  const topPaths = topByCount(top.rageEvents, (e) => e.path).slice(0, 3);
+  const topRagePaths = topByCount(top.rageEvents, (e) => e.path).slice(0, 3);
+  const topErrorPaths = topByCount(top.errorEvents, (e) => e.path).slice(0, 3);
   const cohortEventsFlat = top.sessions.flatMap((s) => s.events);
   const deviceMode = modeStringProp(cohortEventsFlat, "device_type");
 
@@ -216,7 +217,7 @@ function buildFinding(inputs: Inputs): AuditFinding {
       value: `${round(top.rageRate, 4)} rage / ${round(top.errorRate, 4)} err / ${round(top.stagRate, 4)} shallow`,
     },
     {
-      label: "Site median (composite)",
+      label: "Cross-cohort median (composite)",
       value: round(medianComposite, 3),
       context: `${round(multiple, 1)}× multiple`,
     },
@@ -225,10 +226,16 @@ function buildFinding(inputs: Inputs): AuditFinding {
       value: `${quote(referenceRow.label)} (${round(referenceRow.composite, 3)} composite)`,
     },
   ];
-  if (topPaths.length > 0) {
+  if (topRagePaths.length > 0) {
     evidence.push({
       label: "Top rage paths in cohort",
-      value: topPaths.map((p) => `${p.key} (${p.count})`).join(", "),
+      value: topRagePaths.map((p) => `${p.key} (${p.count})`).join(", "),
+    });
+  }
+  if (topErrorPaths.length > 0) {
+    evidence.push({
+      label: "Top error paths in cohort",
+      value: topErrorPaths.map((p) => `${p.key} (${p.count})`).join(", "),
     });
   }
   if (deviceMode !== null) evidence.push({ label: "Top device type in cohort", value: deviceMode });

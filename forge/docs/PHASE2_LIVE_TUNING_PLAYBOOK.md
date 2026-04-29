@@ -13,16 +13,17 @@ This runbook is for **operators** validating audit rules against real PostHog (o
 
 ```bash
 SITE_ID=…
+# macOS: use `date -u -v-7d` for “7 days ago”. On GNU date: start="$(date -u -d '7 days ago' -Iseconds)".
 curl -s -X POST "$BASE/api/phase2/insights/run" \
   -H "Content-Type: application/json" \
   -H "x-org-id: org_…" \
-  -d "{\"siteId\":\"$SITE_ID\",\"window\":{\"start\":\"$(date -u -v-7d -Iseconds)\",\"end\":\"$(date -u -Iseconds)\"}}"
+  -d "{\"siteId\":\"$SITE_ID\",\"window\":{\"start\":\"$(date -u -v-7d -Iseconds 2>/dev/null || date -u -d '7 days ago' -Iseconds)\",\"end\":\"$(date -u -Iseconds)\"}}"
 ```
 
 Check:
 
 - `warnings[]` from the validation gate — investigate `block` before trusting findings.
-- `auditReport.findings[]` — severities and evidence look aligned with what you know about the product.
+- `auditReport.findings[]` — severities and evidence look aligned with what you know about the product. (Older APIs may expose `designReport[]` instead — same shape.)
 - `auditReport.diagnostics[]` — rules that emitted `0` with `skippedReason` deserve a follow-up data check.
 
 ## 3. Calibration loop

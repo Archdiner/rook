@@ -28,15 +28,19 @@ function pickSessionId(msg: Record<string, unknown>): string {
 
 function pathFromMessage(msg: Record<string, unknown>): string {
   const props = asRecord(msg.properties);
-  if (!props) return '/';
-  const direct = props.path ?? props.pathname;
-  if (typeof direct === 'string' && direct.length > 0) {
-    return direct.startsWith('/') ? direct.slice(0, 500) : `/${direct.slice(0, 499)}`;
+  if (props) {
+    const direct = props.path ?? props.pathname;
+    if (typeof direct === 'string' && direct.length > 0) {
+      return direct.startsWith('/') ? direct.slice(0, 500) : `/${direct.slice(0, 499)}`;
+    }
   }
-  const page = asRecord(asRecord(msg.context)?.page as unknown);
-  if (typeof page?.url === 'string' && page.url.length > 0) {
+  const pageMeta = asRecord(asRecord(msg.context)?.page as unknown);
+  if (typeof pageMeta?.path === 'string' && pageMeta.path.length > 0) {
+    return pageMeta.path.startsWith('/') ? pageMeta.path.slice(0, 500) : `/${pageMeta.path.slice(0, 499)}`;
+  }
+  if (typeof pageMeta?.url === 'string' && pageMeta.url.length > 0) {
     try {
-      const u = new URL(page.url);
+      const u = new URL(pageMeta.url);
       return u.pathname.startsWith('/') ? u.pathname.slice(0, 500) : '/';
     } catch {
       return '/';
@@ -93,11 +97,16 @@ export function mapSegmentMessageToCanonical(raw: unknown, args: MapSegmentArgs)
   const mt = typeof msg.type === 'string' ? msg.type.toLowerCase() : '';
   if (mt === 'identify' || mt === 'group' || mt === 'alias') return null;
 
+  /** Only ingest message types Forge maps today; silently skip the rest so unknown SDK shapes don't pollute canonical events. */
+  if (mt !== 'page' && mt !== 'track' && mt !== 'screen') {
+    return null;
+  }
+
   const sessionId = pickSessionId(msg);
   const occurredAt = isoOccurredAt(msg);
 
   let type = 'page_view';
-  let path = pathFromMessage(msg);
+  const path = pathFromMessage(msg);
 
   if (mt === 'track') {
     const ev = typeof msg.event === 'string' ? msg.event : '';
@@ -105,11 +114,6 @@ export function mapSegmentMessageToCanonical(raw: unknown, args: MapSegmentArgs)
   } else if (mt === 'screen') {
     const name = typeof msg.name === 'string' ? msg.name : '';
     type = name.length > 0 ? `screen_${slugify(name).slice(0, 96)}` : 'screen';
-  }
-
-  /* page + track keep path heuristic; bare page without path resolves to '/' */
-  if (mt !== 'page' && path === '/' && mt === 'track') {
-    path = '/';
   }
 
   const props = flattenProps(asRecord(msg.properties) ?? {});

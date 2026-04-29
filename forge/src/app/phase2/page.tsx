@@ -135,6 +135,12 @@ export default function Phase2InsightsPage(): React.ReactElement {
           diagnostics?: unknown[];
           groundedInSnapshots?: unknown;
         };
+        /** Older responses before rename (#10) — same shape */
+        designReport?: {
+          findings?: unknown[];
+          diagnostics?: unknown[];
+          groundedInSnapshots?: unknown;
+        };
       };
 
       let okPayload: InsightsEnvelope | null = null;
@@ -156,24 +162,36 @@ export default function Phase2InsightsPage(): React.ReactElement {
         okPayload = unfolded as InsightsEnvelope;
       }
 
+      function pickInsightsErrorEnvelope(source: Record<string, unknown>): string {
+        const err = source.error;
+        if (err && typeof err === "object" && err !== null) {
+          const m = (err as { message?: unknown }).message;
+          if (typeof m === "string") return m;
+          const nested = err as Record<string, unknown>;
+          const code = nested.code;
+          if (typeof code === "string") return code;
+        }
+        const topMsg = source.message;
+        if (typeof topMsg === "string") return topMsg;
+        return "Insights request failed.";
+      }
+
       if (!res.ok || !okPayload) {
-        const errEnvelope =
-          typeof json.success === "boolean" && json.success === false
-            ? json.error ?? json.message
-            : json.error ?? json;
-        const msg =
-          typeof errEnvelope === "object" &&
-          errEnvelope &&
-          typeof (errEnvelope as { message?: unknown }).message === "string"
-            ? String((errEnvelope as { message: string }).message)
-            : typeof errEnvelope === "string"
-              ? errEnvelope
-              : "Insights request failed.";
-        throw new Error(msg);
+        throw new Error(pickInsightsErrorEnvelope(json));
+      }
+
+      function pickAuditBlock(env: InsightsEnvelope): {
+        findings?: unknown[];
+        diagnostics?: unknown[];
+        groundedInSnapshots?: unknown;
+      } {
+        if (env.auditReport && typeof env.auditReport === "object") return env.auditReport;
+        if (env.designReport && typeof env.designReport === "object") return env.designReport;
+        return {};
       }
 
       const f1 = Array.isArray(okPayload.findings) ? okPayload.findings.length : 0;
-      const ar = okPayload.auditReport ?? {};
+      const ar = pickAuditBlock(okPayload);
       const rawFindings = Array.isArray(ar?.findings) ? ar!.findings! : [];
 
       const norm: AuditFindingUi[] = rawFindings
@@ -250,8 +268,9 @@ export default function Phase2InsightsPage(): React.ReactElement {
             Audit report (design + pain)
           </h1>
           <p style={{ margin: 0, color: MUTED, fontSize: 15, lineHeight: 1.6 }}>
-            Runs the same deterministic rules as `/api/phase2/insights/run` — `auditReport` lists designer- and researcher-voiced
-            findings; Phase 1 statistical findings remain in the API payload (count below).
+            Runs the same deterministic rules as `/api/phase2/insights/run`. The audit payload field is
+            `auditReport` (formerly `designReport` on older stacks); Phase 1 statistical findings remain in the API
+            payload (count below).
           </p>
           <nav style={{ marginTop: "14px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
             <Link href="/" style={{ color: INK }}>
