@@ -570,9 +570,9 @@ function getDocsMobiusPoints(count: number) {
     let pz = z + noiseZ;
 
     // Rot X
-    let tx = px;
-    let ty = py * Math.cos(tiltX) - pz * Math.sin(tiltX);
-    let tz = py * Math.sin(tiltX) + pz * Math.cos(tiltX);
+    const tx = px;
+    const ty = py * Math.cos(tiltX) - pz * Math.sin(tiltX);
+    const tz = py * Math.sin(tiltX) + pz * Math.cos(tiltX);
 
     // Rot Y
     px = tx * Math.cos(tiltY) + tz * Math.sin(tiltY);

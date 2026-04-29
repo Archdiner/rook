@@ -105,7 +105,7 @@ export interface ListEventsInWindowInput {
   limit?: number;
 }
 
-export interface UpsertPhase2SiteConfigInput extends Phase2SiteConfig {}
+export type UpsertPhase2SiteConfigInput = Phase2SiteConfig;
 
 export interface GetPhase2SiteConfigInput {
   organizationId: string;
