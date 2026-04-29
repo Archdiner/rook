@@ -54,7 +54,7 @@ export async function runSnapshot(
 ): Promise<RunSnapshotResult> {
   try {
     const fetchResult = await fetchHtml(url, options);
-    const data = parseSnapshot({
+    const data = await parseSnapshot({
       html: fetchResult.html,
       finalUrl: fetchResult.finalUrl,
       rawByteSize: fetchResult.byteSize,

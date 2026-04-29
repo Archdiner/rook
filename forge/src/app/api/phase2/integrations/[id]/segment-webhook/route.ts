@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextResponse } from 'next/server';
 
 import {
@@ -25,6 +25,13 @@ interface RouteCtx {
 }
 
 export const runtime = 'nodejs';
+
+function bearerMatchesSecret(secret: string, bearer: string): boolean {
+  if (secret.length === 0 || bearer.length === 0) return false;
+  const a = createHash('sha256').update(secret, 'utf8').digest();
+  const b = createHash('sha256').update(bearer, 'utf8').digest();
+  return timingSafeEqual(a, b);
+}
 
 function toCreates(
   inputs: CanonicalEventInput[],
@@ -85,7 +92,7 @@ export async function POST(request: Request, context: RouteCtx) {
 
       const hdr = parseString(request.headers.get('authorization')) ?? '';
       const bearer = hdr.toLowerCase().startsWith('bearer ') ? hdr.slice(7).trim() : '';
-      const okAuth = secretFromEnv.length > 0 && bearer === secretFromEnv;
+      const okAuth = bearerMatchesSecret(secretFromEnv, bearer);
       if (!okAuth) {
         return NextResponse.json(
           {

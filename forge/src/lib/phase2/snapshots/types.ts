@@ -206,7 +206,7 @@ export type SnapshotParser = (input: {
   html: string;
   finalUrl: string;
   rawByteSize: number;
-}) => PageSnapshotData;
+}) => Promise<PageSnapshotData>;
 
 /**
  * Resilient fetch wrapper. Subagent A2 implements this in `fetcher.ts`.

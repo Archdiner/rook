@@ -123,8 +123,10 @@ export async function runPostHogSync(
       ? { lastTimestamp: sinceOverride, lastUuid: null }
       : persistedCursor;
 
-  const maxEvents = Math.max(0, Math.floor(ctx.maxEvents));
-  const cap = maxEventsPerSync > 0 ? Math.min(maxEvents, maxEventsPerSync) : maxEvents;
+  const cap = Math.min(
+    Math.max(0, Math.floor(ctx.maxEvents)),
+    maxEventsPerSync > 0 ? maxEventsPerSync : Infinity,
+  );
 
   const accumulated: CanonicalEventInput[] = [];
   let cursor: PostHogCursor = persistedCursor;

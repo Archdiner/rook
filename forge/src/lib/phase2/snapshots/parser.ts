@@ -6,7 +6,7 @@
  * reason about. No network IO, no JS execution.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, webcrypto } from 'node:crypto';
 import { parse, type HTMLElement } from 'node-html-parser';
 
 import { guessFold } from './foldGuess';
@@ -349,7 +349,7 @@ function normalizeHtmlForHash(root: HTMLElement): string {
   return root.toString().replace(/\s+/g, ' ').trim();
 }
 
-export const parseSnapshot: SnapshotParser = (input) => {
+export const parseSnapshot: SnapshotParser = async (input) => {
   try {
     const root = parse(input.html, PARSE_OPTIONS);
     const body = root.querySelector('body');
@@ -363,9 +363,13 @@ export const parseSnapshot: SnapshotParser = (input) => {
     // carry per-request noise (nonces, csrf tokens, build hashes, analytics
     // payloads) that would otherwise drift contentHash on every fetch even
     // when the visible design is identical.
-    root.querySelectorAll('script, style, noscript').forEach((el) => el.remove());
+    for (const el of Array.from(root.querySelectorAll('script, style, noscript'))) {
+      el.remove();
+    }
     const normalized = normalizeHtmlForHash(root);
-    const contentHash = createHash('sha256').update(normalized).digest('hex');
+    const contentHashHex = Buffer.from(
+      await webcrypto.subtle.digest('SHA-256', Buffer.from(normalized, 'utf8')),
+    ).toString('hex');
 
     return {
       schemaVersion: 1,
@@ -373,7 +377,7 @@ export const parseSnapshot: SnapshotParser = (input) => {
       headings,
       ctas,
       forms,
-      contentHash,
+      contentHash: contentHashHex,
       rawByteSize: input.rawByteSize,
       parsedAt: new Date().toISOString(),
     };

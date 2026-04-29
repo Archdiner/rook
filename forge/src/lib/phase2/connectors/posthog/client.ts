@@ -134,30 +134,17 @@ async function performFetch(
   init: RequestInit,
   callerSignal: AbortSignal | undefined,
 ): Promise<Response> {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, PER_REQUEST_TIMEOUT_MS);
-
-  let onCallerAbort: (() => void) | null = null;
-  if (callerSignal !== undefined) {
-    if (callerSignal.aborted) {
-      controller.abort();
-    } else {
-      onCallerAbort = () => controller.abort();
-      callerSignal.addEventListener("abort", onCallerAbort, { once: true });
-    }
-  }
+  const timeoutSignal = AbortSignal.timeout(PER_REQUEST_TIMEOUT_MS);
+  const composite =
+    callerSignal !== undefined ? AbortSignal.any([timeoutSignal, callerSignal]) : timeoutSignal;
 
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
+    return await fetch(url, { ...init, signal: composite });
   } catch (err) {
     if (callerSignal?.aborted) {
       throw new PostHogConnectorError("POSTHOG_ABORT", "Request aborted by caller.", { cause: err });
     }
-    if (timedOut) {
+    if (timeoutSignal.aborted) {
       throw new PostHogConnectorError(
         "POSTHOG_TIMEOUT",
         "Request to PostHog timed out after 15s.",
@@ -169,11 +156,6 @@ async function performFetch(
       "Network error contacting PostHog.",
       { cause: err },
     );
-  } finally {
-    clearTimeout(timeoutId);
-    if (callerSignal !== undefined && onCallerAbort !== null) {
-      callerSignal.removeEventListener("abort", onCallerAbort);
-    }
   }
 }
 
