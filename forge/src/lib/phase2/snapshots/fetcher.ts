@@ -84,6 +84,16 @@ function isAbortLike(err: unknown): boolean {
 
 async function readBodyWithLimit(response: Response, maxBytes: number): Promise<{ html: string; byteSize: number }> {
   if (!response.body) {
+    // Fall back to text() when the streaming body isn't available. Cheaply
+    // reject obviously oversized responses via Content-Length first so we
+    // don't materialize a multi-megabyte payload into memory only to throw.
+    const contentLengthHeader = response.headers.get('content-length');
+    if (contentLengthHeader !== null) {
+      const contentLength = Number.parseInt(contentLengthHeader, 10);
+      if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+        throw new SnapshotError('TOO_LARGE', `response exceeds ${maxBytes} bytes`);
+      }
+    }
     const text = await response.text();
     const byteSize = new TextEncoder().encode(text).byteLength;
     if (byteSize > maxBytes) {

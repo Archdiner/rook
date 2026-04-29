@@ -150,10 +150,9 @@ export function mapPostHogEvents(
   for (let index = 0; index < dtos.length; index++) {
     const result = mapPostHogEvent(dtos[index], options);
     if (result.event === null) {
-      if (result.skippedReason === undefined) {
-        continue;
+      if (result.skippedReason !== undefined) {
+        skipped.push({ index, reason: result.skippedReason });
       }
-      skipped.push({ index, reason: result.skippedReason });
       continue;
     }
     events.push(result.event);

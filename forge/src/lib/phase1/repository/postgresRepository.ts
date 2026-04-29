@@ -360,7 +360,9 @@ export function createPostgresPhase1Repository(): Phase1Repository {
       const insertedRows = await db
         .insert(phase1Events)
         .values(inputs.map(toCanonicalInsertValues))
-        .onConflictDoNothing()
+        .onConflictDoNothing({
+          target: [phase1Events.siteId, phase1Events.source, phase1Events.sourceEventId],
+        })
         .returning({ id: phase1Events.id });
       const inserted = insertedRows.length;
       return { inserted, deduped: inputs.length - inserted };

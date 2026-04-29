@@ -327,22 +327,60 @@ export function createBlobPhase1Repository(): Phase1Repository {
     ): Promise<{ inserted: number; deduped: number }> {
       let inserted = 0;
       let deduped = 0;
+
+      // Pre-load existing dedupe keys for each `(organizationId, siteId)`
+      // partition touched by this batch in a single pass so each input is
+      // an O(1) Set lookup instead of an O(n) linear scan over the events
+      // partition. Also catches intra-batch duplicates against earlier
+      // inputs in the same call.
+      const dedupeKeys = new Set<string>();
+      const keyOf = (
+        organizationId: string,
+        siteId: string,
+        source: CanonicalEventSource,
+        sourceEventId: string
+      ): string => `${organizationId}|${siteId}|${source}|${sourceEventId}`;
+
+      const partitions = new Map<string, { organizationId: string; siteId: string }>();
+      for (const input of inputs) {
+        if (!input.sourceEventId) continue;
+        const partitionKey = `${input.organizationId}|${input.siteId}`;
+        if (!partitions.has(partitionKey)) {
+          partitions.set(partitionKey, {
+            organizationId: input.organizationId,
+            siteId: input.siteId,
+          });
+        }
+      }
+      for (const { organizationId, siteId } of partitions.values()) {
+        const records = await readJsonlRecords<StoredCanonicalEvent>('events', {
+          siteId,
+          monthsToScan: 6,
+          limit: DEDUPE_SCAN_LIMIT,
+          filter: (record) =>
+            record.siteId === siteId &&
+            isOrgMatch(record.organizationId, organizationId) &&
+            Boolean(record.sourceEventId),
+        });
+        for (const record of records) {
+          if (!record.sourceEventId) continue;
+          dedupeKeys.add(keyOf(organizationId, record.siteId, record.source, record.sourceEventId));
+        }
+      }
+
       for (const input of inputs) {
         if (input.sourceEventId) {
-          const matches = await readJsonlRecords<StoredCanonicalEvent>('events', {
-            siteId: input.siteId,
-            monthsToScan: 6,
-            limit: 1,
-            filter: (record) =>
-              record.siteId === input.siteId &&
-              isOrgMatch(record.organizationId, input.organizationId) &&
-              record.source === input.source &&
-              record.sourceEventId === input.sourceEventId,
-          });
-          if (matches.length > 0) {
+          const key = keyOf(
+            input.organizationId,
+            input.siteId,
+            input.source,
+            input.sourceEventId
+          );
+          if (dedupeKeys.has(key)) {
             deduped += 1;
             continue;
           }
+          dedupeKeys.add(key);
         }
 
         await appendJsonlRecord('events', buildEventRecord(input));
