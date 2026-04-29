@@ -1,4 +1,12 @@
-import { index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 
 export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
@@ -32,10 +40,75 @@ export const phase1Events = pgTable(
     path: text('path').notNull(),
     metrics: jsonb('metrics').$type<Record<string, number> | null>(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    // Phase 2 canonical-event extensions (nullable for backward compatibility).
+    occurredAt: timestamp('occurred_at', { withTimezone: true }),
+    source: text('source'),
+    sourceEventId: text('source_event_id'),
+    anonymousId: text('anonymous_id'),
+    properties: jsonb('properties').$type<Record<
+      string,
+      string | number | boolean | null
+    > | null>(),
+    schemaVersion: integer('schema_version'),
   },
   (table) => ({
     orgIdx: index('phase1_events_org_idx').on(table.organizationId),
     siteIdx: index('phase1_events_site_idx').on(table.siteId),
+    occurredAtIdx: index('phase1_events_occurred_at_idx').on(table.occurredAt),
+    siteOccurredIdx: index('phase1_events_site_occurred_idx').on(
+      table.siteId,
+      table.occurredAt
+    ),
+    dedupeIdx: uniqueIndex('phase1_events_dedupe_idx').on(
+      table.siteId,
+      table.source,
+      table.sourceEventId
+    ),
+  })
+);
+
+export const phase2SiteConfigs = pgTable(
+  'phase2_site_configs',
+  {
+    siteId: text('site_id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    cohortDimensions: jsonb('cohort_dimensions').$type<unknown>().notNull(),
+    onboardingSteps: jsonb('onboarding_steps').$type<unknown>().notNull(),
+    ctas: jsonb('ctas').$type<unknown>().notNull(),
+    narratives: jsonb('narratives').$type<unknown>().notNull(),
+    conversionEventTypes: jsonb('conversion_event_types').$type<string[] | null>(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index('phase2_site_configs_org_idx').on(table.organizationId),
+  })
+);
+
+export const phase2Integrations = pgTable(
+  'phase2_integrations',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    provider: text('provider').notNull(),
+    status: text('status').notNull(),
+    /** Provider-specific config (e.g. PostHog host + projectId). Never holds secrets. */
+    config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+    /** Env-var name where the secret API key lives (never the secret value itself). */
+    secretRef: text('secret_ref'),
+    cursor: jsonb('cursor').$type<Record<string, unknown> | null>(),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+    lastErrorCode: text('last_error_code'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index('phase2_integrations_org_idx').on(table.organizationId),
+    siteIdx: index('phase2_integrations_site_idx').on(table.siteId),
+    siteProviderIdx: uniqueIndex('phase2_integrations_site_provider_idx').on(
+      table.siteId,
+      table.provider
+    ),
   })
 );
 

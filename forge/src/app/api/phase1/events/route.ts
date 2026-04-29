@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 import { createPhase1Repository } from '@/lib/phase1';
+import { CANONICAL_EVENT_SCHEMA_VERSION } from '@/lib/phase2/types';
+import type { CanonicalEventSource } from '@/lib/phase2/types';
 import {
   asObject,
   badRequest,
@@ -10,6 +12,15 @@ import {
   parseString,
   success,
 } from '../_shared';
+
+const VALID_SOURCES: ReadonlySet<CanonicalEventSource> = new Set([
+  'api',
+  'shopify',
+  'segment',
+  'ga4',
+  'posthog',
+  'custom',
+]);
 
 function parseMetrics(value: unknown): Record<string, number> | undefined {
   if (value == null) return undefined;
@@ -28,6 +39,41 @@ function parseMetrics(value: unknown): Record<string, number> | undefined {
   }
 
   return Object.keys(metrics).length > 0 ? metrics : undefined;
+}
+
+function parseProperties(
+  value: unknown
+): Record<string, string | number | boolean | null> | undefined {
+  if (value == null) return undefined;
+  const obj = asObject(value);
+  if (!obj) return undefined;
+  const props: Record<string, string | number | boolean | null> = {};
+  for (const [key, raw] of Object.entries(obj)) {
+    if (raw === null || typeof raw === 'boolean' || typeof raw === 'string') {
+      props[key] = raw;
+      continue;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      props[key] = raw;
+      continue;
+    }
+    return undefined;
+  }
+  return Object.keys(props).length > 0 ? props : undefined;
+}
+
+function parseSource(value: unknown): CanonicalEventSource {
+  if (typeof value !== 'string') return 'api';
+  const lower = value.toLowerCase();
+  return VALID_SOURCES.has(lower as CanonicalEventSource)
+    ? (lower as CanonicalEventSource)
+    : 'api';
+}
+
+function parseIsoDate(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (Number.isNaN(Date.parse(value))) return null;
+  return value;
 }
 
 export async function POST(request: Request) {
@@ -62,7 +108,23 @@ export async function POST(request: Request) {
       return badRequest('`metrics` must be an object with numeric values.');
     }
 
+    if (body.properties != null && parseProperties(body.properties) == null) {
+      return badRequest(
+        '`properties` must be an object with string|number|boolean|null values.'
+      );
+    }
+
+    if (body.occurredAt != null && parseIsoDate(body.occurredAt) == null) {
+      return badRequest('`occurredAt` must be a valid ISO date string when provided.');
+    }
+
     const metrics = parseMetrics(body.metrics);
+    const properties = parseProperties(body.properties);
+    const source = parseSource(body.source);
+    const sourceEventId = parseString(body.sourceEventId) ?? undefined;
+    const anonymousId = parseString(body.anonymousId) ?? undefined;
+    const occurredAtRaw = parseIsoDate(body.occurredAt);
+
     const orgContext = resolveOrganizationContext(request, {
       bodyOrganizationId: body.organizationId,
       allowQueryFallback: false,
@@ -72,18 +134,25 @@ export async function POST(request: Request) {
     }
 
     const repository = createPhase1Repository();
-    const event = {
+    const createdAt = new Date().toISOString();
+    const occurredAt = occurredAtRaw ?? createdAt;
+
+    const created = await repository.createCanonicalEvent({
       id: randomUUID(),
       organizationId: orgContext.organizationId,
       siteId,
       sessionId,
       type,
       path,
-      createdAt: new Date().toISOString(),
+      occurredAt,
+      createdAt,
+      source,
+      schemaVersion: CANONICAL_EVENT_SCHEMA_VERSION,
       ...(metrics ? { metrics } : {}),
-    };
-
-    const created = await repository.createEvent(event);
+      ...(properties ? { properties } : {}),
+      ...(sourceEventId ? { sourceEventId } : {}),
+      ...(anonymousId ? { anonymousId } : {}),
+    });
     return success(created, 201);
   } catch (error) {
     return mapRouteError(error);

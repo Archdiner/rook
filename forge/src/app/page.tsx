@@ -48,10 +48,21 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
     }, 300);
   };
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        handleClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
     <div
+      onClick={handleClose}
       style={{
         position: 'fixed',
         inset: 0,
@@ -65,7 +76,6 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
     >
       {/* Backdrop */}
       <div
-        onClick={handleClose}
         style={{
           position: 'absolute',
           inset: 0,
@@ -77,6 +87,7 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
 
       {/* Modal */}
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           position: 'relative',
           width: '100%',
@@ -96,15 +107,20 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
           aria-label="Close"
           style={{
             position: 'absolute',
-            top: '20px',
-            right: '20px',
+            top: '16px',
+            right: '16px',
             background: 'none',
             border: 'none',
-            fontSize: '24px',
+            fontSize: '28px',
             color: '#6B6B6B',
             cursor: 'pointer',
             lineHeight: 1,
-            padding: '4px',
+            padding: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '40px',
+            height: '40px',
           }}
         >
           ×
@@ -122,10 +138,10 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
                 color: '#111',
               }}
             >
-              She&apos;s on her way.
+              We&apos;ve got it.
             </h3>
             <p style={{ fontSize: '16px', color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
-              We&apos;ll reach out within 48 hours to begin the survey. Keep an eye on your inbox.
+              We&apos;ll review your site and reach out if there&apos;s a fit for an audit.
             </p>
             <button
               onClick={handleClose}
@@ -155,10 +171,10 @@ function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void
                 color: '#111',
               }}
             >
-              Request a survey
+              Request a site audit
             </h3>
             <p style={{ fontSize: '15px', color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
-              Free during private beta. No card required.
+              Drop your URL below. We&apos;ll manually review your funnel and see if Forge can help.
             </p>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -302,10 +318,9 @@ function MinimalDOM() {
             Clarity over<br />
             intuition.
           </h1>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-relaxed">
-            <span className="text-[#111]">Forge</span> is built for teams who want product and UX changes grounded in{' '}
-            <span className="text-[#111]">real user behavior</span>—not hunches. We take how people actually move through your product (paths, sessions, events) and turn that signal into{' '}
-            <span className="text-[#111]">specific recommendations aimed at user pain</span>: where they stall, get confused, or leave. Not generic “redesign everything” lists. Not blank best practices. Changes you can tie back to what your data already shows is broken.
+          <p className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-[1.8]">
+            <span className="text-[#111]">Forge</span> reads how people move through your product and returns ranked changes aimed at{' '}
+            <span className="text-[#111]">real pain</span>—stalls, confusion, drop-off—grounded in paths, sessions, and events. Not hunches. Not generic redesign lists.
           </p>
         </div>
       </section>
@@ -314,9 +329,9 @@ function MinimalDOM() {
       <section className="h-screen w-full flex flex-col pt-[62vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
-            Drop-offs, loops, and weak journeys aren’t abstract—they’re visible in how people click, scroll, and convert (or don’t). Forge starts from that signal so you’re solving{' '}
-            <span className="text-[#111]">real struggle</span>, not inventing problems to justify a roadmap.
+          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-[1.8]">
+            Weak journeys show up in clicks and conversions. We start from that signal so you fix{' '}
+            <span className="text-[#111]">real struggle</span>, not invented roadmap work.
           </p>
         </div>
       </section>
@@ -325,9 +340,9 @@ function MinimalDOM() {
       <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
-            Recommendations are ranked against the pain your data exposes—so engineering and design spend cycles on{' '}
-            <span className="text-[#111]">relieving friction users already hit</span>, instead of shipping undifferentiated changes that don’t map to a documented problem.
+          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-[1.8]">
+            Rankings follow the friction your data already shows—so you ship relief for{' '}
+            <span className="text-[#111]">problems you can point to</span>, not random tweaks.
           </p>
         </div>
       </section>
@@ -336,9 +351,9 @@ function MinimalDOM() {
       <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">How we define Forge.</h2>
-          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed">
-            We’re a <span className="text-[#111]">behavior-first</span> product: real usage in, readiness and ranked interventions out—each tied to evidence you can explain.{' '}
-            <span className="text-[#111]">Clarity</span> means knowing which user pains deserve the next sprint; <span className="text-[#111]">intuition</span> is what we deliberately replace when the data says otherwise.
+          <p className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-[1.8]">
+            <span className="text-[#111]">Behavior-first</span>: usage in, evidence-backed rankings out.{' '}
+            <span className="text-[#111]">Clarity</span> picks what ships; the signal beats intuition.
           </p>
         </div>
       </section>
@@ -349,7 +364,7 @@ function MinimalDOM() {
           Clarity over intuition—in practice.
         </h2>
         <p className="sans-text pointer-events-none mb-8 max-w-lg text-sm text-[#6B6B6B] md:mb-12 md:text-lg">
-          Request a conversation—we’ll follow up on your product, your data, and whether Forge is the right way to turn user pain into prioritized work.
+          Request a conversation—we’ll follow up if Forge fits your product and data.
         </p>
         <button
           onClick={openModal}
@@ -369,13 +384,13 @@ function MinimalDOM() {
 export default function Home() {
   return (
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
-      <header className="fixed top-0 left-0 w-full px-6 py-8 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-none">
-        <Link href="/" className="pointer-events-auto flex items-center gap-3 no-underline">
+      <header className="fixed top-0 left-0 w-full px-6 py-6 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
+        <Link href="/" className="flex items-center gap-3 no-underline">
           <div className="w-6 h-6 rounded-md bg-[#111]" />
           <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Forge</span>
         </Link>
         <nav
-          className="pointer-events-auto flex flex-wrap items-center justify-end gap-4 md:gap-8 sans-text"
+          className="flex flex-wrap items-center justify-end gap-4 md:gap-8 sans-text"
           aria-label="Primary"
         >
           <Link
@@ -394,7 +409,7 @@ export default function Home() {
             href="/phase1"
             className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
-            Lab
+            Phase 1
           </Link>
         </nav>
         <div className="hidden lg:block sans-text font-bold tracking-widest uppercase text-xs text-[#6B6B6B]">

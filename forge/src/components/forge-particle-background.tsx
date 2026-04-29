@@ -520,3 +520,205 @@ export function ForgeParticleCanvas() {
     </div>
   );
 }
+
+// --- Docs: "Quantum Möbius Nexus" (Continuous infinite loop, calm but highly creative) ---
+
+function getDocsSpawnPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const x = (Math.random() - 0.5) * 44;
+    const y = (Math.random() - 0.5) * 36;
+    const z = (Math.random() - 0.5) * 22 - 6;
+    points[i * 3] = x;
+    points[i * 3 + 1] = y;
+    points[i * 3 + 2] = z;
+  }
+  return points;
+}
+
+/** Particles formed into a continuous Möbius strip — symbolizing infinite loops and data continuity. */
+function getDocsMobiusPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  const R = 8.0; // Main radius
+  const r = 3.0; // Tube radius
+  
+  for (let i = 0; i < count; i++) {
+    const u = Math.random() * Math.PI * 2; // Angle around the main loop
+    const v = Math.random() * Math.PI * 2; // Angle around the tube
+    
+    // Add some thickness/volume to the surface
+    const thickness = (Math.random() - 0.5) * 1.5;
+    const currentR = r + thickness;
+
+    // Möbius parametric equations
+    const x = (R + currentR * Math.cos(v / 2)) * Math.cos(u);
+    const y = (R + currentR * Math.cos(v / 2)) * Math.sin(u);
+    const z = currentR * Math.sin(v / 2);
+
+    // Add some organic noise to break up the math perfection slightly
+    const noiseX = (Math.random() - 0.5) * 0.4;
+    const noiseY = (Math.random() - 0.5) * 0.4;
+    const noiseZ = (Math.random() - 0.5) * 0.4;
+
+    // Tilt for dramatic framing
+    const tiltX = Math.PI / 4;
+    const tiltY = Math.PI / 6;
+
+    // Apply tilts
+    let px = x + noiseX;
+    let py = y + noiseY;
+    let pz = z + noiseZ;
+
+    // Rot X
+    const tx = px;
+    const ty = py * Math.cos(tiltX) - pz * Math.sin(tiltX);
+    const tz = py * Math.sin(tiltX) + pz * Math.cos(tiltX);
+
+    // Rot Y
+    px = tx * Math.cos(tiltY) + tz * Math.sin(tiltY);
+    pz = -tx * Math.sin(tiltY) + tz * Math.cos(tiltY);
+    py = ty;
+
+    points[i * 3] = px;
+    points[i * 3 + 1] = py;
+    points[i * 3 + 2] = pz;
+  }
+  return points;
+}
+
+const docsVertexShader = `
+attribute vec3 spawnPos;
+attribute vec3 position;
+
+uniform float uTime;
+uniform float uSpawnTime;
+uniform float uMobile;
+uniform float uScroll;
+
+float cheapNoise(vec3 p) {
+  return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
+}
+
+void main() {
+  vec3 p = position;
+
+  float calm = 1.0 - uMobile * 0.35;
+
+  // Gentle majestic rotation of the entire Möbius structure
+  float rotSpeed = uTime * 0.05 * calm;
+  float cx = p.x * cos(rotSpeed) - p.z * sin(rotSpeed);
+  float cz = p.x * sin(rotSpeed) + p.z * cos(rotSpeed);
+  p.x = cx;
+  p.z = cz;
+
+  // Breathing / pulsating effect
+  float pulse = sin(uTime * 0.2 + length(p) * 0.1) * 0.2 * calm;
+  p += normalize(p) * pulse;
+
+  // Subtle fluid wave distortion across the structure
+  p.y += sin(p.x * 0.2 + uTime * 0.15) * 0.6 * calm;
+  p.x += cos(p.y * 0.3 + uTime * 0.1) * 0.4 * calm;
+
+  p.y += uScroll * 0.015; // Drift upwards on scroll
+
+  float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 3.0);
+  vec3 chaotic = spawnPos;
+  float wobble = (1.0 - spawnEase) * 3.5;
+  chaotic += vec3(
+    (cheapNoise(chaotic + uTime) - 0.5) * wobble,
+    (cheapNoise(chaotic.yxz + uTime * 0.7) - 0.5) * wobble,
+    (cheapNoise(chaotic.zxy + uTime * 1.1) - 0.5) * wobble * 0.6
+  );
+
+  vec3 finalPos = mix(chaotic, p, spawnEase);
+
+  vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  
+  // Dynamic sizing based on depth and pulse
+  gl_PointSize = max(1.0, (40.0 - uMobile * 15.0) / -mvPosition.z) * (1.0 + pulse * 0.5) * spawnEase;
+}
+`;
+
+const docsFragmentShader = `
+void main() {
+  float dist = distance(gl_PointCoord, vec2(0.5));
+  if (dist > 0.5) discard;
+  // Glowing core with softer edges
+  float alpha = smoothstep(0.5, 0.2, dist) * 0.65;
+  gl_FragColor = vec4(0.08, 0.08, 0.09, alpha);
+}
+`;
+
+const DOCS_PARTICLE_DESKTOP = 28000;
+const DOCS_PARTICLE_MOBILE = 16000;
+
+function DocsParticleSwarm() {
+  const shaderRef = useRef<THREE.ShaderMaterial>(null);
+  const { size } = useThree();
+  const isMobile = size.width < 768;
+  const count = isMobile ? DOCS_PARTICLE_MOBILE : DOCS_PARTICLE_DESKTOP;
+  const mountTimeRef = useRef<number | null>(null);
+
+  const buffers = useMemo(
+    () => ({
+      spawn: getDocsSpawnPoints(count),
+      mobius: getDocsMobiusPoints(count),
+    }),
+    [count],
+  );
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uSpawnTime: { value: 0 },
+      uMobile: { value: isMobile ? 1.0 : 0.0 },
+      uScroll: { value: 0 },
+    }),
+    [isMobile],
+  );
+
+  useFrame((state) => {
+    if (!shaderRef.current) return;
+    const time = state.clock.getElapsedTime();
+    const scrollY = Math.max(0, window.scrollY);
+    const spawnDuration = isMobile ? 1500 : 2500;
+    if (mountTimeRef.current === null) {
+      mountTimeRef.current = Date.now();
+    }
+    const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
+    shaderRef.current.uniforms.uTime.value = time;
+    shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
+    shaderRef.current.uniforms.uScroll.value = scrollY;
+  });
+
+  return (
+    <points frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[buffers.mobius, 3]} />
+        <bufferAttribute attach="attributes-spawnPos" args={[buffers.spawn, 3]} />
+      </bufferGeometry>
+      <shaderMaterial
+        ref={shaderRef}
+        vertexShader={docsVertexShader}
+        fragmentShader={docsFragmentShader}
+        uniforms={uniforms}
+        transparent={true}
+        depthWrite={false}
+        blending={THREE.NormalBlending}
+      />
+    </points>
+  );
+}
+
+/** Majestic, rotating Möbius strip for /docs — symbolizes infinite discovery & optimization. */
+export function ForgeDocsParticleCanvas() {
+  return (
+    <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
+      <Canvas camera={{ position: [0, 0, 15], fov: 45 }} dpr={[1, 1.5]}>
+        <ambientLight intensity={1} />
+        <DocsParticleSwarm />
+      </Canvas>
+    </div>
+  );
+}

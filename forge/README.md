@@ -8,7 +8,7 @@ Forge is pre-product. **Phase 1 core** (sufficiency + insights engines, Phase 1 
 
 When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensure migrations are applied). To smoke-test APIs without Postgres: `PORT=3020 DATABASE_URL= PHASE1_STORAGE_DRIVER=blob npm run start`.
 
-**Full product narrative (Phases 0–4):** see [`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md). For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
+**Full product narrative (Phases 0–4):** see [`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md). **Phase 2 evidence contract:** see [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md). For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
 
 **Interactive API docs** (marketing-site visuals + particle background): open **`/docs`** on your deployment (e.g. `https://your-app.vercel.app/docs`).
 
@@ -18,6 +18,7 @@ When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensur
 - Phase 1 API surface for site setup, event ingestion, readiness checks, and recommendations (`src/app/api/phase1`)
 - Data sufficiency engine with deterministic thresholds and readiness scoring (`src/lib/phase1/sufficiency`)
 - Insights engine that ranks evidence-backed findings from behavioral aggregates (`src/lib/phase1/insights`)
+- **Phase 2 spine:** versioned canonical events with `(siteId, source, sourceEventId)` dedupe, per-site config CRUD, rollup pipeline (`src/lib/phase2`), validation gate, and end-to-end `POST /api/phase2/insights/run`
 
 ## Local Development
 
@@ -38,6 +39,10 @@ Then open `http://localhost:3000`.
 | `DATABASE_URL` | Required when using `postgres` driver | Neon/Postgres connection string used by Drizzle repository |
 | `NEXT_PUBLIC_DEFAULT_ORG_ID` | Optional (`org_default`) | Fallback organization context when no `organizationId` query/header is provided |
 | `PHASE1_ORG_IDENTITY_MODE` | Optional (`dev` default) | `dev` allows query/body fallback; `header_required` requires `x-org-id` header |
+
+Phase 2 reuses the same env matrix; no additional secrets are required for the
+spine (rollups + gate + insights run). Provider connectors will introduce
+provider-specific secrets when they ship.
 
 Without `BLOB_READ_WRITE_TOKEN`, Phase 1 storage falls back to local temporary files.
 
@@ -124,6 +129,72 @@ curl -s -X POST "$BASE_URL/api/phase1/insights" \
   }'
 ```
 
+## API Quickstart (Phase 2)
+
+Phase 2 derives the insights `InsightInput` from your stored canonical events
+plus a per-site config; you do not need to pre-shape aggregates.
+
+Phase 2 health:
+
+```bash
+curl -s "$BASE_URL/api/phase2/health"
+```
+
+Declare site config (cohort dimensions, onboarding, CTAs, narratives):
+
+```bash
+curl -s -X PUT "$BASE_URL/api/phase2/sites/replace-with-site-id/config" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cohortDimensions": [
+      { "id": "utm_source", "label": "UTM source", "source": "property", "key": "utm_source", "fallback": "direct" }
+    ],
+    "onboardingSteps": [
+      { "id": "view_pricing", "label": "View pricing", "order": 1, "match": { "kind": "path-prefix", "prefix": "/pricing" } },
+      { "id": "start_checkout", "label": "Start checkout", "order": 2, "match": { "kind": "event-type", "type": "checkout_start" } }
+    ],
+    "ctas": [
+      { "pageRef": "/pricing", "ctaId": "buy_now", "label": "Buy now", "visualWeight": 0.9, "match": { "kind": "event-type", "type": "cta_click" } }
+    ],
+    "narratives": [
+      { "id": "pricing_story", "label": "Pricing narrative", "sourcePathRef": "/pricing", "expectedPathRefs": ["/checkout", "/cart"] }
+    ]
+  }'
+```
+
+Send a canonical event (note `occurredAt`, `source`, `sourceEventId`):
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase1/events" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "siteId": "replace-with-site-id",
+    "sessionId": "session-1",
+    "type": "page_view",
+    "path": "/pricing",
+    "occurredAt": "2026-04-15T12:00:00Z",
+    "source": "shopify",
+    "sourceEventId": "shopify_evt_123",
+    "properties": { "utm_source": "newsletter" }
+  }'
+```
+
+Run Phase 2 insights end-to-end:
+
+```bash
+curl -s -X POST "$BASE_URL/api/phase2/insights/run" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "siteId": "replace-with-site-id",
+    "window": { "start": "2026-04-01T00:00:00Z", "end": "2026-04-22T00:00:00Z" },
+    "maxFindings": 5
+  }'
+```
+
+The response includes `findings`, `warnings` (gate output), `diagnostics`, and a
+`trustworthy` boolean. See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md)
+for the full contract and what each warning code means.
+
 ## Architecture (High Level)
 
 - Next.js App Router app with UI routes and API routes in a single service
@@ -142,7 +213,10 @@ curl -s -X POST "$BASE_URL/api/phase1/insights" \
 - `src/app/api/discovery` - Discovery survey API
 - `src/app/api/intake` - General intake API
 - `src/app/api/phase1` - Phase 1 endpoints (health, sites, events, readiness, recommendations, sufficiency, insights)
+- `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run)
 - `src/lib/phase1` - Core contracts, storage adapter, sufficiency engine, insights engine
+- `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
+- `drizzle` - Generated Postgres migrations (`drizzle-kit generate`)
 - `public` - Static assets
 
 ## Roadmap

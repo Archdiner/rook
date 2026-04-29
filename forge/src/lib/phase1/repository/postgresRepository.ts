@@ -1,20 +1,107 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, or, sql } from 'drizzle-orm';
 
 import { getDb } from '@/lib/db/client';
-import { phase1Events, phase1ReadinessSnapshots, phase1Sites } from '@/lib/db/schema';
+import {
+  phase1Events,
+  phase1ReadinessSnapshots,
+  phase1Sites,
+  phase2SiteConfigs,
+} from '@/lib/db/schema';
+import type {
+  CanonicalEvent,
+  CanonicalEventSchemaVersion,
+  CanonicalEventSource,
+  Phase2SiteConfig,
+} from '@/lib/phase2/types';
 
 import type {
+  CreateCanonicalEventInput,
   CreatePhase1EventInput,
   CreatePhase1ReadinessSnapshotInput,
   CreatePhase1SiteInput,
   GetLatestPhase1ReadinessSnapshotInput,
+  GetPhase2SiteConfigInput,
+  ListEventsInWindowInput,
   ListPhase1EventsInput,
   ListPhase1SitesInput,
   Phase1EventRecord,
   Phase1ReadinessSnapshotRecord,
   Phase1Repository,
   Phase1SiteRecord,
+  UpsertPhase2SiteConfigInput,
 } from './types';
+
+type Phase1EventRow = typeof phase1Events.$inferSelect;
+type Phase2SiteConfigRow = typeof phase2SiteConfigs.$inferSelect;
+
+const LIST_WINDOW_LIMIT = 5000;
+
+function mapEventRowToCanonicalEvent(row: Phase1EventRow): CanonicalEvent {
+  // Legacy rows (pre Phase 2) lack occurredAt/source/schemaVersion; fall back without
+  // mutating the canonical schema-version constant for newly written rows.
+  const occurredAtIso = row.occurredAt
+    ? row.occurredAt.toISOString()
+    : row.createdAt.toISOString();
+  const source: CanonicalEventSource = (row.source ?? 'api') as CanonicalEventSource;
+  const schemaVersion = (row.schemaVersion ?? 1) as CanonicalEventSchemaVersion;
+
+  const event: CanonicalEvent = {
+    id: row.id,
+    organizationId: row.organizationId,
+    siteId: row.siteId,
+    sessionId: row.sessionId,
+    type: row.type,
+    path: row.path,
+    occurredAt: occurredAtIso,
+    createdAt: row.createdAt.toISOString(),
+    source,
+    schemaVersion,
+  };
+
+  if (row.metrics) event.metrics = row.metrics as Record<string, number>;
+  if (row.properties) {
+    event.properties = row.properties as Record<string, string | number | boolean | null>;
+  }
+  if (row.anonymousId) event.anonymousId = row.anonymousId;
+  if (row.sourceEventId) event.sourceEventId = row.sourceEventId;
+
+  return event;
+}
+
+function mapRowToPhase2SiteConfig(row: Phase2SiteConfigRow): Phase2SiteConfig {
+  const config: Phase2SiteConfig = {
+    siteId: row.siteId,
+    organizationId: row.organizationId,
+    cohortDimensions: row.cohortDimensions as Phase2SiteConfig['cohortDimensions'],
+    onboardingSteps: row.onboardingSteps as Phase2SiteConfig['onboardingSteps'],
+    ctas: row.ctas as Phase2SiteConfig['ctas'],
+    narratives: row.narratives as Phase2SiteConfig['narratives'],
+    updatedAt: row.updatedAt.toISOString(),
+  };
+  if (row.conversionEventTypes && row.conversionEventTypes.length > 0) {
+    config.conversionEventTypes = row.conversionEventTypes;
+  }
+  return config;
+}
+
+function toCanonicalInsertValues(input: CreateCanonicalEventInput) {
+  return {
+    id: input.id,
+    organizationId: input.organizationId,
+    siteId: input.siteId,
+    sessionId: input.sessionId,
+    type: input.type,
+    path: input.path,
+    metrics: input.metrics ?? null,
+    properties: input.properties ?? null,
+    anonymousId: input.anonymousId ?? null,
+    source: input.source,
+    sourceEventId: input.sourceEventId ?? null,
+    schemaVersion: input.schemaVersion,
+    occurredAt: new Date(input.occurredAt),
+    createdAt: new Date(input.createdAt),
+  };
+}
 
 export function createPostgresPhase1Repository(): Phase1Repository {
   return {
@@ -173,6 +260,139 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         sessionCount: row.sessionCount,
         generatedAt: row.generatedAt.toISOString(),
       };
+    },
+    async createCanonicalEvent(input: CreateCanonicalEventInput): Promise<CanonicalEvent> {
+      const db = getDb();
+      const inserted = await db
+        .insert(phase1Events)
+        .values(toCanonicalInsertValues(input))
+        .onConflictDoNothing({
+          target: [phase1Events.siteId, phase1Events.source, phase1Events.sourceEventId],
+        })
+        .returning();
+
+      if (inserted[0]) {
+        return mapEventRowToCanonicalEvent(inserted[0]);
+      }
+
+      // Conflict on the dedupe key — fetch and return the existing row.
+      if (input.sourceEventId) {
+        const existing = await db
+          .select()
+          .from(phase1Events)
+          .where(
+            and(
+              eq(phase1Events.siteId, input.siteId),
+              eq(phase1Events.source, input.source),
+              eq(phase1Events.sourceEventId, input.sourceEventId)
+            )
+          )
+          .limit(1);
+        if (existing[0]) return mapEventRowToCanonicalEvent(existing[0]);
+      }
+
+      throw new Error(
+        'createCanonicalEvent: insert returned no rows and no dedupe key was provided.'
+      );
+    },
+    async createCanonicalEventsBatch(
+      inputs: CreateCanonicalEventInput[]
+    ): Promise<{ inserted: number; deduped: number }> {
+      if (inputs.length === 0) return { inserted: 0, deduped: 0 };
+      const db = getDb();
+      const insertedRows = await db
+        .insert(phase1Events)
+        .values(inputs.map(toCanonicalInsertValues))
+        .onConflictDoNothing()
+        .returning({ id: phase1Events.id });
+      const inserted = insertedRows.length;
+      return { inserted, deduped: inputs.length - inserted };
+    },
+    async listEventsInWindow(input: ListEventsInWindowInput): Promise<CanonicalEvent[]> {
+      const db = getDb();
+      const start = new Date(input.window.start);
+      const end = new Date(input.window.end);
+      const limit = Math.min(input.limit ?? LIST_WINDOW_LIMIT, LIST_WINDOW_LIMIT);
+
+      const rows = await db
+        .select()
+        .from(phase1Events)
+        .where(
+          and(
+            eq(phase1Events.organizationId, input.organizationId),
+            eq(phase1Events.siteId, input.siteId),
+            or(
+              and(
+                gte(phase1Events.occurredAt, start),
+                lt(phase1Events.occurredAt, end)
+              ),
+              and(
+                isNull(phase1Events.occurredAt),
+                gte(phase1Events.createdAt, start),
+                lt(phase1Events.createdAt, end)
+              )
+            )
+          )
+        )
+        .orderBy(
+          sql`coalesce(${phase1Events.occurredAt}, ${phase1Events.createdAt}) DESC`
+        )
+        .limit(limit);
+
+      return rows.map(mapEventRowToCanonicalEvent);
+    },
+    async upsertPhase2SiteConfig(
+      input: UpsertPhase2SiteConfigInput
+    ): Promise<Phase2SiteConfig> {
+      const db = getDb();
+      const updatedAt = new Date(input.updatedAt);
+      const conversionEventTypes = input.conversionEventTypes ?? null;
+      const [row] = await db
+        .insert(phase2SiteConfigs)
+        .values({
+          siteId: input.siteId,
+          organizationId: input.organizationId,
+          cohortDimensions: input.cohortDimensions,
+          onboardingSteps: input.onboardingSteps,
+          ctas: input.ctas,
+          narratives: input.narratives,
+          conversionEventTypes,
+          updatedAt,
+        })
+        .onConflictDoUpdate({
+          target: phase2SiteConfigs.siteId,
+          set: {
+            organizationId: input.organizationId,
+            cohortDimensions: input.cohortDimensions,
+            onboardingSteps: input.onboardingSteps,
+            ctas: input.ctas,
+            narratives: input.narratives,
+            conversionEventTypes,
+            updatedAt,
+          },
+        })
+        .returning();
+
+      return mapRowToPhase2SiteConfig(row);
+    },
+    async getPhase2SiteConfig(
+      input: GetPhase2SiteConfigInput
+    ): Promise<Phase2SiteConfig | null> {
+      const db = getDb();
+      const rows = await db
+        .select()
+        .from(phase2SiteConfigs)
+        .where(
+          and(
+            eq(phase2SiteConfigs.organizationId, input.organizationId),
+            eq(phase2SiteConfigs.siteId, input.siteId)
+          )
+        )
+        .limit(1);
+
+      const row = rows[0];
+      if (!row) return null;
+      return mapRowToPhase2SiteConfig(row);
     },
   };
 }
