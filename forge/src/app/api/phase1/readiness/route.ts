@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { computeReadinessSnapshotFromEvents, createPhase1Repository } from '@/lib/phase1';
 import type { Phase1Event, Phase1ReadinessSnapshot } from '@/lib/phase1/storage';
 import {
@@ -30,7 +29,7 @@ async function buildReadinessResponse(siteId: string, organizationId: string) {
 
   const snapshot = computeReadinessSnapshotFromEvents(siteId, events);
   await repository.createReadinessSnapshot({
-    id: randomUUID(),
+    id: snapshot.id,
     organizationId,
     siteId,
     score: snapshot.score,

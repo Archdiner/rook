@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 import { evaluateAllCategories } from '@/lib/phase1/sufficiency';
 
 import type { Phase1Event, Phase1ReadinessSnapshot } from '@/lib/phase1/storage';
@@ -65,7 +67,7 @@ export function computeReadinessSnapshotFromEvents(
       : ['Collect more behavioral evidence to unlock category-level readiness.'];
 
   return {
-    id: `snapshot-${siteId}-${new Date().toISOString().slice(0, 16)}`,
+    id: randomUUID(),
     siteId,
     score,
     status,
