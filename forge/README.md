@@ -269,6 +269,38 @@ curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots?pathRef=/pricing" -H "x-o
 See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md) §10
 for the full snapshot contract and visual-weight scoring rubric.
 
+### Design rules (designer-voiced findings)
+
+With both snapshots and PostHog events on hand, Forge runs a set of
+**design rules** that produce findings naming actual elements:
+
+```jsonc
+{
+  "designReport": {
+    "findings": [
+      {
+        "ruleId": "hero-hierarchy-inversion",
+        "pathRef": "/pricing",
+        "title": "Visual hierarchy inverts user preference on /pricing",
+        "summary": "Most-clicked CTA on /pricing is `Start free trial` (38% of CTA clicks, 1,420 clicks). The visually heaviest CTA is `Book demo` (visual weight 0.82, signals: text-2xl, bg-primary, font-bold).",
+        "recommendation": [
+          "Either reduce the visual weight of `Book demo` or raise `Start free trial` to match. The eye should land where the value lands, and right now those are different places.",
+          "Concretely: drop bg-primary from `Book demo`, or promote `Start free trial` into the same header position and give it text-2xl + bg-primary."
+        ],
+        "evidence": [...]
+      }
+    ],
+    "diagnostics": [...],
+    "groundedInSnapshots": true
+  }
+}
+```
+
+Rules shipping in v1: `hero-hierarchy-inversion`, `above-fold-coverage`,
+`rage-click-target`, `mobile-engagement-asymmetry`, `nav-dispersion`.
+See [`docs/PHASE2_EVIDENCE_MODEL.md`](docs/PHASE2_EVIDENCE_MODEL.md)
+§§11–12.
+
 ## Architecture (High Level)
 
 - Next.js App Router app with UI routes and API routes in a single service
@@ -290,8 +322,9 @@ for the full snapshot contract and visual-weight scoring rubric.
 - `src/app/api/phase2` - Phase 2 endpoints (health, site config, insights/run, integrations, page snapshots)
 - `src/lib/phase1` - Core contracts, storage adapter, sufficiency engine, insights engine
 - `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
-- `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution)
+- `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution, elements_chain ancestry parser)
 - `src/lib/phase2/snapshots` - Page DNA static analysis (fetcher, parser, visual-weight scoring, fold guess)
+- `src/lib/phase2/rules` - Design rules: hero-hierarchy-inversion, above-fold-coverage, rage-click-target, mobile-engagement-asymmetry, nav-dispersion
 - `drizzle` - Generated Postgres migrations (`drizzle-kit generate`)
 - `public` - Static assets
 

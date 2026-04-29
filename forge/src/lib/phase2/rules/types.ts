@@ -1,0 +1,119 @@
+/**
+ * Phase 2 — Design rules
+ *
+ * Design rules consume canonical events + page snapshots + rollup output
+ * and emit "design-aware" findings that name *the actual page elements*
+ * — the H1 we saw, the button class signals, the rage-click target — so
+ * the audit reads as a tasteful design review rather than a generic
+ * metrics dump.
+ *
+ * Rules are pure functions (`evaluate`). They never throw on missing
+ * data; they return an empty array. Each rule is responsible for its
+ * own minimum-sample threshold so callers can run them blindly across
+ * sites without producing noise on small windows.
+ */
+
+import type { CanonicalEvent, Phase2SiteConfig, RollupResult, TimeWindow } from '@/lib/phase2/types';
+import type { PageSnapshot } from '@/lib/phase2/snapshots/types';
+
+export type DesignFindingSeverity = 'info' | 'warn' | 'critical';
+
+export type DesignFindingCategory =
+  | 'hierarchy'        // visual weight vs click share mismatch
+  | 'fold'             // above/below the fold coverage problems
+  | 'rage'             // rage-click clusters
+  | 'asymmetry'        // mobile vs desktop / cohort gap problems
+  | 'nav'              // nav IA dispersion / over-faceted menus
+  | 'mismatch';        // landing promise vs page content mismatch
+
+/**
+ * One named piece of structured evidence the rule used to make its
+ * call. Rules should populate this generously — finding consumers
+ * can render it as "Why we said this" tooltips or full evidence cards.
+ */
+export interface DesignFindingEvidence {
+  label: string;
+  value: string | number;
+  context?: string;
+}
+
+export interface DesignFinding {
+  /** Stable, human-readable id, e.g. `hero-hierarchy-inversion:/pricing`. */
+  id: string;
+  /** Rule that produced this finding. */
+  ruleId: string;
+  category: DesignFindingCategory;
+  severity: DesignFindingSeverity;
+  /** 0..1 — heuristic confidence (sample size + signal strength). */
+  confidence: number;
+  /** 0..1 — heuristic priority (impact × addressability). */
+  priorityScore: number;
+  /** Page this finding is about. `null` for site-wide findings. */
+  pathRef: string | null;
+  title: string;
+  summary: string;
+  /** Designer-voiced paragraph(s). Each string is one paragraph. */
+  recommendation: string[];
+  evidence: DesignFindingEvidence[];
+  /**
+   * Optional refs into snapshots/CTAs/element ancestry so a UI can deep-link
+   * back into the artifact that produced the finding.
+   */
+  refs?: {
+    snapshotId?: string;
+    ctaRef?: string;
+    elementRef?: string;
+  };
+}
+
+/**
+ * Everything a rule needs to run. The route handler builds this once
+ * per request and feeds it to every rule.
+ */
+export interface DesignRuleContext {
+  organizationId: string;
+  siteId: string;
+  window: TimeWindow;
+  config: Phase2SiteConfig;
+  events: CanonicalEvent[];
+  rollup: RollupResult;
+  /** Indexed by `pathRef` for O(1) lookup inside rules. */
+  pageSnapshotsByPath: Map<string, PageSnapshot>;
+  /** All snapshots, in case a rule wants to iterate site-wide. */
+  pageSnapshots: PageSnapshot[];
+}
+
+export interface DesignRule {
+  id: string;
+  category: DesignFindingCategory;
+  /** Human-readable rule name for diagnostics/logging. */
+  name: string;
+  evaluate(ctx: DesignRuleContext): DesignFinding[];
+}
+
+/**
+ * Helper signature: turn one finding's structured evidence into a
+ * recommendation paragraph. Each rule provides its own template; this
+ * type just keeps signatures consistent.
+ */
+export type RecommendationFormatter<T> = (input: T) => string[];
+
+// ----- response shape (used by /api/phase2/insights/run) -----
+
+export interface DesignFindingsReport {
+  findings: DesignFinding[];
+  /** Rule-level diagnostics for debugging why a rule did/didn't fire. */
+  diagnostics: DesignRuleDiagnostic[];
+  /** True if at least one snapshot was available for grounding. */
+  groundedInSnapshots: boolean;
+}
+
+export interface DesignRuleDiagnostic {
+  ruleId: string;
+  /** How many findings the rule emitted. */
+  emitted: number;
+  /** Optional reason the rule produced nothing — e.g. INSUFFICIENT_SAMPLE, NO_SNAPSHOT, NO_DEVICE_DATA. */
+  skippedReason?: string;
+  /** How many candidate paths/cohorts/elements the rule considered. */
+  candidatesEvaluated?: number;
+}

@@ -243,6 +243,35 @@ export interface RunInsightsResponse {
   diagnostics: RollupDiagnostics;
   /** Whether engine output meets the gate's minimum bar. */
   trustworthy: boolean;
+  /**
+   * Phase 2 design-rule output (Layer B+C). Optional in v1 — empty when
+   * no page snapshots are available or when rules find nothing actionable.
+   * The shape lives in `@/lib/phase2/rules/types` to avoid a hard
+   * dependency from `phase2/types.ts` on the rules module.
+   */
+  designReport?: {
+    findings: Array<{
+      id: string;
+      ruleId: string;
+      category: string;
+      severity: 'info' | 'warn' | 'critical';
+      confidence: number;
+      priorityScore: number;
+      pathRef: string | null;
+      title: string;
+      summary: string;
+      recommendation: string[];
+      evidence: Array<{ label: string; value: string | number; context?: string }>;
+      refs?: { snapshotId?: string; ctaRef?: string; elementRef?: string };
+    }>;
+    diagnostics: Array<{
+      ruleId: string;
+      emitted: number;
+      skippedReason?: string;
+      candidatesEvaluated?: number;
+    }>;
+    groundedInSnapshots: boolean;
+  };
 }
 
 /* ------------------------------------------------------------------ */

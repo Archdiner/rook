@@ -393,7 +393,113 @@ actual class signals.
 
 ---
 
-## 11. Out of scope for Phase 2 (deferred)
+## 11. PostHog mapping depth (extended properties)
+
+Layer A grounded the audit in *what the page is*. Layer B grounds it in
+*what PostHog actually saw* — the full `elements_chain` ancestry, device
+type, scroll fraction, rage-click target, session-replay handle. The
+mapping is still pure (no I/O, no clocks); just richer.
+
+### 11.1 Properties added to canonical events
+
+| Source on PostHog event | Canonical destination | Notes |
+|---|---|---|
+| `properties.$elements_chain` (or `$elements_chain_chain`) | `properties.element_tag`, `element_classes`, `element_role`, `element_landmark_distance`, `element_depth` | Full ancestry parse via `connectors/posthog/elementsChain.ts`. `element_role` = nearest landmark walking from leaf up (`header` \| `nav` \| `main` \| `aside` \| `footer` \| `dialog` \| `null`). `element_classes` = up to 5 leaf class tokens, space-joined. |
+| `properties.$active_seconds` | `metrics.activeSeconds`; `properties.dwell_seconds` | Engaged time (PostHog's tracker). Distinct from `metrics.dwellMs` which is wall-time on page. Clamped 0..86_400. |
+| `properties.$scroll_percentage` | `metrics.scrollPct` (0..100) **and** `metrics.scrollPctNormalized` (0..1) | Both kept; rules read whichever they prefer. |
+| `properties.$session_recording_id` | `properties.recording_id` | Stable handle for downstream replay attach. |
+| `properties.$feature_flag` + `$feature_flag_response` | `properties.flag_<key>` | Single-flag exposure. |
+| `properties.$feature_flags` (object) | `properties.flag_<key>` (per entry) | Capped at 10 entries; only `string`/`boolean`/finite-number values. |
+| `$rageclick` event + leaf | `properties.rage_target_text`, `rage_target_ref` | `rage_target_text` falls back through `$el_text` → first class → aria-label → tag. `rage_target_ref` = sha256 (16 chars) of the leaf signature so multiple sessions can be grouped. |
+
+`elements_chain` parsing is bracket- and escape-aware (handles
+`[data-cta="value"]`, `\"` and `\\` escapes, ignores `:nth-child(...)`
+pseudos, treats ARIA `role` of `banner`/`navigation`/`complementary`/
+`contentinfo` as semantic landmarks). Capped at 50 nodes per chain.
+
+PII guardrails are unchanged: the mapper still never copies `$ip`,
+`$user_agent`, `email`, `name`, `phone`, raw cookies, or unknown
+property blobs.
+
+---
+
+## 12. Design rules (designer-voiced findings)
+
+Snapshots tell us what the page is. Events tell us what users did. The
+**design rules** (Layer C, `forge/src/lib/phase2/rules/`) read both and
+emit findings that name *the actual element* — not "promote A over B"
+but "the most-clicked CTA on `/pricing` is `Start free trial` (38%
+share); the visually heaviest one is `Book demo` (signals: text-2xl,
+bg-primary, font-bold). Drop bg-primary or move trial into the hero."
+
+### 12.1 Rule contract
+
+```ts
+interface DesignRule {
+  id: string;
+  category: 'hierarchy' | 'fold' | 'rage' | 'asymmetry' | 'nav' | 'mismatch';
+  evaluate(ctx: DesignRuleContext): DesignFinding[];
+}
+
+interface DesignFinding {
+  id;          // stable, e.g. 'hero-hierarchy-inversion:/pricing'
+  ruleId; category; severity;       // 'info' | 'warn' | 'critical'
+  confidence;  priorityScore;       // both 0..1
+  pathRef;     // page or null for site-wide
+  title;  summary;
+  recommendation: string[];          // 1-2 designer-voiced paragraphs
+  evidence: { label, value, context? }[];
+  refs?: { snapshotId?; ctaRef?; elementRef?; };
+}
+```
+
+Rules are pure, deterministic, and own their own minimum-sample
+thresholds — they return `[]` rather than firing on shaky data.
+
+### 12.2 Rules shipping in v1
+
+| Rule id | Trigger | Recommendation voice |
+|---|---|---|
+| `hero-hierarchy-inversion` | Most-clicked CTA on a page ≠ visually heaviest CTA on the same page (≥ 30 clicks/window) | *"Most-clicked CTA is `Start free trial` (38% / 1,420 clicks). Visually heaviest is `Book demo` (signals: text-2xl, bg-primary, font-bold). The eye should land where the value lands. Drop bg-primary on `Book demo` or promote `Start free trial` into the same header position."* |
+| `above-fold-coverage` | A non-above-fold CTA has visualWeight > 0.4 AND > 50% of pageviews scroll < 40% | *"`Get started` sits inside the main landmark with foldGuess=below. 62% of pageviews never scroll past 40%. Most visitors never see the ask. Move it into the hero or duplicate above the fold."* |
+| `rage-click-target` | ≥ 5 rage clicks on one target on one page AND ≥ 5% of sessions on that page rage-clicked it | *"`Read more` rage-clicked 23 times — that's 7% of sessions on `/faq`. The element looks clickable but probably isn't responding. If meant to expand, rebuild as an accordion; if meant to navigate, fix the handler."* |
+| `mobile-engagement-asymmetry` | An onboarding step's mobile completion rate trails desktop by > 15 percentage points (≥ 50 mobile starts) | *"Mobile users complete `Verify email` at 18% vs 41% on desktop — a 23-point gap across 1,240 mobile starts. Touch targets and layout likely break at small viewports."* |
+| `nav-dispersion` | Site-wide nav clicks: ≥ 50 clicks across ≥ 6 destinations with Gini < 0.3 | *"1,820 nav clicks across 9 destinations with Gini 0.18. Click distribution is essentially uniform — the IA isn't telling visitors where to start. Demote 5 entries into a secondary menu."* |
+
+### 12.3 Output
+
+`POST /api/phase2/insights/run` now returns a `designReport` field:
+
+```jsonc
+{
+  "siteId": "...",
+  "findings": [...],          // existing Phase 1 statistical findings
+  "designReport": {
+    "findings": [...],        // DesignFinding[] sorted by priority×severity×confidence
+    "diagnostics": [          // why each rule did/didn't fire
+      { "ruleId": "hero-hierarchy-inversion", "emitted": 2 },
+      { "ruleId": "above-fold-coverage", "emitted": 0, "skippedReason": "NO_SCROLL_DATA" }
+    ],
+    "groundedInSnapshots": true
+  }
+}
+```
+
+Design findings are in addition to Phase 1 findings, not in place of
+them. They are deliberately *designer-voiced* — naming elements,
+quoting class signals, citing share/click counts — so the audit reads
+like a critique instead of a dashboard.
+
+### 12.4 Deferred rules (Layer C, future)
+
+- `landing-promise-mismatch` — campaign tokens vs page H1/OG tokens
+- `cta-form-mismatch` — high-intent CTA leading into long form
+- `headline-collision` — multiple H1-equivalent visual weights
+- `sticky-affordance-suggestion` — high-intent CTA available only above-fold
+
+---
+
+## 13. Out of scope for Phase 2 (deferred)
 
 - Other providers (Shopify Admin, Segment write-key receiver, GA4 BigQuery
   export). They reuse the same `Phase2Connector`-shaped path.
@@ -401,4 +507,6 @@ actual class signals.
   + `/api/phase2/sites/:siteId/snapshots`).
 - Identity stitching beyond the `anonymousId` carrier field.
 - Headless-render snapshots (JS-rendered SPAs). v1 is HTML-only.
+- LLM-narrated finding prose (current templates produce specific,
+  designer-voiced findings deterministically).
 - Outcome/experiment loop (Phase 3).
