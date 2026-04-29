@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ForgeParticleCanvas } from "@/components/forge-particle-background";
+import { useState } from "react";
+import { ForgeDocsParticleCanvas } from "@/components/forge-particle-background";
 
 const ENDPOINTS: { method: string; path: string; note: string }[] = [
   { method: "GET", path: "/api/phase1/health", note: "Service health and capability flags." },
@@ -16,23 +17,44 @@ const ENDPOINTS: { method: string; path: string; note: string }[] = [
 ];
 
 function CodeBlock({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(children.trim());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {
+      console.error("Failed to copy", e);
+    }
+  };
+
   return (
-    <pre className="overflow-x-auto rounded-2xl border border-black/[0.08] bg-[#111/[0.035]] px-5 py-4 text-left font-mono text-[12px] leading-relaxed text-[#111] md:text-[13px]">
-      {children.trim()}
-    </pre>
+    <div className="relative group mb-4">
+      <pre className="overflow-x-auto rounded-2xl border border-black/[0.08] bg-[#111/[0.035]] px-5 py-4 text-left font-mono text-[12px] leading-[1.8] text-[#111] md:text-[13px]">
+        {children.trim()}
+      </pre>
+      <button
+        onClick={handleCopy}
+        className="absolute top-2 right-2 rounded-md bg-white border border-black/[0.08] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B] opacity-0 transition-opacity group-hover:opacity-100 hover:text-[#111] shadow-sm"
+        aria-label="Copy code"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    </div>
   );
 }
 
 export default function DocsPage() {
   return (
     <main className="relative min-h-[220vh] w-full bg-[#FAFAF8] text-[#111]">
-      <header className="fixed top-0 left-0 z-50 flex w-full flex-wrap items-center justify-between gap-y-4 px-6 py-8 pointer-events-none">
-        <Link href="/" className="pointer-events-auto flex items-center gap-3 no-underline">
+      <header className="fixed top-0 left-0 w-full z-50 flex flex-wrap items-center justify-between gap-y-4 px-6 py-6 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
+        <Link href="/" className="flex items-center gap-3 no-underline">
           <div className="h-6 w-6 rounded-md bg-[#111]" />
           <span className="sans-text text-xl font-bold tracking-tight text-[#111]">Forge</span>
         </Link>
         <nav
-          className="pointer-events-auto flex flex-wrap items-center justify-end gap-4 md:gap-8 sans-text"
+          className="flex flex-wrap items-center justify-end gap-4 md:gap-8 sans-text"
           aria-label="Primary"
         >
           <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111]">API</span>
@@ -46,7 +68,7 @@ export default function DocsPage() {
             href="/phase1"
             className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
-            Lab
+            Phase 1
           </Link>
         </nav>
         <div className="hidden lg:block sans-text text-xs font-bold uppercase tracking-widest text-[#6B6B6B]">
@@ -54,7 +76,7 @@ export default function DocsPage() {
         </div>
       </header>
 
-      <ForgeParticleCanvas />
+      <ForgeDocsParticleCanvas />
 
       <article className="relative z-10 mx-auto max-w-[720px] px-6 pb-32 pt-28 md:px-10 md:pt-36">
         <p className="sans-text mb-4 text-[11px] font-bold uppercase tracking-[0.25em] text-[#6B6B6B]">
@@ -64,7 +86,7 @@ export default function DocsPage() {
           API reference
         </h1>
         <p
-          className="mb-14 font-[family-name:var(--font-newsreader)] text-lg leading-relaxed text-[#6B6B6B] md:text-xl"
+          className="mb-14 font-[family-name:var(--font-newsreader)] text-lg leading-[1.8] text-[#6B6B6B] md:text-xl"
           style={{ fontStyle: "normal" }}
         >
           All routes run on the same Forge deployment as this site — there is no separate backend service.
@@ -73,7 +95,7 @@ export default function DocsPage() {
 
         <section className="mb-14 rounded-[28px] border border-black/[0.06] bg-[rgba(250,250,248,0.78)] p-8 shadow-[0_24px_80px_-32px_rgba(0,0,0,0.12)] backdrop-blur-xl md:p-10">
           <h2 className="sans-text mb-4 text-xl font-bold tracking-tight text-[#111] md:text-2xl">Base URL</h2>
-          <p className="sans-text mb-4 text-sm leading-relaxed text-[#6B6B6B] md:text-base">
+          <p className="sans-text mb-4 text-sm leading-[1.8] text-[#6B6B6B] md:text-base">
             Use your deployment origin (for example{" "}
             <code className="rounded bg-black/[0.06] px-1.5 py-0.5 font-mono text-[13px] text-[#111]">
               https://your-app.vercel.app
@@ -87,7 +109,7 @@ export default function DocsPage() {
           <h2 className="sans-text mb-4 text-xl font-bold tracking-tight text-[#111] md:text-2xl">
             Organization context
           </h2>
-          <ul className="sans-text mb-6 list-disc space-y-2 pl-5 text-sm leading-relaxed text-[#6B6B6B] md:text-base">
+          <ul className="sans-text mb-6 list-disc space-y-2 pl-5 text-sm leading-[1.8] text-[#6B6B6B] md:text-base">
             <li>
               Prefer header{" "}
               <code className="rounded bg-black/[0.06] px-1 font-mono text-[13px] text-[#111]">x-org-id</code>.
@@ -119,7 +141,7 @@ export default function DocsPage() {
                   </span>
                   <code className="break-all font-mono text-[13px] text-[#111]">{row.path}</code>
                 </div>
-                <p className="sans-text text-sm leading-relaxed text-[#6B6B6B] md:max-w-[340px] md:text-right">
+                <p className="sans-text text-sm leading-[1.8] text-[#6B6B6B] md:max-w-[340px] md:text-right">
                   {row.note}
                 </p>
               </div>

@@ -3,7 +3,18 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export type Phase1Collection = 'sites' | 'events' | 'snapshots';
+/**
+ * Collections backed by Vercel Blob (or local fs fallback in dev).
+ *
+ * - `sites`: site registrations.
+ * - `events`: Phase 1 + Phase 2 canonical events. Phase 2 records carry extra
+ *   fields (`occurredAt`, `source`, `sourceEventId`, etc.); legacy Phase 1 readers
+ *   ignore them and continue to work.
+ * - `snapshots`: Phase 1 readiness snapshots.
+ * - `siteConfigs`: per-site Phase 2 config snapshots. Latest record wins (storage
+ *   sorts by `updatedAt` desc on read).
+ */
+export type Phase1Collection = 'sites' | 'events' | 'snapshots' | 'siteConfigs';
 
 export interface Phase1Site {
   id: string;
@@ -119,6 +130,16 @@ function recordBlobPathname(
         );
       }
       return `${PHASE1_PREFIX}/snapshots/${month}/${siteId}/${id}.json`;
+    }
+    case 'siteConfigs': {
+      const siteId = typeof record.siteId === 'string' ? record.siteId : null;
+      if (!siteId) {
+        throw new Phase1StorageError(
+          'BLOB_APPEND_FAILED',
+          'Site config record missing siteId for partitioned blob path.'
+        );
+      }
+      return `${PHASE1_PREFIX}/siteConfigs/${month}/${siteId}/${id}.json`;
     }
   }
 }
@@ -362,6 +383,22 @@ export async function readJsonlRecords<T>(
     return rows.slice(0, limit);
   }
 
+  if (collection === 'siteConfigs' && siteId) {
+    const rows: T[] = [];
+    for (const month of months) {
+      const prefix = `${PHASE1_PREFIX}/siteConfigs/${month}/${siteId}/`;
+      const entries = await listBlobJsonEntries(prefix, token);
+      for (const { pathname, url } of entries) {
+        const parsed = await fetchBlobJson<T>(pathname, token, { url });
+        if (!parsed) continue;
+        if (filter && !filter(parsed)) continue;
+        rows.push(parsed);
+      }
+    }
+    rows.sort((a, b) => compareRecordsByUpdatedAt(a, b));
+    return rows.slice(0, limit);
+  }
+
   const collected: T[] = [];
 
   for (const month of months) {
@@ -441,6 +478,18 @@ function compareRecordsByGeneratedAt(a: unknown, b: unknown): number {
   return gb - ga;
 }
 
+function compareRecordsByUpdatedAt(a: unknown, b: unknown): number {
+  const ua =
+    typeof a === 'object' && a !== null && 'updatedAt' in a && typeof (a as { updatedAt: string }).updatedAt === 'string'
+      ? Date.parse((a as { updatedAt: string }).updatedAt)
+      : 0;
+  const ub =
+    typeof b === 'object' && b !== null && 'updatedAt' in b && typeof (b as { updatedAt: string }).updatedAt === 'string'
+      ? Date.parse((b as { updatedAt: string }).updatedAt)
+      : 0;
+  return ub - ua;
+}
+
 async function readPhase1RecordsLocal<T>(
   collection: Phase1Collection,
   options: { limit: number; monthsToScan: number; filter?: (record: T) => boolean; siteId?: string }
@@ -456,6 +505,17 @@ async function readPhase1RecordsLocal<T>(
       rows.push(...batch);
     }
     rows.sort((a, b) => compareRecordsByGeneratedAt(a, b));
+    return rows.slice(0, limit);
+  }
+
+  if (collection === 'siteConfigs' && siteId) {
+    const rows: T[] = [];
+    for (const month of months) {
+      const rel = `${PHASE1_PREFIX}/siteConfigs/${month}/${siteId}`;
+      const batch = await readLocalJsonFiles<T>(rel, filter, 10_000);
+      rows.push(...batch);
+    }
+    rows.sort((a, b) => compareRecordsByUpdatedAt(a, b));
     return rows.slice(0, limit);
   }
 
