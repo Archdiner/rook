@@ -40,7 +40,7 @@ function fallbackSufficiency(siteId: string, events: Phase1Event[]): Phase1Readi
     score >= 85 ? 'sufficient' : score >= 50 ? 'collecting' : 'insufficient';
 
   return {
-    id: `snapshot-${siteId}-${new Date().toISOString().slice(0, 16)}`,
+    id: randomUUID(),
     siteId,
     score,
     status,
@@ -141,7 +141,7 @@ async function buildRecommendationsResponse(siteId: string, organizationId: stri
 
   const snapshot = await computeSnapshot(siteId, events);
   await repository.createReadinessSnapshot({
-    id: randomUUID(),
+    id: snapshot.id,
     organizationId,
     siteId,
     score: snapshot.score,

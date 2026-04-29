@@ -40,24 +40,39 @@ export interface DiscoveryPayload {
   website_field?: string;
 }
 
+/** Coerces typical JSON/form values into number | null | undefined for q4. */
+const optionalNullableQ4 = z.preprocess((val) => {
+  if (val === undefined || val === null) return val;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const t = val.trim();
+    if (t === '') return undefined;
+    const n = Number(t);
+    return Number.isFinite(n) ? n : Number.NaN;
+  }
+  return Number.NaN;
+}, z.union([z.number(), z.null()]).optional());
+
 const looseDiscoveryShape = z.object({
-  website_field: z.unknown().optional(),
-  q1: z.unknown().optional(),
-  q2: z.unknown().optional(),
-  q3: z.unknown().optional(),
-  q3_other: z.unknown().optional(),
-  q4: z.unknown().optional(),
-  q4_note: z.unknown().optional(),
-  q5: z.unknown().optional(),
-  q6: z.unknown().optional(),
-  q7: z.unknown().optional(),
-  q7_email: z.unknown().optional(),
-  q8: z.unknown().optional(),
-  q8_url: z.unknown().optional(),
+  website_field: z.string().optional(),
+  q1: z.enum(['yes', 'no']).optional(),
+  q2: z.string().optional(),
+  q3: z.array(z.string()).optional(),
+  q3_other: z.string().optional(),
+  q4: optionalNullableQ4,
+  q4_note: z.string().optional(),
+  q5: z.string().optional(),
+  q6: z.string().optional(),
+  q7: z.enum(['yes', 'no', '']).optional(),
+  q7_email: z.string().optional(),
+  q8: z.enum(['yes', 'no', '']).optional(),
+  q8_url: z.string().optional(),
 });
 
+type LooseDiscoveryInput = z.infer<typeof looseDiscoveryShape>;
+
 export const discoveryPayloadSchema = looseDiscoveryShape.superRefine((b, ctx) => {
-  if (typeof b.website_field === 'string' && b.website_field.trim() !== '') {
+  if ((b.website_field?.trim() ?? '') !== '') {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'Submission rejected.',
@@ -79,7 +94,7 @@ export const discoveryPayloadSchema = looseDiscoveryShape.superRefine((b, ctx) =
     return;
   }
 
-  const q4 = typeof b.q4 === 'number' ? b.q4 : Number.NaN;
+  const q4 = typeof b.q4 === 'number' && !Number.isNaN(b.q4) ? b.q4 : Number.NaN;
   if (!Number.isInteger(q4) || q4 < 1 || q4 > 5) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -151,38 +166,37 @@ export const discoveryPayloadSchema = looseDiscoveryShape.superRefine((b, ctx) =
   }
 });
 
-function buildDiscoveryPayload(body: Record<string, unknown>): DiscoveryPayload {
+function buildDiscoveryPayload(body: LooseDiscoveryInput): DiscoveryPayload {
   if (body.q1 === 'no') {
     return {
       q1: 'no',
-      website_field: typeof body.website_field === 'string' ? body.website_field : '',
+      website_field: body.website_field ?? '',
     };
   }
 
-  const q3Raw = Array.isArray(body.q3) ? body.q3 : [];
-  const q3 = q3Raw.filter((v): v is string => typeof v === 'string' && Q3_VALID.has(v));
+  const q3 = (body.q3 ?? []).filter((v) => Q3_VALID.has(v));
 
   let q7Email = '';
   if (body.q7 === 'yes') {
-    q7Email = typeof body.q7_email === 'string' ? body.q7_email.trim() : '';
+    q7Email = (body.q7_email ?? '').trim();
   }
 
   let q8Url = '';
   if (body.q8 === 'yes') {
-    q8Url = typeof body.q8_url === 'string' ? body.q8_url.trim() : '';
+    q8Url = (body.q8_url ?? '').trim();
   }
 
   const q4 = typeof body.q4 === 'number' ? body.q4 : null;
 
   return {
     q1: 'yes',
-    q2: typeof body.q2 === 'string' ? body.q2.trim() : '',
+    q2: (body.q2 ?? '').trim(),
     q3,
-    q3_other: typeof body.q3_other === 'string' ? body.q3_other.trim() : '',
+    q3_other: (body.q3_other ?? '').trim(),
     q4,
-    q4_note: typeof body.q4_note === 'string' ? body.q4_note.trim() : '',
-    q5: typeof body.q5 === 'string' ? body.q5 : '',
-    q6: typeof body.q6 === 'string' ? body.q6 : '',
+    q4_note: (body.q4_note ?? '').trim(),
+    q5: body.q5 ?? '',
+    q6: body.q6 ?? '',
     q7: body.q7 as 'yes' | 'no',
     q7_email: q7Email,
     q8: body.q8 as 'yes' | 'no',
@@ -204,6 +218,5 @@ export function validateDiscoveryPayload(
     return { ok: false, error: first?.message ?? 'Invalid payload.' };
   }
 
-  const record = body as Record<string, unknown>;
-  return { ok: true, data: buildDiscoveryPayload(record) };
+  return { ok: true, data: buildDiscoveryPayload(parsed.data) };
 }

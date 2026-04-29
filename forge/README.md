@@ -10,6 +10,8 @@ When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensur
 
 **Full product narrative (Phases 0–4):** see [`docs/PRODUCT_PRD.md`](docs/PRODUCT_PRD.md). For private scratch PRD drafts, keep a local file such as `PRD.full.md` (ignored by git when listed in `.gitignore`).
 
+**Interactive API docs** (marketing-site visuals + particle background): open **`/docs`** on your deployment (e.g. `https://your-app.vercel.app/docs`).
+
 ## What Exists Today
 
 - Discovery survey flow with server-side intake handling (`src/app/discovery`, `src/app/api/discovery/route.ts`)

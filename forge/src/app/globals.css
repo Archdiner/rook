@@ -30,6 +30,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.sans-text {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
 /* Subtle SVG Noise Texture to remove the "empty" feeling */
 body::before {
   content: "";

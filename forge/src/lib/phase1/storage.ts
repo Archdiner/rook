@@ -55,11 +55,9 @@ export class Phase1StorageError extends Error {
   }
 }
 
-interface BlobLikeEntry {
-  pathname?: string;
-}
-
 const PHASE1_PREFIX = 'phase1';
+/** Vercel Blob `list` maximum page size (SDK default; larger values are capped). */
+const BLOB_LIST_PAGE_LIMIT = 1000;
 const DEFAULT_READ_LIMIT = 100;
 const DEFAULT_MONTHS_TO_SCAN = 6;
 const LOCAL_FALLBACK_ROOT = path.join(os.tmpdir(), 'forge-phase1');
@@ -135,19 +133,33 @@ async function writeLocalJsonRecord(pathname: string, record: object): Promise<v
   await fs.writeFile(filePath, JSON.stringify(record), 'utf8');
 }
 
-async function listBlobJsonPathnames(prefix: string, token: string): Promise<string[]> {
+async function listBlobJsonEntries(
+  prefix: string,
+  token: string
+): Promise<Array<{ pathname: string; url: string }>> {
+  const out: Array<{ pathname: string; url: string }> = [];
+  let cursor: string | undefined;
   try {
-    const result = await list({
-      token,
-      prefix,
-      limit: 2000,
-    });
-    return (result.blobs as BlobLikeEntry[])
-      .map((entry) => entry.pathname)
-      .filter((pathname): pathname is string => Boolean(pathname?.endsWith('.json')));
+    for (;;) {
+      const result = await list({
+        token,
+        prefix,
+        limit: BLOB_LIST_PAGE_LIMIT,
+        cursor,
+      });
+      for (const entry of result.blobs) {
+        if (entry.pathname.endsWith('.json')) {
+          out.push({ pathname: entry.pathname, url: entry.url });
+        }
+      }
+      if (!result.hasMore) break;
+      cursor = result.cursor;
+      if (!cursor) break;
+    }
   } catch (error) {
     throw new Phase1StorageError('BLOB_READ_FAILED', `Unable to list blobs for prefix ${prefix}`, error);
   }
+  return out.sort((a, b) => b.pathname.localeCompare(a.pathname));
 }
 
 function parseJsonObject<T>(raw: string): T | null {
@@ -164,10 +176,14 @@ function parseJsonlLine<T>(line: string): T | null {
   return parseJsonObject(trimmed);
 }
 
-async function fetchBlobJson<T>(pathname: string, token: string): Promise<T | null> {
+async function fetchBlobJson<T>(
+  pathname: string,
+  token: string,
+  options?: { url?: string }
+): Promise<T | null> {
   try {
-    const meta = await head(pathname, { token });
-    const res = await fetch(meta.url, { cache: 'no-store' });
+    const url = options?.url ?? (await head(pathname, { token })).url;
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     return parseJsonObject<T>(await res.text());
   } catch (error) {
@@ -334,9 +350,9 @@ export async function readJsonlRecords<T>(
     const rows: T[] = [];
     for (const month of months) {
       const prefix = `${PHASE1_PREFIX}/snapshots/${month}/${siteId}/`;
-      const paths = await listBlobJsonPathnames(prefix, token);
-      for (const pathname of paths) {
-        const parsed = await fetchBlobJson<T>(pathname, token);
+      const entries = await listBlobJsonEntries(prefix, token);
+      for (const { pathname, url } of entries) {
+        const parsed = await fetchBlobJson<T>(pathname, token, { url });
         if (!parsed) continue;
         if (filter && !filter(parsed)) continue;
         rows.push(parsed);
@@ -354,10 +370,10 @@ export async function readJsonlRecords<T>(
     if (collection === 'events' && siteId) {
       const seenIds = new Set<string>();
       const prefix = `${PHASE1_PREFIX}/events/${month}/${siteId}/`;
-      const paths = await listBlobJsonPathnames(prefix, token);
-      for (const pathname of paths.sort((a, b) => b.localeCompare(a))) {
+      const entries = await listBlobJsonEntries(prefix, token);
+      for (const { pathname, url } of entries) {
         if (collected.length >= limit) break;
-        const parsed = await fetchBlobJson<T>(pathname, token);
+        const parsed = await fetchBlobJson<T>(pathname, token, { url });
         if (!parsed) continue;
         if (filter && !filter(parsed)) continue;
         const rid =
@@ -392,10 +408,10 @@ export async function readJsonlRecords<T>(
         ? `${PHASE1_PREFIX}/sites/${month}/`
         : `${PHASE1_PREFIX}/${collection}/${month}/`;
 
-    const paths = await listBlobJsonPathnames(prefix, token);
-    for (const pathname of paths.sort((a, b) => b.localeCompare(a))) {
+    const entries = await listBlobJsonEntries(prefix, token);
+    for (const { pathname, url } of entries) {
       if (collected.length >= limit) break;
-      const parsed = await fetchBlobJson<T>(pathname, token);
+      const parsed = await fetchBlobJson<T>(pathname, token, { url });
       if (!parsed) continue;
       if (filter && !filter(parsed)) continue;
       collected.push(parsed);
