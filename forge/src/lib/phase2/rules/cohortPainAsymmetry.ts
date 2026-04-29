@@ -1,17 +1,16 @@
 /**
- * Rule: cohort-pain-asymmetry
+ * Rule: cohort-pain-asymmetry (v2)
  *
- * Measures rage-clicks per session for each cohort within a declared
- * cohort dimension. When the worst cohort sees at least double the
- * site-median rate (and at least 0.05 rage events / session), emit a
- * finding — the friction is cohort-shaped, not page-shaped, and a
- * page-level fix won't move the needle.
+ * Composite pain index per cohort: weighted blend of
+ *   - rage events / session,
+ *   - error events ($exception-mapped `error`) / session,
+ *   - shallow-session rate (≤1 path, shallow event count — "can't find what they wanted").
+ *
+ * Indices are min–max normalized *across cohorts in this dimension*, then compared to the site
+ * median composite so spikes on cold cohorts aren't missed when absolute rates are globally low.
  */
 
-import type {
-  CanonicalEvent,
-  CohortDimensionConfig,
-} from "@/lib/phase2/types";
+import type { CanonicalEvent, CohortDimensionConfig } from "@/lib/phase2/types";
 
 import type { SessionTrace } from "./helpers";
 import {
@@ -25,23 +24,27 @@ import {
   sanitizeIdSegment,
   topByCount,
 } from "./helpers";
-import type {
-  AuditFinding,
-  AuditFindingEvidence,
-  AuditRule,
-  AuditRuleContext,
-} from "./types";
+import { COHORT_PAIN_ELIGIBILITY, COHORT_PAIN_WEIGHTS } from "./ruleTuning";
+import type { AuditFinding, AuditFindingEvidence, AuditRule, AuditRuleContext } from "./types";
 
-const MIN_COHORT_SESSIONS = 50;
-const MIN_TOP_RATE = 0.05;
-const MULTIPLE_THRESHOLD = 2;
-const SEVERITY_MULTIPLE = 4;
+const {
+  compositeAbsoluteFloor,
+  epsilon,
+  medianMultipleFloor,
+  minSessionsPerCohort,
+} = COHORT_PAIN_ELIGIBILITY;
+
+const WR = COHORT_PAIN_WEIGHTS.rage;
+const WE = COHORT_PAIN_WEIGHTS.error;
+const WS = COHORT_PAIN_WEIGHTS.stagnation;
 
 interface CohortBucket {
   label: string;
   sessions: SessionTrace[];
   rageEvents: CanonicalEvent[];
-  rate: number;
+  errorEvents: CanonicalEvent[];
+  /** Sessions with at most one path and few events — brittle browse / bounce-ish. */
+  stagnationSessions: number;
 }
 
 export const cohortPainAsymmetry: AuditRule = {
@@ -61,10 +64,11 @@ export const cohortPainAsymmetry: AuditRule = {
   },
 };
 
-function evaluateDimension(
-  dim: CohortDimensionConfig,
-  sessions: SessionTrace[],
-): AuditFinding | null {
+function stagnationGuess(session: SessionTrace): boolean {
+  return session.paths.length <= 1 && session.events.length <= 5;
+}
+
+function evaluateDimension(dim: CohortDimensionConfig, sessions: SessionTrace[]): AuditFinding | null {
   const fallback = typeof dim.fallback === "string" ? dim.fallback : "(unassigned)";
 
   const buckets = new Map<string, CohortBucket>();
@@ -72,90 +76,153 @@ function evaluateDimension(
     const label = assignSessionCohort(session, dim);
     let bucket = buckets.get(label);
     if (!bucket) {
-      bucket = { label, sessions: [], rageEvents: [], rate: 0 };
+      bucket = {
+        label,
+        sessions: [],
+        rageEvents: [],
+        errorEvents: [],
+        stagnationSessions: 0,
+      };
       buckets.set(label, bucket);
     }
     bucket.sessions.push(session);
+    if (stagnationGuess(session)) bucket.stagnationSessions += 1;
     for (const event of session.events) {
       if (event.type === "rage_click") bucket.rageEvents.push(event);
+      if (event.type === "error") bucket.errorEvents.push(event);
     }
   }
 
-  const eligible: CohortBucket[] = [];
+  const eligible: Array<CohortBucket & { composite: number; rageRate: number; errorRate: number; stagRate: number }> = [];
+
   for (const bucket of buckets.values()) {
     if (bucket.label === fallback) continue;
-    if (bucket.sessions.length < MIN_COHORT_SESSIONS) continue;
-    bucket.rate = bucket.rageEvents.length / bucket.sessions.length;
-    eligible.push(bucket);
+    if (bucket.sessions.length < minSessionsPerCohort) continue;
+    const n = bucket.sessions.length;
+    const rageRate = bucket.rageEvents.length / n;
+    const errorRate = bucket.errorEvents.length / n;
+    const stagRate = bucket.stagnationSessions / n;
+    eligible.push({
+      ...bucket,
+      rageRate,
+      errorRate,
+      stagRate,
+      composite: 0,
+    });
   }
 
   if (eligible.length < 2) return null;
 
-  const siteMedian = medianOf(eligible.map((b) => b.rate));
-  if (siteMedian <= 0) return null;
+  const maxR = Math.max(...eligible.map((b) => b.rageRate), epsilon);
+  const maxE = Math.max(...eligible.map((b) => b.errorRate), epsilon);
+  const maxS = Math.max(...eligible.map((b) => b.stagRate), epsilon);
+
+  for (const b of eligible) {
+    const normR = b.rageRate / maxR;
+    const normE = b.errorRate / maxE;
+    const normS = b.stagRate / maxS;
+    b.composite = clamp(WR * normR + WE * normE + WS * normS, 0, 1);
+  }
+
+  const rates = eligible.map((b) => b.composite).sort((a, c) => a - c);
+  const medianComposite = medianOf(rates);
+  if (medianComposite <= 0) return null;
 
   eligible.sort((a, b) => {
-    if (b.rate !== a.rate) return b.rate - a.rate;
+    if (b.composite !== a.composite) return b.composite - a.composite;
     return a.label.localeCompare(b.label);
   });
 
   const top = eligible[0];
-  if (top.rate < Math.max(siteMedian * MULTIPLE_THRESHOLD, MIN_TOP_RATE)) {
-    return null;
-  }
+  const multiple = top.composite / Math.max(medianComposite, epsilon);
+  const absoluteOk = top.composite >= compositeAbsoluteFloor;
+  const multipleOk = multiple >= medianMultipleFloor;
+  if (!(absoluteOk && multipleOk)) return null;
 
-  const multiple = top.rate / siteMedian;
-  const reference = pickReferenceCohort(eligible);
+  const asc = [...eligible].sort((a, b) => {
+    if (a.composite !== b.composite) return a.composite - b.composite;
+    return a.label.localeCompare(b.label);
+  });
 
-  return buildFinding({ dim, top, siteMedian, multiple, reference });
+  let referenceRow = asc[Math.floor((asc.length - 1) / 2)];
+  if (!referenceRow && asc[0]) referenceRow = asc[0];
+
+  return buildFinding({
+    dim,
+    top,
+    medianComposite,
+    multiple,
+    referenceRow: referenceRow ?? top,
+  });
 }
 
-interface FindingInputs {
+interface Inputs {
   dim: CohortDimensionConfig;
-  top: CohortBucket;
-  siteMedian: number;
+  top: CohortBucket & {
+    composite: number;
+    rageRate: number;
+    errorRate: number;
+    stagRate: number;
+    stagnationSessions: number;
+  };
+  medianComposite: number;
   multiple: number;
-  reference: CohortBucket;
+  referenceRow: CohortBucket & {
+    composite: number;
+    rageRate: number;
+    errorRate: number;
+    stagRate: number;
+    stagnationSessions: number;
+  };
 }
 
-function buildFinding(inputs: FindingInputs): AuditFinding {
-  const { dim, top, siteMedian, multiple, reference } = inputs;
+function buildFinding(inputs: Inputs): AuditFinding {
+  const { dim, top, medianComposite, multiple, referenceRow } = inputs;
+
+  const stagnationPct =
+    top.sessions.length > 0
+      ? `${Math.round((top.stagnationSessions / top.sessions.length) * 100)}%`
+      : "0%";
 
   const summary =
-    `On dimension ${quote(dim.label)}, the cohort ${quote(top.label)} shows ${round(top.rate, 3)} ` +
-    `rage-clicks per session — ${round(multiple, 1)}× the site median (${round(siteMedian, 3)}). ` +
+    `On dimension ${quote(dim.label)}, the cohort ${quote(top.label)} has a composite pain index of ${round(top.composite, 3)} ` +
+    `(rage ${round(top.rageRate, 3)} / sess, errors ${round(top.errorRate, 3)}, ${stagnationPct} shallow-session ` +
+    `stagnation) — ${round(multiple, 1)}× the site median (${round(medianComposite, 3)}). ` +
     `${formatCount(top.sessions.length)} sessions in this cohort.`;
 
   const para1 =
-    `${top.label} users are hitting friction the rest of the audience isn't. Either the surface ` +
-    `they land on doesn't match the promise that brought them there (campaign mismatch), or this ` +
-    `audience needs a different proof/affordance set. Pull a recording (\`recording_id\` is on the ` +
-    `rage events) and watch one before deciding.`;
+    `${top.label} users are accumulating friction signals the rest of the audience isn't (` +
+    `${round(top.rageRate, 3)} rage/session, ${round(top.errorRate, 3)} errors/session, stagnation-heavy traffic). Pull a ` +
+    `recording (\`recording_id\` on rage/error events where present) before deciding what's cultural vs broken.`;
+
   const para2 =
-    `This is a cohort-level pattern, not a page-level one — fixing a single page won't move the ` +
-    `needle. Look for the consistent thread across this cohort's top-rage pages (next paragraph ` +
-    `below or in the evidence).`;
+    `This cohort-level pattern responds to differentiated proof points and onboarding — a single shallow page tweak ` +
+    `won't erase the gap. Benchmark against cohort ${quote(referenceRow.label)} (${round(referenceRow.composite, 3)} composite pain).`;
 
   const topPaths = topByCount(top.rageEvents, (e) => e.path).slice(0, 3);
-  const cohortEvents = top.sessions.flatMap((s) => s.events);
-  const deviceMode = modeStringProp(cohortEvents, "device_type");
+  const cohortEventsFlat = top.sessions.flatMap((s) => s.events);
+  const deviceMode = modeStringProp(cohortEventsFlat, "device_type");
 
   const evidence: AuditFindingEvidence[] = [
     { label: "Dimension", value: dim.label, context: dim.id },
     { label: "Top cohort", value: top.label },
     {
-      label: "Rage rate",
-      value: round(top.rate, 3),
-      context: `${formatCount(top.rageEvents.length)} rage events / ${formatCount(top.sessions.length)} sessions`,
+      label: "Composite pain index",
+      value: round(top.composite, 3),
+      context: `rage ${WR * 100}% + error ${WE * 100}% + stagn ${WS * 100}% (normalized cohort-to-cohort)`,
     },
     {
-      label: "Site median",
-      value: round(siteMedian, 3),
+      label: "Component rates",
+      value: `${round(top.rageRate, 4)} rage / ${round(top.errorRate, 4)} err / ${round(top.stagRate, 4)} shallow`,
+    },
+    {
+      label: "Site median (composite)",
+      value: round(medianComposite, 3),
       context: `${round(multiple, 1)}× multiple`,
     },
     {
       label: "Reference cohort",
-      value: `${quote(reference.label)} (${round(reference.rate, 3)} rage/sess)`,
+      value: `${quote(referenceRow.label)} (${round(referenceRow.composite, 3)} composite)`,
     },
   ];
   if (topPaths.length > 0) {
@@ -164,37 +231,22 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
       value: topPaths.map((p) => `${p.key} (${p.count})`).join(", "),
     });
   }
-  if (deviceMode !== null) {
-    evidence.push({ label: "Top device type in cohort", value: deviceMode });
-  }
+  if (deviceMode !== null) evidence.push({ label: "Top device type in cohort", value: deviceMode });
 
   return {
     id: `cohort-pain-asymmetry:${sanitizeIdSegment(dim.id)}:${sanitizeIdSegment(top.label)}`,
     ruleId: "cohort-pain-asymmetry",
     category: "asymmetry",
-    severity: multiple > SEVERITY_MULTIPLE ? "critical" : "warn",
+    severity:
+      multiple > COHORT_PAIN_ELIGIBILITY.severityMultipleCritical ? "critical" : "warn",
     confidence: clamp(0.4 + Math.log10(Math.max(top.sessions.length, 1)) * 0.2, 0, 0.95),
-    priorityScore: clamp(Math.min(top.rate * 2, 1), 0, 1),
+    priorityScore: clamp(Math.min(top.composite * 2, 1), 0, 1),
     pathRef: null,
-    title: `Cohort ${quote(top.label)} hits ${round(multiple, 1)}× site-median rage rate`,
+    title: `Cohort ${quote(top.label)} pain index ${round(multiple, 1)}× cohort median`,
     summary,
     recommendation: [para1, para2],
     evidence,
   };
-}
-
-/**
- * The cohort whose rate sits at the median (lower-of-two for even-sized
- * input). Used as a contrast point in the recommendation.
- */
-function pickReferenceCohort(sortedDescByRate: readonly CohortBucket[]): CohortBucket {
-  const ascByRate = [...sortedDescByRate].sort((a, b) => {
-    if (a.rate !== b.rate) return a.rate - b.rate;
-    return a.label.localeCompare(b.label);
-  });
-  const mid = Math.floor(ascByRate.length / 2);
-  if (ascByRate.length % 2 === 1) return ascByRate[mid];
-  return ascByRate[mid - 1];
 }
 
 function medianOf(values: readonly number[]): number {

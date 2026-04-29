@@ -57,6 +57,23 @@ function parseCreateBody(
     return { ok: false, message: '`secretRef` must be a string env var name when provided.' };
   }
 
+  if (providerRaw === 'segment') {
+    /**
+     * Segment v1 is **webhook ingest** only (`POST .../segment-webhook`).
+     * `secretRef` must name an env var holding the shared bearer token callers
+     * send as `Authorization: Bearer ...`.
+     */
+    const writeKeyHint = typeof config.writeKey_env === 'string' ? config.writeKey_env.trim() : '';
+    if (!writeKeyHint && !secretRef) {
+      return {
+        ok: false,
+        message:
+          'For segment, set `secretRef` to an env var holding the webhook bearer token ' +
+          '(you may optionally set `config.writeKey_env` to the same name for documentation only).',
+      };
+    }
+  }
+
   if (providerRaw === 'posthog') {
     const host = typeof config.host === 'string' ? config.host.trim() : '';
     const projectId =

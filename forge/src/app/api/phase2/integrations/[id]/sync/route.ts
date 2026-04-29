@@ -112,12 +112,16 @@ export async function POST(request: Request, context: RouteContext) {
     }
 
     if (integration.provider !== 'posthog') {
+      const hint =
+        integration.provider === 'segment'
+          ? 'Use POST /api/phase2/integrations/:id/segment-webhook for Segment HTTP ingest (webhook), not pull-sync.'
+          : `Sync is only implemented for PostHog; "${integration.provider}" is not yet supported.`;
       return NextResponse.json(
         {
           success: false,
           error: {
             code: 'UNSUPPORTED_PROVIDER',
-            message: `Sync is only implemented for PostHog; got "${integration.provider}".`,
+            message: hint,
           },
         },
         { status: 501 }

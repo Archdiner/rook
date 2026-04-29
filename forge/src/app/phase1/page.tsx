@@ -461,7 +461,10 @@ export default function Phase1Page() {
               fontWeight: 700,
             }}
           >
-            Phase 1 Operator Dashboard
+            Phase 1 Operator Dashboard ·{" "}
+            <Link href="/phase2" style={{ fontWeight: 600, letterSpacing: "0.06em", textTransform: "none", color: INK }}>
+              Phase 2 audit UI
+            </Link>
           </div>
         </div>
       </header>
