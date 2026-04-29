@@ -273,17 +273,19 @@ curl -s "$BASE_URL/api/phase2/sites/$SITE_ID/snapshots?pathRef=/pricing" -H "x-o
 See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)` §10
 for the full snapshot contract and visual-weight scoring rubric.
 
-### Design rules (designer-voiced findings)
+### Audit rules (designer- and researcher-voiced findings)
 
 With both snapshots and PostHog events on hand, Forge runs a set of
-**design rules** that produce findings naming actual elements:
+**audit rules** that produce findings naming actual elements, actual
+error messages, actual form fields, actual cohort labels:
 
 ```jsonc
 {
-  "designReport": {
+  "auditReport": {
     "findings": [
       {
         "ruleId": "hero-hierarchy-inversion",
+        "category": "hierarchy",
         "pathRef": "/pricing",
         "title": "Visual hierarchy inverts user preference on /pricing",
         "summary": "Most-clicked CTA on /pricing is `Start free trial` (38% of CTA clicks, 1,420 clicks). The visually heaviest CTA is `Book demo` (visual weight 0.82, signals: text-2xl, bg-primary, font-bold).",
@@ -292,6 +294,14 @@ With both snapshots and PostHog events on hand, Forge runs a set of
           "Concretely: drop bg-primary from `Book demo`, or promote `Start free trial` into the same header position and give it text-2xl + bg-primary."
         ],
         "evidence": [...]
+      },
+      {
+        "ruleId": "form-abandonment",
+        "category": "abandonment",
+        "pathRef": "/signup",
+        "title": "85% abandon the 6-field form on /signup",
+        "summary": "Visitors view the 6-field form on /signup 2,140 times in the window but submit only 312 times — 85% abandonment. Required fields visible: `email`, `phone_number`, `company_size`.",
+        "recommendation": [...]
       }
     ],
     "diagnostics": [...],
@@ -300,10 +310,22 @@ With both snapshots and PostHog events on hand, Forge runs a set of
 }
 ```
 
-Rules shipping in v1: `hero-hierarchy-inversion`, `above-fold-coverage`,
-`rage-click-target`, `mobile-engagement-asymmetry`, `nav-dispersion`.
+**Design rules** (Layer C): `hero-hierarchy-inversion`,
+`above-fold-coverage`, `rage-click-target`,
+`mobile-engagement-asymmetry`, `nav-dispersion`.
+
+**Pain rules** (Layer D): `form-abandonment`, `help-seeking-spike`,
+`hesitation-pattern`, `bounce-on-key-page`, `error-exposure`,
+`return-visit-thrash`, `cohort-pain-asymmetry`.
+
+> **Naming note:** the response field is `auditReport` (formerly
+> `designReport`). The interface `AuditFinding` (formerly
+> `DesignFinding`) and helper `runAuditRules` (formerly
+> `runDesignRules`) reflect that the rule set spans both design and
+> user-pain patterns now.
+
 See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
-§§11–12.
+§§11–14.
 
 ## Architecture (High Level)
 
@@ -328,7 +350,7 @@ See `[docs/PHASE2_EVIDENCE_MODEL.md](docs/PHASE2_EVIDENCE_MODEL.md)`
 - `src/lib/phase2` - Canonical event schema, per-site config, rollup pipeline, validation gate
 - `src/lib/phase2/connectors/posthog` - PostHog connector (mapping, paginated sync, retry/backoff, secret resolution, elements_chain ancestry parser)
 - `src/lib/phase2/snapshots` - Page DNA static analysis (fetcher, parser, visual-weight scoring, fold guess)
-- `src/lib/phase2/rules` - Design rules: hero-hierarchy-inversion, above-fold-coverage, rage-click-target, mobile-engagement-asymmetry, nav-dispersion
+- `src/lib/phase2/rules` - Audit rules. Design: hero-hierarchy-inversion, above-fold-coverage, rage-click-target, mobile-engagement-asymmetry, nav-dispersion. Pain: form-abandonment, help-seeking-spike, hesitation-pattern, bounce-on-key-page, error-exposure, return-visit-thrash, cohort-pain-asymmetry
 - `drizzle` - Generated Postgres migrations (`drizzle-kit generate`)
 - `public` - Static assets
 

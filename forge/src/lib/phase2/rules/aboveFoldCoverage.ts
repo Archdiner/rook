@@ -13,10 +13,10 @@ import type { CanonicalEvent } from "@/lib/phase2/types";
 
 import { clamp, formatCount, pct, quote, readScrollFraction } from "./helpers";
 import type {
-  DesignFinding,
-  DesignFindingEvidence,
-  DesignRule,
-  DesignRuleContext,
+  AuditFinding,
+  AuditFindingEvidence,
+  AuditRule,
+  AuditRuleContext,
 } from "./types";
 
 const MIN_PAGEVIEWS = 30;
@@ -24,13 +24,13 @@ const FOLD_FRACTION = 0.4;
 const MIN_VISUAL_WEIGHT = 0.4;
 const MIN_BELOW_FOLD_SHARE = 0.5;
 
-export const aboveFoldCoverage: DesignRule = {
+export const aboveFoldCoverage: AuditRule = {
   id: "above-fold-coverage",
   name: "Above-fold CTA coverage",
   category: "fold",
 
-  evaluate(ctx: DesignRuleContext): DesignFinding[] {
-    const findings: DesignFinding[] = [];
+  evaluate(ctx: AuditRuleContext): AuditFinding[] {
+    const findings: AuditFinding[] = [];
 
     const pageviewsByPath = new Map<string, CanonicalEvent[]>();
     for (const event of ctx.events) {
@@ -63,7 +63,7 @@ function evaluatePage(
   pathRef: string,
   snapshot: PageSnapshot,
   pageviews: CanonicalEvent[],
-): DesignFinding | null {
+): AuditFinding | null {
   const primary = pickPrimaryBelowFoldCta(snapshot.data.ctas);
   if (!primary) return null;
   if (primary.visualWeight < MIN_VISUAL_WEIGHT) return null;
@@ -95,7 +95,7 @@ function evaluatePage(
       `making this CTA visually important (${signalList}) only matter when the CTA is rendered.`,
   ];
 
-  const evidence: DesignFindingEvidence[] = [
+  const evidence: AuditFindingEvidence[] = [
     {
       label: "Primary CTA",
       value: primary.text || "(unnamed CTA)",

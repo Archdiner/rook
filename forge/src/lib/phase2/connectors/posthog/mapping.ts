@@ -176,6 +176,8 @@ function canonicalizeEventName(raw: string): string {
       return "cta_click";
     case "$rageclick":
       return "rage_click";
+    case "$exception":
+      return "error";
     default:
       return raw.startsWith("$") ? raw.slice(1) : raw;
   }
@@ -355,10 +357,50 @@ function deriveProperties(
     applyRageClickProperties(out, properties, parsedChain.leaf);
   }
 
+  if (rawEventName === "$exception") {
+    applyExceptionProperties(out, properties);
+  }
+
   if (Object.keys(out).length === 0) {
     return undefined;
   }
   return sortRecord(out);
+}
+
+/**
+ * Capture PostHog `$exception` payloads as structured `error_*` properties.
+ * Stack traces and `$exception_personURL` are intentionally dropped — they
+ * tend to carry user/session ids and aren't needed for the audit-rule
+ * grouping (which keys on type + message + path).
+ */
+function applyExceptionProperties(
+  out: Record<string, string | number | boolean | null>,
+  properties: Record<string, unknown>,
+): void {
+  const errorType = trimToString(properties["$exception_type"]);
+  if (errorType !== null) {
+    out.error_type = errorType.slice(0, 200);
+  }
+  const errorMessage = trimToString(properties["$exception_message"]);
+  if (errorMessage !== null) {
+    out.error_message = errorMessage.slice(0, 500);
+  }
+  const errorSource = trimToString(properties["$exception_source"]);
+  if (errorSource !== null) {
+    out.error_source = errorSource.slice(0, 200);
+  }
+  const errorLine = properties["$exception_lineno"];
+  if (isFiniteNumber(errorLine)) {
+    out.error_line = Math.max(0, Math.floor(errorLine));
+  }
+  const errorCol = properties["$exception_colno"];
+  if (isFiniteNumber(errorCol)) {
+    out.error_column = Math.max(0, Math.floor(errorCol));
+  }
+  const handled = properties["$exception_handled"];
+  if (typeof handled === "boolean") {
+    out.error_handled = handled;
+  }
 }
 
 function readElementsChain(

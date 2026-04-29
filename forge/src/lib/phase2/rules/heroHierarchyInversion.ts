@@ -21,10 +21,10 @@ import {
   topByCount,
 } from "./helpers";
 import type {
-  DesignFinding,
-  DesignFindingEvidence,
-  DesignRule,
-  DesignRuleContext,
+  AuditFinding,
+  AuditFindingEvidence,
+  AuditRule,
+  AuditRuleContext,
 } from "./types";
 
 const MIN_CTA_CLICKS = 30;
@@ -34,13 +34,13 @@ interface ClickedRef {
   fallbackText: string | null;
 }
 
-export const heroHierarchyInversion: DesignRule = {
+export const heroHierarchyInversion: AuditRule = {
   id: "hero-hierarchy-inversion",
   name: "Hero hierarchy inversion",
   category: "hierarchy",
 
-  evaluate(ctx: DesignRuleContext): DesignFinding[] {
-    const findings: DesignFinding[] = [];
+  evaluate(ctx: AuditRuleContext): AuditFinding[] {
+    const findings: AuditFinding[] = [];
 
     const clicksByPath = new Map<string, CanonicalEvent[]>();
     for (const event of ctx.events) {
@@ -72,7 +72,7 @@ function evaluatePage(
   pathRef: string,
   snapshot: PageSnapshot,
   clicks: CanonicalEvent[],
-): DesignFinding | null {
+): AuditFinding | null {
   const totalClicks = clicks.length;
 
   // Bucket clicks by matched CTA ref. Unmatched clicks fall back to
@@ -142,7 +142,7 @@ function evaluatePage(
       `${promotionSlot} and give it ${heavyPairSignals}.`,
   ];
 
-  const evidence: DesignFindingEvidence[] = [
+  const evidence: AuditFindingEvidence[] = [
     {
       label: "Most-clicked CTA",
       value: clickedText ?? "(unnamed CTA)",

@@ -435,28 +435,39 @@ bg-primary, font-bold). Drop bg-primary or move trial into the hero."
 ### 12.1 Rule contract
 
 ```ts
-interface DesignRule {
+interface AuditRule {
   id: string;
-  category: 'hierarchy' | 'fold' | 'rage' | 'asymmetry' | 'nav' | 'mismatch';
-  evaluate(ctx: DesignRuleContext): DesignFinding[];
+  category:
+    // Design-shaped
+    | 'hierarchy' | 'fold' | 'nav' | 'mismatch'
+    // Pain-shaped
+    | 'rage' | 'asymmetry' | 'abandonment' | 'help'
+    | 'hesitation' | 'bounce' | 'error' | 'thrash';
+  evaluate(ctx: AuditRuleContext): AuditFinding[];
 }
 
-interface DesignFinding {
+interface AuditFinding {
   id;          // stable, e.g. 'hero-hierarchy-inversion:/pricing'
   ruleId; category; severity;       // 'info' | 'warn' | 'critical'
   confidence;  priorityScore;       // both 0..1
   pathRef;     // page or null for site-wide
   title;  summary;
-  recommendation: string[];          // 1-2 designer-voiced paragraphs
+  recommendation: string[];          // 1-2 designer/researcher-voiced paragraphs
   evidence: { label, value, context? }[];
-  refs?: { snapshotId?; ctaRef?; elementRef?; };
+  refs?: { snapshotId?; ctaRef?; elementRef?; formRef?; };
 }
 ```
 
 Rules are pure, deterministic, and own their own minimum-sample
 thresholds — they return `[]` rather than firing on shaky data.
 
-### 12.2 Rules shipping in v1
+> **Rename note (Layer D):** `DesignFinding`, `DesignRule`,
+> `DesignRuleContext`, `runDesignRules`, `ALL_DESIGN_RULES` and the
+> response field `designReport` were renamed to their `Audit*` /
+> `auditReport` equivalents in this PR. The semantics are unchanged;
+> the new naming captures the broader scope (design **and** pain).
+
+### 12.2 Design rules shipping in v1
 
 | Rule id | Trigger | Recommendation voice |
 |---|---|---|
@@ -468,14 +479,15 @@ thresholds — they return `[]` rather than firing on shaky data.
 
 ### 12.3 Output
 
-`POST /api/phase2/insights/run` now returns a `designReport` field:
+`POST /api/phase2/insights/run` now returns an `auditReport` field
+(formerly `designReport` — see rename note above):
 
 ```jsonc
 {
   "siteId": "...",
   "findings": [...],          // existing Phase 1 statistical findings
-  "designReport": {
-    "findings": [...],        // DesignFinding[] sorted by priority×severity×confidence
+  "auditReport": {
+    "findings": [...],        // AuditFinding[] sorted by priority×severity×confidence
     "diagnostics": [          // why each rule did/didn't fire
       { "ruleId": "hero-hierarchy-inversion", "emitted": 2 },
       { "ruleId": "above-fold-coverage", "emitted": 0, "skippedReason": "NO_SCROLL_DATA" }
@@ -485,12 +497,13 @@ thresholds — they return `[]` rather than firing on shaky data.
 }
 ```
 
-Design findings are in addition to Phase 1 findings, not in place of
-them. They are deliberately *designer-voiced* — naming elements,
-quoting class signals, citing share/click counts — so the audit reads
-like a critique instead of a dashboard.
+Audit findings are in addition to Phase 1 findings, not in place of
+them. They are deliberately *designer- / researcher-voiced* — naming
+elements, quoting class signals, citing share/click counts, quoting
+actual error messages and form field labels — so the audit reads like a
+critique instead of a dashboard.
 
-### 12.4 Deferred rules (Layer C, future)
+### 12.4 Deferred design rules (future)
 
 - `landing-promise-mismatch` — campaign tokens vs page H1/OG tokens
 - `cta-form-mismatch` — high-intent CTA leading into long form
@@ -499,7 +512,91 @@ like a critique instead of a dashboard.
 
 ---
 
-## 13. Out of scope for Phase 2 (deferred)
+## 13. PostHog mapping addendum: `$exception`
+
+To unlock the `error-exposure` rule (§14), the PostHog connector now
+canonicalizes `$exception` events to type `'error'` and extracts the
+following on the canonical event's `properties`:
+
+| Source | Destination | Notes |
+|---|---|---|
+| `$exception_type` | `error_type` | Capped at 200 chars |
+| `$exception_message` | `error_message` | Capped at 500 chars; first 120 used in finding summaries |
+| `$exception_source` | `error_source` | Capped at 200 chars |
+| `$exception_lineno` | `error_line` | Floored, `≥ 0` |
+| `$exception_colno` | `error_column` | Floored, `≥ 0` |
+| `$exception_handled` | `error_handled` | Boolean only; missing means unknown (treated as unhandled in audit) |
+
+`$exception_personURL`, raw stack traces, and breadcrumb dumps are
+intentionally *not* copied — they tend to carry user/session ids and
+aren't needed for grouping (which keys on type + message + path).
+
+---
+
+## 14. Pain rules (user-pain audit)
+
+Pain rules complement design rules with patterns that signal *user
+friction* — abandonment, hesitation, errors, thrashing. They share the
+`AuditRule` contract; the difference is the signal mix they read
+(sessions, error events, form-page traffic) rather than snapshot
+geometry.
+
+### 14.1 Rules shipping in v1
+
+| Rule id | Category | Trigger | Recommendation voice |
+|---|---|---|---|
+| `form-abandonment` | `abandonment` | Form has ≥ 2 fields; ≥ 100 sessions view its page; submit rate < 50% | *"Visitors view the 6-field form on `/signup` 2,140 times in the window but submit only 312 times — 85% abandonment. Required fields visible: `email`, `phone_number`, `company_size`. Audit each — `phone_number` and `company_size` look optional in the UI but block submission. Either drop them or move to a second step after the user is invested."* |
+| `help-seeking-spike` | `help` | On a non-help page, help-CTA share ≥ 5% AND ≥ 2× site baseline; ≥ 50 page CTAs and ≥ 200 site CTAs | *"On `/pricing`, 9% of CTA clicks are help-seeking — 3.2× the site baseline of 2.8%. Visitors are on this page but reaching for help instead of acting. Inline the most-asked support questions as a FAQ accordion below the fold; quote the actual help-CTA labels visitors clicked: `Talk to sales`, `Need help?`."* |
+| `hesitation-pattern` | `hesitation` | ≥ 30 sessions with `active_seconds ≥ 45` on the page where the next event is session-end or back-navigation (no following CTA click) | *"On `/pricing`, 412 sessions held the page in active view for ≥ 45s without acting — 71% of long-dwell sessions either left or back-navigated. Long active dwell with no follow-up is value-clarity friction. The page hands the visitor information but not a reason to commit."* |
+| `bounce-on-key-page` | `bounce` | Landing path is a key page (config-declared OR snapshot CTA visualWeight > 0.6); single-page session with no CTA click; ≥ 100 entries; bounce rate > 50% | *"3,210 sessions land on `/` and 64% leave without clicking anything — a key page that costs visitors more than it gives. The most prominent CTA is `Start free trial` (visual weight 0.83). Audit hero copy, CTA prominence, and load performance — visitors should see something they want within 1.5 seconds."* |
+| `error-exposure` | `error` | ≥ 5 `$exception` events on a `(path, error_type, error_message)` triple in the window; top 10 groups | *"`TypeError: Cannot read property 'id' of undefined` (unhandled) at `pricing.tsx:142:14` — 87 occurrences on `/pricing`, affecting 16% of sessions on the page. `/pricing` is referenced in your conversion funnel (config-declared CTA target). Bumping this fix above feature work is correct."* |
+| `return-visit-thrash` | `thrash` | Same path visited 3+ times in one session AND no advancement to a config-declared narrative-next path between visits (or 4+ with no other path between visits when no narrative is declared); ≥ 50 sessions on path; > 5% thrash rate | *"94 sessions visit `/docs/api` 3+ times without progressing — 11% of sessions that touch this page get caught in a loop. They're searching for something the page doesn't surface clearly."* |
+| `cohort-pain-asymmetry` | `asymmetry` | For each declared cohort dimension, top cohort's rage rate (events/session) ≥ 2× site median across cohorts AND ≥ 0.05 events/session; ≥ 50 sessions per cohort | *"On dimension `device`, the cohort `mobile` shows 0.42 rage-clicks per session — 3.5× the site median (0.12). 1,860 sessions in this cohort. Reference cohort: `desktop` (0.10 rage/sess). Mobile users are hitting friction the rest of the audience isn't."* |
+
+All seven rules survive a strict-trigger necessity test:
+
+- **`form-abandonment`** fires only on real form views, not transient visits.
+- **`help-seeking-spike`** excludes help/docs/FAQ pages from being subjects of the rule, so a docs site doesn't trip on itself.
+- **`hesitation-pattern`** anchors on **leave or back-nav** to discriminate "reading" from "stuck".
+- **`bounce-on-key-page`** restricts to config-declared key pages or high-visual-weight CTAs to avoid noise on incidental landings.
+- **`error-exposure`** caps at the top 10 groups so a broken site doesn't flood the report.
+- **`return-visit-thrash`** uses narrative-aware progression detection; pages with no narrative use a stricter 4+/no-other-path trigger.
+- **`cohort-pain-asymmetry`** uses a numeric **median** (not mean) and excludes the dimension's fallback bucket.
+
+### 14.2 Shared helpers (`rules/helpers.ts`)
+
+Three new helpers underpin the pain rules:
+
+- `groupSessions(events)` — order events by `occurredAt`, bucket by
+  `sessionId`. Returns `SessionTrace { sessionId, events, paths,
+  pathCounts, firstAtMs, lastAtMs, durationMs }`. Filters out the
+  fallback `'unknown_session'` so strangers aren't lumped together.
+- `assignSessionCohort(session, dim)` — resolve a session's cohort
+  label for one declared `CohortDimensionConfig`. Mirrors the rollup
+  pipeline's per-event assignment but at session granularity.
+- `siteBaselineRate(events, matches, totalPredicate?)` — site-wide
+  rate, used by `help-seeking-spike` for the comparison.
+- `isKeyPath(pathRef, config, snapshot?)` — true if the path is
+  referenced in onboarding steps, narratives, declared CTAs, or has a
+  high-visualWeight (> 0.6) CTA on its snapshot. Used by
+  `bounce-on-key-page` and `error-exposure`.
+
+### 14.3 Where pain rules fit
+
+```
+PostHog events  ──┐
+                  ├──►  Audit rules ──►  AuditFinding[]
+Page snapshots  ──┘                       (design + pain)
+```
+
+Pain rules read `AuditRuleContext` exactly like design rules; the
+orchestrator (`runAuditRules`) doesn't distinguish flavors. The output
+shape is one unified list, sorted by `priorityScore` then `severity`
+then `confidence`.
+
+---
+
+## 15. Out of scope for Phase 2 (deferred)
 
 - Other providers (Shopify Admin, Segment write-key receiver, GA4 BigQuery
   export). They reuse the same `Phase2Connector`-shaped path.
@@ -508,5 +605,7 @@ like a critique instead of a dashboard.
 - Identity stitching beyond the `anonymousId` carrier field.
 - Headless-render snapshots (JS-rendered SPAs). v1 is HTML-only.
 - LLM-narrated finding prose (current templates produce specific,
-  designer-voiced findings deterministically).
+  designer- / researcher-voiced findings deterministically).
+- Multi-signal `cohort-pain-asymmetry` (rage + bounce + abandonment
+  blend). v1 uses rage-rate alone.
 - Outcome/experiment loop (Phase 3).

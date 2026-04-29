@@ -4,7 +4,11 @@
  * deterministic, easy to test individually.
  */
 
-import type { CanonicalEvent } from "@/lib/phase2/types";
+import type {
+  CanonicalEvent,
+  CohortDimensionConfig,
+  Phase2SiteConfig,
+} from "@/lib/phase2/types";
 import type { CtaCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
 
 /** Lowercase + collapse whitespace for fuzzy text matching. */
@@ -255,4 +259,174 @@ export function modeStringProp(
     }
   }
   return best === null ? null : best.value;
+}
+
+/* ------------------------------------------------------------------ */
+/* Session reconstruction                                              */
+/* ------------------------------------------------------------------ */
+
+export interface SessionTrace {
+  sessionId: string;
+  /** Events ordered by `occurredAt` ascending. */
+  events: CanonicalEvent[];
+  /** Distinct paths visited in arrival order. */
+  paths: string[];
+  /** Number of times each path appears in this session. */
+  pathCounts: Map<string, number>;
+  firstAtMs: number;
+  lastAtMs: number;
+  durationMs: number;
+}
+
+/**
+ * Group events into sessions, ordered by `occurredAt`. Sessions are stable
+ * across calls — keyed by `event.sessionId`. `unknown_session` (the
+ * mapper's fallback) is filtered out so heuristics don't lump strangers
+ * together.
+ */
+export function groupSessions(events: readonly CanonicalEvent[]): SessionTrace[] {
+  const buckets = new Map<string, CanonicalEvent[]>();
+  for (const e of events) {
+    if (!e.sessionId || e.sessionId === "unknown_session") continue;
+    const list = buckets.get(e.sessionId);
+    if (list) list.push(e);
+    else buckets.set(e.sessionId, [e]);
+  }
+  const out: SessionTrace[] = [];
+  for (const [sessionId, list] of buckets) {
+    list.sort((a, b) => Date.parse(a.occurredAt) - Date.parse(b.occurredAt));
+    const paths: string[] = [];
+    const pathCounts = new Map<string, number>();
+    for (const e of list) {
+      pathCounts.set(e.path, (pathCounts.get(e.path) ?? 0) + 1);
+      if (paths.length === 0 || paths[paths.length - 1] !== e.path) {
+        paths.push(e.path);
+      }
+    }
+    const firstAtMs = Date.parse(list[0].occurredAt);
+    const lastAtMs = Date.parse(list[list.length - 1].occurredAt);
+    out.push({
+      sessionId,
+      events: list,
+      paths,
+      pathCounts,
+      firstAtMs,
+      lastAtMs,
+      durationMs: Math.max(0, lastAtMs - firstAtMs),
+    });
+  }
+  return out;
+}
+
+/**
+ * Find the first event in `session` strictly after `afterMs`. Used by
+ * hesitation rule to detect what happens after a long-dwell pageview.
+ */
+export function nextEventAfter(
+  session: SessionTrace,
+  afterMs: number,
+): CanonicalEvent | null {
+  for (const e of session.events) {
+    if (Date.parse(e.occurredAt) > afterMs) return e;
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Cohort assignment (session-scoped)                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Resolve a single session's cohort label for one declared dimension.
+ * Returns the dimension's `fallback` (or null) when no event in the
+ * session carries a usable value.
+ *
+ * Sources mirror `Phase2SiteConfig.CohortDimensionConfig.source`:
+ *   - `'property'` reads `event.properties[dim.key]` and stringifies
+ *   - `'metric'`   reads `event.metrics[dim.key]` and stringifies
+ *   - `'path-prefix'` matches the session's first path against the
+ *     dimension's `key` prefix; either `"matched"` or `"unmatched"`.
+ */
+export function assignSessionCohort(
+  session: SessionTrace,
+  dim: CohortDimensionConfig,
+): string {
+  const fallback = typeof dim.fallback === "string" ? dim.fallback : "(unassigned)";
+  if (dim.source === "property") {
+    if (!dim.key) return fallback;
+    for (const e of session.events) {
+      const v = e.properties?.[dim.key];
+      if (v !== undefined && v !== null) return String(v);
+    }
+    return fallback;
+  }
+  if (dim.source === "metric") {
+    if (!dim.key) return fallback;
+    for (const e of session.events) {
+      const v = e.metrics?.[dim.key];
+      if (typeof v === "number" && Number.isFinite(v)) return String(v);
+    }
+    return fallback;
+  }
+  if (dim.source === "path-prefix") {
+    const prefix = dim.key ?? "";
+    const first = session.paths[0] ?? "";
+    return first.startsWith(prefix) ? "matched" : "unmatched";
+  }
+  return fallback;
+}
+
+/* ------------------------------------------------------------------ */
+/* Site baseline                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Compute a global rate (matches / total) across `events`. Used by the
+ * help-seeking rule to compare a single page's rate vs the whole site.
+ * Returns `0` when total is `0` so callers can use it directly in a
+ * ratio comparison.
+ */
+export function siteBaselineRate(
+  events: readonly CanonicalEvent[],
+  matches: (e: CanonicalEvent) => boolean,
+  totalPredicate?: (e: CanonicalEvent) => boolean,
+): number {
+  let m = 0;
+  let t = 0;
+  for (const e of events) {
+    if (totalPredicate && !totalPredicate(e)) continue;
+    t += 1;
+    if (matches(e)) m += 1;
+  }
+  return t === 0 ? 0 : m / t;
+}
+
+/**
+ * A page is considered "key" when the config or a high-weight snapshot
+ * CTA marks it as part of the conversion funnel. Used by `bounce-on-key-page`
+ * to filter out incidental pages.
+ */
+export function isKeyPath(
+  pathRef: string,
+  config: Phase2SiteConfig,
+  snapshot: PageSnapshot | undefined,
+): boolean {
+  for (const step of config.onboardingSteps) {
+    if (step.match.kind === "path-prefix" && pathRef.startsWith(step.match.prefix)) {
+      return true;
+    }
+  }
+  for (const narrative of config.narratives) {
+    if (narrative.sourcePathRef === pathRef) return true;
+    if (narrative.expectedPathRefs.includes(pathRef)) return true;
+  }
+  for (const cta of config.ctas) {
+    if (pathRef === cta.pageRef || pathRef.startsWith(cta.pageRef)) return true;
+  }
+  if (snapshot) {
+    for (const cta of snapshot.data.ctas) {
+      if (!cta.disabled && cta.visualWeight > 0.6) return true;
+    }
+  }
+  return false;
 }

@@ -10,22 +10,22 @@
 
 import { clamp, formatCount, gini, pct, readStringProp, round, share } from "./helpers";
 import type {
-  DesignFinding,
-  DesignFindingEvidence,
-  DesignRule,
-  DesignRuleContext,
+  AuditFinding,
+  AuditFindingEvidence,
+  AuditRule,
+  AuditRuleContext,
 } from "./types";
 
 const MIN_NAV_CLICKS = 50;
 const MIN_DISTINCT_DESTS = 6;
 const MAX_GINI_FOR_FINDING = 0.3;
 
-export const navDispersion: DesignRule = {
+export const navDispersion: AuditRule = {
   id: "nav-dispersion",
   name: "Navigation dispersion",
   category: "nav",
 
-  evaluate(ctx: DesignRuleContext): DesignFinding[] {
+  evaluate(ctx: AuditRuleContext): AuditFinding[] {
     const counts = new Map<string, number>();
     let navClicks = 0;
 
@@ -68,7 +68,7 @@ export const navDispersion: DesignRule = {
         `prominence they don't need. Move them to footer or a more contextual surface.`,
     ];
 
-    const evidence: DesignFindingEvidence[] = [
+    const evidence: AuditFindingEvidence[] = [
       { label: "Nav clicks", value: navClicks },
       { label: "Distinct destinations", value: distinctDests },
       {
