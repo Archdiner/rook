@@ -1,5 +1,14 @@
-import { Phase1Event, Phase1ReadinessSnapshot, readJsonlRecords } from '@/lib/phase1/storage';
-import { badRequest, mapRouteError, parseJsonObject, parseString, success } from '../_shared';
+import { randomUUID } from 'crypto';
+import { createPhase1Repository } from '@/lib/phase1';
+import { Phase1Event, Phase1ReadinessSnapshot } from '@/lib/phase1/storage';
+import {
+  badRequest,
+  mapRouteError,
+  parseJsonObject,
+  parseString,
+  resolveOrganizationContext,
+  success,
+} from '../_shared';
 
 interface Recommendation {
   id: string;
@@ -122,14 +131,27 @@ function buildRecommendations(snapshot: Phase1ReadinessSnapshot, events: Phase1E
     .slice(0, 3);
 }
 
-async function buildRecommendationsResponse(siteId: string) {
-  const events = await readJsonlRecords<Phase1Event>('events', {
+async function buildRecommendationsResponse(siteId: string, organizationId: string) {
+  const repository = createPhase1Repository();
+  const events = (await repository.listEvents({
+    organizationId,
+    siteId,
     limit: 2000,
-    monthsToScan: 6,
-    filter: (record) => record.siteId === siteId,
-  });
+  })) as Phase1Event[];
 
   const snapshot = await computeSnapshot(siteId, events);
+  await repository.createReadinessSnapshot({
+    id: randomUUID(),
+    organizationId,
+    siteId,
+    score: snapshot.score,
+    status: snapshot.status,
+    reasons: snapshot.reasons,
+    eventCount: snapshot.eventCount,
+    sessionCount: snapshot.sessionCount,
+    generatedAt: snapshot.generatedAt,
+  });
+
   const recommendations = buildRecommendations(snapshot, events);
 
   return success({
@@ -143,7 +165,9 @@ function parseSiteIdFromQuery(request: Request): string | null {
   return parseString(new URL(request.url).searchParams.get('siteId'));
 }
 
-async function parseSiteIdFromBody(request: Request): Promise<{ siteId: string } | { error: Response }> {
+async function parseSiteIdFromBody(
+  request: Request
+): Promise<{ siteId: string; organizationId?: string } | { error: Response }> {
   const parsedBody = await parseJsonObject(request);
   if (!parsedBody.ok) {
     return { error: badRequest(parsedBody.message) };
@@ -154,7 +178,10 @@ async function parseSiteIdFromBody(request: Request): Promise<{ siteId: string }
     return { error: badRequest('`siteId` is required in JSON body.') };
   }
 
-  return { siteId };
+  return {
+    siteId,
+    organizationId: parseString(parsedBody.value.organizationId) ?? undefined,
+  };
 }
 
 export async function GET(request: Request) {
@@ -163,8 +190,12 @@ export async function GET(request: Request) {
     if (!siteId) {
       return badRequest('`siteId` query param is required.');
     }
+    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
+    if (!orgContext.ok) {
+      return orgContext.response;
+    }
 
-    return await buildRecommendationsResponse(siteId);
+    return await buildRecommendationsResponse(siteId, orgContext.organizationId);
   } catch (error) {
     return mapRouteError(error);
   }
@@ -177,7 +208,15 @@ export async function POST(request: Request) {
       return parsedSiteId.error;
     }
 
-    return await buildRecommendationsResponse(parsedSiteId.siteId);
+    const orgContext = resolveOrganizationContext(request, {
+      bodyOrganizationId: parsedSiteId.organizationId,
+      allowQueryFallback: false,
+    });
+    if (!orgContext.ok) {
+      return orgContext.response;
+    }
+
+    return await buildRecommendationsResponse(parsedSiteId.siteId, orgContext.organizationId);
   } catch (error) {
     return mapRouteError(error);
   }

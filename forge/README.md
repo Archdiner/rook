@@ -4,7 +4,9 @@ Forge helps teams identify which product and UX changes are worth shipping next,
 
 ## Status
 
-Forge is pre-product. Phase 1 (sufficiency + insights core) is currently in progress.
+Forge is pre-product. **Phase 1 core** (sufficiency + insights engines, Phase 1 HTTP APIs, org-aware repository layer) is implemented; verify locally with `npm run build` and the API curls below.
+
+When `DATABASE_URL` is set, `PHASE1_STORAGE_DRIVER=auto` selects Postgres (ensure migrations are applied). To smoke-test APIs without Postgres: `PORT=3020 DATABASE_URL= PHASE1_STORAGE_DRIVER=blob npm run start`.
 
 ## What Exists Today
 
@@ -28,6 +30,10 @@ Then open `http://localhost:3000`.
 | --- | --- | --- |
 | `RESEND_API_KEY` | Yes (for discovery/intake email delivery) | Sends responses from `POST /api/discovery` and `POST /api/intake` |
 | `BLOB_READ_WRITE_TOKEN` | Optional in local dev, required for Vercel Blob persistence | Stores/retrieves JSONL records for discovery and Phase 1 collections |
+| `PHASE1_STORAGE_DRIVER` | Optional (`auto` default) | Selects repository backend: `auto`, `blob`, or `postgres` |
+| `DATABASE_URL` | Required when using `postgres` driver | Neon/Postgres connection string used by Drizzle repository |
+| `NEXT_PUBLIC_DEFAULT_ORG_ID` | Optional (`org_default`) | Fallback organization context when no `organizationId` query/header is provided |
+| `PHASE1_ORG_IDENTITY_MODE` | Optional (`dev` default) | `dev` allows query/body fallback; `header_required` requires `x-org-id` header |
 
 Without `BLOB_READ_WRITE_TOKEN`, Phase 1 storage falls back to local temporary files.
 
@@ -119,7 +125,9 @@ curl -s -X POST "$BASE_URL/api/phase1/insights" \
 - Next.js App Router app with UI routes and API routes in a single service
 - Deterministic analysis core in `src/lib/phase1` (pure logic for sufficiency and insights)
 - API routes validate inputs and map requests to domain engines
-- Storage adapter writes JSONL collections to Vercel Blob, with local fallback when Blob token is absent
+- Org-aware repository layer supports `blob` and `postgres` drivers, with auto-selection via env config
+- Blob driver writes JSONL collections to Vercel Blob, with local fallback when Blob token is absent
+- Org identity resolution can be strict in production via `PHASE1_ORG_IDENTITY_MODE=header_required`
 
 ## Repository Structure
 

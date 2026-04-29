@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
-import { appendJsonlRecord, Phase1Event, readJsonlRecords } from '@/lib/phase1/storage';
+import { createPhase1Repository } from '@/lib/phase1';
 import {
   asObject,
   badRequest,
   mapRouteError,
   parseJsonObject,
   parsePositiveInt,
+  resolveOrganizationContext,
   parseString,
   success,
 } from '../_shared';
@@ -62,8 +63,18 @@ export async function POST(request: Request) {
     }
 
     const metrics = parseMetrics(body.metrics);
-    const event: Phase1Event = {
+    const orgContext = resolveOrganizationContext(request, {
+      bodyOrganizationId: body.organizationId,
+      allowQueryFallback: false,
+    });
+    if (!orgContext.ok) {
+      return orgContext.response;
+    }
+
+    const repository = createPhase1Repository();
+    const event = {
       id: randomUUID(),
+      organizationId: orgContext.organizationId,
       siteId,
       sessionId,
       type,
@@ -72,8 +83,8 @@ export async function POST(request: Request) {
       ...(metrics ? { metrics } : {}),
     };
 
-    await appendJsonlRecord('events', event);
-    return success(event, 201);
+    const created = await repository.createEvent(event);
+    return success(created, 201);
   } catch (error) {
     return mapRouteError(error);
   }
@@ -81,6 +92,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    const repository = createPhase1Repository();
     const url = new URL(request.url);
     const siteId = parseString(url.searchParams.get('siteId'));
     if (!siteId) {
@@ -88,10 +100,14 @@ export async function GET(request: Request) {
     }
 
     const limit = parsePositiveInt(url.searchParams.get('limit'), 100, 500);
-    const events = await readJsonlRecords<Phase1Event>('events', {
+    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
+    if (!orgContext.ok) {
+      return orgContext.response;
+    }
+    const events = await repository.listEvents({
+      organizationId: orgContext.organizationId,
+      siteId,
       limit,
-      monthsToScan: 6,
-      filter: (record) => record.siteId === siteId,
     });
 
     return success(events);

@@ -1,11 +1,12 @@
 import { randomUUID } from 'crypto';
-import { appendJsonlRecord, Phase1Site, readJsonlRecords } from '@/lib/phase1/storage';
+import { createPhase1Repository } from '@/lib/phase1';
 import {
   badRequest,
   mapRouteError,
   parseJsonObject,
   parseOptionalString,
   parsePositiveInt,
+  resolveOrganizationContext,
   parseString,
   success,
 } from '../_shared';
@@ -29,16 +30,26 @@ export async function POST(request: Request) {
     }
 
     const analyticsProvider = parseOptionalString(body.analyticsProvider);
-    const site: Phase1Site = {
+    const orgContext = resolveOrganizationContext(request, {
+      bodyOrganizationId: body.organizationId,
+      allowQueryFallback: false,
+    });
+    if (!orgContext.ok) {
+      return orgContext.response;
+    }
+
+    const repository = createPhase1Repository();
+    const site = {
       id: randomUUID(),
+      organizationId: orgContext.organizationId,
       name,
       domain: domain.toLowerCase(),
       createdAt: new Date().toISOString(),
       ...(analyticsProvider ? { analyticsProvider } : {}),
     };
 
-    await appendJsonlRecord('sites', site);
-    return success(site, 201);
+    const created = await repository.createSite(site);
+    return success(created, 201);
   } catch (error) {
     return mapRouteError(error);
   }
@@ -46,9 +57,14 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   try {
+    const repository = createPhase1Repository();
     const url = new URL(request.url);
     const limit = parsePositiveInt(url.searchParams.get('limit'), 50, 200);
-    const sites = await readJsonlRecords<Phase1Site>('sites', { limit, monthsToScan: 6 });
+    const orgContext = resolveOrganizationContext(request, { allowQueryFallback: true });
+    if (!orgContext.ok) {
+      return orgContext.response;
+    }
+    const sites = await repository.listSites({ organizationId: orgContext.organizationId, limit });
     return success(sites);
   } catch (error) {
     return mapRouteError(error);

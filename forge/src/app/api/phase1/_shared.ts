@@ -10,6 +10,8 @@ interface ApiEnvelope<T> {
   };
 }
 
+type OrgIdentityMode = 'dev' | 'header_required';
+
 export function success<T>(data: T, status = 200): NextResponse<ApiEnvelope<T>> {
   return NextResponse.json({ success: true, data }, { status });
 }
@@ -24,6 +26,22 @@ export function badRequest(message: string, code = 'BAD_REQUEST'): NextResponse<
       },
     },
     { status: 400 }
+  );
+}
+
+export function unauthorized(
+  message: string,
+  code = 'UNAUTHORIZED'
+): NextResponse<ApiEnvelope<never>> {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code,
+        message,
+      },
+    },
+    { status: 401 }
   );
 }
 
@@ -90,6 +108,53 @@ export function parseOptionalString(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+export function getDefaultOrgId(): string {
+  return process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? 'org_default';
+}
+
+function getOrgIdentityMode(): OrgIdentityMode {
+  const raw = (process.env.PHASE1_ORG_IDENTITY_MODE ?? 'dev').toLowerCase();
+  return raw === 'header_required' ? 'header_required' : 'dev';
+}
+
+export function resolveOrganizationContext(
+  request: Request,
+  options?: {
+    bodyOrganizationId?: unknown;
+    allowQueryFallback?: boolean;
+    fallbackOrganizationId?: string;
+  }
+): { ok: true; organizationId: string } | { ok: false; response: NextResponse<ApiEnvelope<never>> } {
+  const mode = getOrgIdentityMode();
+  const url = new URL(request.url);
+  const headerOrgId = parseOptionalString(request.headers.get('x-org-id'));
+  if (headerOrgId) return { ok: true, organizationId: headerOrgId };
+
+  if (mode === 'header_required') {
+    return {
+      ok: false,
+      response: unauthorized(
+        'Missing organization context. Send x-org-id header.',
+        'MISSING_ORG_CONTEXT'
+      ),
+    };
+  }
+
+  const allowQueryFallback = options?.allowQueryFallback ?? true;
+  if (allowQueryFallback) {
+    const queryOrgId = parseOptionalString(url.searchParams.get('organizationId'));
+    if (queryOrgId) return { ok: true, organizationId: queryOrgId };
+  }
+
+  const bodyOrgId = parseOptionalString(options?.bodyOrganizationId);
+  if (bodyOrgId) return { ok: true, organizationId: bodyOrgId };
+
+  return {
+    ok: true,
+    organizationId: options?.fallbackOrganizationId ?? getDefaultOrgId(),
+  };
 }
 
 export function parsePositiveInt(
