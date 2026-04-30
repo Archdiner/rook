@@ -78,9 +78,28 @@ type SiteStatus = {
     warnCount: number;
     warnings: Array<{ code: string; level: string; message: string }>;
   };
+  revenue: {
+    monthlyRevenueCents: number | null;
+    avgOrderValueCents: number | null;
+  } | null;
   openFindings: number;
   readinessPercent: number;
 };
+
+function revenueAtRisk(
+  monthlyRevenueCents: number,
+  priorityScore: number,
+  confidence: number
+): number {
+  // Conservative estimate: monthly revenue × how much of the funnel is affected × confidence
+  return Math.round((monthlyRevenueCents / 100) * priorityScore * confidence);
+}
+
+function fmtRevenue(dollars: number): string {
+  if (dollars >= 10000) return `$${(dollars / 1000).toFixed(0)}k`;
+  if (dollars >= 1000) return `$${(dollars / 1000).toFixed(1)}k`;
+  return `$${dollars.toFixed(0)}`;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -390,6 +409,14 @@ function CockpitContent() {
     .sort()
     .at(-1) ?? null;
 
+  const monthlyRevCents = siteStatus?.revenue?.monthlyRevenueCents ?? null;
+  const totalRiskDollars = monthlyRevCents
+    ? openFindings.reduce(
+        (sum, f) => sum + revenueAtRisk(monthlyRevCents, f.priorityScore, f.confidence),
+        0
+      )
+    : null;
+
   return (
     <div
       style={{
@@ -556,11 +583,20 @@ function CockpitContent() {
               value={openFindings.length}
               sub={findings.length > 0 ? `${findings.length} total` : "Run an audit"}
             />
-            <StatCard
-              label="Experiments"
-              value={activeExperiments.length}
-              sub={`${experiments.length} total`}
-            />
+            {totalRiskDollars !== null ? (
+              <StatCard
+                label="Revenue at risk"
+                value={fmtRevenue(totalRiskDollars)}
+                sub="estimated / month"
+                accent
+              />
+            ) : (
+              <StatCard
+                label="Experiments"
+                value={activeExperiments.length}
+                sub={`${experiments.length} total`}
+              />
+            )}
           </div>
 
           {/* Two-col layout */}
@@ -695,19 +731,21 @@ function CockpitContent() {
                             </p>
                           </div>
                           <div style={{ textAlign: "right", flexShrink: 0 }}>
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: 18,
-                                fontWeight: 700,
-                                letterSpacing: "-0.02em",
-                              }}
-                            >
-                              {(f.priorityScore * 100).toFixed(0)}
-                            </p>
-                            <p style={{ margin: 0, fontSize: 11, color: MUTED }}>
-                              priority
-                            </p>
+                            {monthlyRevCents ? (
+                              <>
+                                <p style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: "#7F1D1D" }}>
+                                  ~{fmtRevenue(revenueAtRisk(monthlyRevCents, f.priorityScore, f.confidence))}/mo
+                                </p>
+                                <p style={{ margin: 0, fontSize: 11, color: MUTED }}>at risk</p>
+                              </>
+                            ) : (
+                              <>
+                                <p style={{ margin: 0, fontSize: 18, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                                  {(f.priorityScore * 100).toFixed(0)}
+                                </p>
+                                <p style={{ margin: 0, fontSize: 11, color: MUTED }}>priority</p>
+                              </>
+                            )}
                           </div>
                         </div>
                       </Card>

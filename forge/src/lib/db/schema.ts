@@ -261,6 +261,14 @@ export const forgeSiteMeta = pgTable('forge_site_meta', {
   /** Minimum new sessions required to trigger a fresh insights run. */
   insightThreshold: integer('insight_threshold').notNull().default(100),
   lastInsightRunAt: timestamp('last_insight_run_at', { withTimezone: true }),
+  /**
+   * Monthly recurring revenue in cents (USD). Used to compute estimated revenue
+   * at risk per finding: revenueAtRisk = (monthlyRevenueCents / 100) × priorityScore × confidence.
+   * Optional — findings display without it, but impact framing is suppressed.
+   */
+  monthlyRevenueCents: integer('monthly_revenue_cents'),
+  /** Average order / conversion value in cents. Refines per-finding impact estimates. */
+  avgOrderValueCents: integer('avg_order_value_cents'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

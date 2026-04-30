@@ -22,6 +22,8 @@ The phased product combines:
 
 Success is measured by **decision quality** (fewer bad bets), **time-to-confidence** (how fast teams know they have enough signal), **pilot traction** (sites onboarded, events flowing, outputs consumed), and **loop completion rate** (share of approved suggestions that reach a **measured** production outcome within an agreed window).
 
+**Go-to-market stance:** prioritize a **specific ideal customer** who already exhibits urgent pull (see **§4.1**); broaden horizontally only after that beachhead repeats.
+
 ---
 
 ## 2. Problem statement
@@ -86,6 +88,27 @@ This table is updated as surfaces ship; implementation truth lives in repo + bac
 | **Engineer (integrations)** | Stable APIs, predictable validation errors, sensible dev vs prod config.       |
 | **Founder / GTM**           | A credible pilot story: week-one value, proof definition, pricing experiments. |
 
+### 4.1 Ideal customer profile (ICP) — audience-first beachhead
+
+**Position:** Forge scales by starting **narrow**: observe **who** already strains under the status quo, confirm they **desperately** want a better loop (not “nice to have”), then **tailor** product and narrative to that cohort. The **specific solution shape** (features, receipts, integrations, UX emphasis) follows from serving that audience exceptionally well; leading only with a generic “solution to a problem” across everyone spreads focus and weakens pull.
+
+**First beachhead (who we optimize for before horizontal expansion)**
+
+| Dimension | ICP definition |
+| --------- | -------------- |
+| **Role** | Operator PM / growth lead (or product owner with growth mandate); founders wearing that hat in smaller teams. |
+| **Context** | **Live** consumer- or prosumer-facing **web product** already in market; meaningful traffic and **instrumentation** (e.g. PostHog/Segment or equivalent) in place or committed during onboarding. |
+| **Pain intensity** | Prioritization is **opaque or politically fragile**; roadmap debates rely on anecdotes; **conversion / activation / retention** work feels guess-prone despite paying for analytics and replay. |
+| **Why Forge vs alternatives** | Needs **one ranked, attributable improvement narrative** (receipts, gates, DNA-aware audits) that respects **distinctive design**, not a generic template audit or “replace your stack” suite. |
+| **Partners** | Engineering engaged for **connectors, previews, and measurement** (flags/experiments)—not as primary IC persona, but as **blocking partner** for closed-loop value. |
+
+**Explicit non-ICP (until pull proves otherwise)**  
+
+Teams optimizing only for **greenfield builds** with no live behavioral signal; orgs unwilling to connect **read-only telemetry**; buyers seeking **a site builder or CMS**; users who only want **more charts** without auditability or a **preview → measure** path.
+
+**Scaling hypothesis**  
+
+Win **repeatable urgency** in this cohort (same workflows, same objections, same receipt vocabulary), then **adjacent** personas (e.g. deeper eng-led workflows, regulated verticals with audit-heavy stakeholders) as **expansion**, not as day-one dilution of positioning.
 
 ---
 

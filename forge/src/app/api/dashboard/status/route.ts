@@ -19,7 +19,7 @@ import { badRequest, mapRouteError, parseString, success } from '@/app/api/phase
 import { resolveForgeActor } from '@/lib/auth/forgeActor';
 import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 import { getDb } from '@/lib/db/client';
-import { forgeFindings } from '@/lib/db/schema';
+import { forgeFindings, forgeSiteMeta } from '@/lib/db/schema';
 import { createPhase1Repository } from '@/lib/phase1';
 import { buildInsightInputFromEvents, runInsightInputGate } from '@/lib/phase2';
 import type { RollupContext } from '@/lib/phase2/types';
@@ -106,6 +106,10 @@ export async function GET(request: Request) {
 
     const openFindings = Number((findingCountRows[0] as { count: number } | undefined)?.count ?? 0);
 
+    // Revenue context for impact framing
+    const metaRows = await getDb().select().from(forgeSiteMeta).where(eq(forgeSiteMeta.siteId, siteId)).limit(1);
+    const siteMeta = metaRows[0] ?? null;
+
     return success({
       siteId,
       pipeline: {
@@ -114,6 +118,10 @@ export async function GET(request: Request) {
         lastSync,
         integrations: integrationSummary,
         healthy: integrations.length > 0 && integrations.every((i) => !i.lastErrorCode),
+      },
+      revenue: {
+        monthlyRevenueCents: siteMeta?.monthlyRevenueCents ?? null,
+        avgOrderValueCents: siteMeta?.avgOrderValueCents ?? null,
       },
       gate: {
         trustworthy: gate.ok,

@@ -139,6 +139,37 @@ export interface NarrativeConfig {
   expectedPathRefs: string[];
 }
 
+/**
+ * How the site measures success. Used by audit rules to frame impact in
+ * meaningful units instead of defaulting to dollars for every product type.
+ *
+ * - 'revenue':    SaaS / subscription — impact expressed in currency via ARPU.
+ * - 'ecommerce':  Transactional — impact expressed in currency via AOV.
+ * - 'growth':     Signups, leads, activations — impact expressed as conversions/month.
+ * - 'engagement': Media, internal tools, content — impact expressed as sessions/month.
+ * - 'custom':     Anything else — impact expressed in a user-defined metric label.
+ */
+export type GoalType = 'revenue' | 'ecommerce' | 'growth' | 'engagement' | 'custom';
+
+export interface GoalConfig {
+  /** Monthly average revenue per user. Used when goalType='revenue'. */
+  arpu?: number;
+  /** Average order value. Used when goalType='ecommerce'. */
+  aov?: number;
+  /** ISO 4217 currency code, e.g. 'USD', 'EUR', 'GBP'. Defaults to 'USD'. */
+  currencyCode?: string;
+  /** Human label for the conversion event, e.g. "signup" or "lead". Used when goalType='growth'. */
+  conversionLabel?: string;
+  /** Label for a custom metric, e.g. "donations" or "referrals". Used when goalType='custom'. */
+  customMetricLabel?: string;
+  /** Value per conversion in the custom metric unit. Used when goalType='custom'. */
+  customMetricValue?: number;
+  /** Estimated monthly unique visitors to the site. Improves impact math accuracy. */
+  monthlyVisitors?: number;
+  /** Site-level baseline conversion rate (0..1). Used to convert sessions → conversions. */
+  baselineConversionRate?: number;
+}
+
 export interface Phase2SiteConfig {
   siteId: string;
   organizationId: string;
@@ -148,6 +179,10 @@ export interface Phase2SiteConfig {
   narratives: NarrativeConfig[];
   /** Conversion event types beyond the global default set. */
   conversionEventTypes?: string[];
+  /** How this site measures success — drives impact framing in findings. */
+  goalType?: GoalType;
+  /** Goal-specific config (ARPU, AOV, conversion label, etc.). */
+  goalConfig?: GoalConfig;
   updatedAt: ISODateString;
 }
 

@@ -116,6 +116,7 @@ function FindingsContent() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [actionPending, setActionPending] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
+  const [monthlyRevCents, setMonthlyRevCents] = useState<number | null>(null);
 
   const apiFetch = useCallback(
     (input: RequestInfo | URL, init?: RequestInit) => {
@@ -133,7 +134,14 @@ function FindingsContent() {
     if (!siteId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const res = await apiFetch(`/api/dashboard/findings?siteId=${siteId}`);
+      const [res, statusRes] = await Promise.all([
+        apiFetch(`/api/dashboard/findings?siteId=${siteId}`),
+        apiFetch(`/api/dashboard/status?siteId=${siteId}`),
+      ]);
+      const statusJson = await statusRes.json() as { success?: boolean; data?: { revenue?: { monthlyRevenueCents?: number | null } } };
+      if (statusJson.success && statusJson.data?.revenue?.monthlyRevenueCents) {
+        setMonthlyRevCents(statusJson.data.revenue.monthlyRevenueCents);
+      }
       const json = await res.json() as { success?: boolean; data?: unknown };
       if (json.success && Array.isArray(json.data)) {
         setFindings(json.data as Finding[]);
@@ -424,12 +432,25 @@ function FindingsContent() {
                 {/* Right: score + actions */}
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
                   <div style={{ textAlign: "right" }}>
-                    <p style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" }}>
-                      {(f.priorityScore * 100).toFixed(0)}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 10, color: MUTED, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                      priority
-                    </p>
+                    {monthlyRevCents ? (
+                      <>
+                        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: "-0.02em", color: "#7F1D1D" }}>
+                          ~${Math.round((monthlyRevCents / 100) * f.priorityScore * f.confidence).toLocaleString()}/mo
+                        </p>
+                        <p style={{ margin: 0, fontSize: 10, color: MUTED, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                          at risk
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p style={{ margin: 0, fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em" }}>
+                          {(f.priorityScore * 100).toFixed(0)}
+                        </p>
+                        <p style={{ margin: 0, fontSize: 10, color: MUTED, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                          priority
+                        </p>
+                      </>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <Link

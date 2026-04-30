@@ -127,6 +127,24 @@ function ConnectContent() {
     }
   }
 
+  // --- Revenue context ---
+  const [mrrInput, setMrrInput] = useState("");
+  const [aovInput, setAovInput] = useState("");
+  const [revenueSaved, setRevenueSaved] = useState(false);
+
+  async function saveRevenue() {
+    if (!siteId || !mrrInput) return;
+    const monthlyRevenueCents = Math.round(parseFloat(mrrInput) * 100);
+    const avgOrderValueCents = aovInput ? Math.round(parseFloat(aovInput) * 100) : undefined;
+    try {
+      await apiFetch(`/api/dashboard/site-meta?siteId=${siteId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ monthlyRevenueCents, ...(avgOrderValueCents ? { avgOrderValueCents } : {}) }),
+      });
+      setRevenueSaved(true);
+    } catch { /* non-fatal */ }
+  }
+
   // --- Step 2: PostHog ---
   const [phHost, setPhHost] = useState("https://us.i.posthog.com");
   const [phProjectId, setPhProjectId] = useState("");
@@ -346,6 +364,86 @@ function ConnectContent() {
             <p style={{ margin: 0, fontSize: 13, color: MUTED }}>
               Site registered · <code style={{ fontSize: 12, color: INK, background: SUBTLE, padding: "2px 6px", borderRadius: 5 }}>{siteId}</code>
             </p>
+          )}
+        </Card>
+
+        {/* Revenue context — unlocks impact framing on findings */}
+        <Card style={{ opacity: siteConnected ? 1 : 0.5 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
+                Revenue context <span style={{ fontWeight: 400, color: MUTED }}>— optional but recommended</span>
+              </p>
+              <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED }}>
+                Forge uses this to estimate how much each friction point is costing you per month.
+              </p>
+            </div>
+            {revenueSaved && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#065F46", padding: "3px 10px", borderRadius: 999, background: "rgba(5,150,105,0.08)" }}>
+                Saved
+              </span>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 5 }}>
+                Monthly revenue (USD)
+              </label>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: MUTED }}>$</span>
+                <input
+                  value={mrrInput}
+                  onChange={(e) => { setMrrInput(e.target.value); setRevenueSaved(false); }}
+                  placeholder="50,000"
+                  disabled={!siteConnected}
+                  type="number"
+                  min="0"
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    padding: "9px 12px 9px 22px",
+                    borderRadius: 10, border: `1px solid ${HAIRLINE}`,
+                    background: siteConnected ? "#fff" : SUBTLE,
+                    fontSize: 13, color: INK,
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, display: "block", marginBottom: 5 }}>
+                Avg. order value <span style={{ fontWeight: 400, color: MUTED }}>(optional)</span>
+              </label>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: MUTED }}>$</span>
+                <input
+                  value={aovInput}
+                  onChange={(e) => { setAovInput(e.target.value); setRevenueSaved(false); }}
+                  placeholder="120"
+                  disabled={!siteConnected}
+                  type="number"
+                  min="0"
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    padding: "9px 12px 9px 22px",
+                    borderRadius: 10, border: `1px solid ${HAIRLINE}`,
+                    background: siteConnected ? "#fff" : SUBTLE,
+                    fontSize: 13, color: INK,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          {mrrInput && siteConnected && !revenueSaved && (
+            <button
+              type="button"
+              onClick={() => void saveRevenue()}
+              style={{
+                marginTop: 10, padding: "8px 16px", borderRadius: 999,
+                border: `1px solid ${HAIRLINE}`, background: "#fff",
+                fontSize: 13, fontWeight: 500, color: INK, cursor: "pointer",
+              }}
+            >
+              Save revenue context
+            </button>
           )}
         </Card>
 
