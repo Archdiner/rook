@@ -37,6 +37,12 @@ Forge **synthesizes** third-party streams into **one improvement narrative** gro
 
 ---
 
+## 3.1 Experiential spine — preview and production measurement
+
+Receipts, rules, and connectors are necessary but not sufficient: customers experience Forge through **guided surfaces** that connect **what we observed** → **what we suggest** → **how you preview it** (when applicable) → **how we measure impact in production**. If this path is not **designed and shipped as product UX**, the backend cannot deliver its full value—there is no “early backend / late UI” split; **the loop is the product**. Operational detail and backlog IDs live in **`PRODUCT_PRD.md`** (§3.1–3.2, Phase 3) and **`CUSTOMER_READINESS_BACKLOG.md` Epic I**.
+
+---
+
 ## 4. Design DNA — operational definition
 
 **Design DNA** (in Forge terms) is the **structured, per-site fingerprint** of how this product presents itself—not a judgement of taste, but a **basis for deltas**:

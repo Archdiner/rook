@@ -10,15 +10,17 @@ This is the **canonical, version-controlled** product narrative. For private scr
 
 ## 1. Executive summary
 
-**Forge** is a **site improver**, not a site builder: it helps teams decide **what to change on an existing live product** by grounding prioritization in **observed user behavior**, **per-property design/context**, and **attributable receipts**—not generic templates alone. Strategic differentiation, autonomy boundaries, credibility demos, and third-party-first composition are specified in **`docs/SITE_IMPROVER_VISION_PRD.md`** (read alongside this document).
+**Forge** is a **site improver**, not a site builder: it helps teams decide **what to change on an existing live product** by grounding prioritization in **observed user behavior**, **per-property design/context**, and **attributable receipts**—not generic templates alone. Strategic differentiation, autonomy boundaries, credibility demos, and third-party-first composition are specified in `**docs/SITE_IMPROVER_VISION_PRD.md`** (read alongside this document).
+
+The **primary product promise** is not “more analytics”—it is a **closed loop**: connect the live property and telemetry → **understand** behavior and design context → **preview** a concrete change (when applicable) → **measure impact in production** with explicit grounding. That loop must be **surfaced in product UI**; APIs and receipts alone do not operationalize the value proposition for customers.
 
 The phased product combines:
 
 - **Intake & discovery** (Phase 0) to validate problems and recruit design partners.
-- **Deterministic analysis** (Phase 1+) — sufficiency, readiness, insights, recommendations — exposed via HTTP APIs and optional operator UI.
-- **Longer-term** (Phases 2–4): deeper integrations, closed loops for actions and outcomes, and production-grade multi-tenant operations.
+- **Deterministic analysis** (Phase 1+) — sufficiency, readiness, insights, recommendations — via HTTP APIs **and** operator-facing surfaces that make outputs actionable (see §5.1).
+- **Phases 2–4:** deeper integrations, **preview and experiment orchestration**, closed loops for **production** outcomes, and multi-tenant operations — **the experiential layer is not “late-stage decoration”;** it is how teams consume Phase 1–2 engines (see §5.1 and `**docs/CUSTOMER_READINESS_BACKLOG.md` Epic I**).
 
-Success is measured by **decision quality** (fewer bad bets), **time-to-confidence** (how fast teams know they have enough signal), and **pilot traction** (sites onboarded, events flowing, outputs consumed).
+Success is measured by **decision quality** (fewer bad bets), **time-to-confidence** (how fast teams know they have enough signal), **pilot traction** (sites onboarded, events flowing, outputs consumed), and **loop completion rate** (share of approved suggestions that reach a **measured** production outcome within an agreed window).
 
 ---
 
@@ -36,19 +38,54 @@ Forge addresses this by making **sufficiency and readiness explicit**, producing
 
 ## 3. Product vision
 
-Forge becomes the **decision layer** between telemetry and execution: ingest structured signals, judge whether conclusions are justified, surface ranked insights, and recommend next actions with explicit confidence—all on **the customer’s live site**, respecting **per-property context** (“design DNA”), not prescribing a generic Forge look. Expanded positioning—**site improver vs site builder**, **credibility demos**, **third-party composition**, autonomy levels—is in **`docs/SITE_IMPROVER_VISION_PRD.md`**.
+Forge becomes the **decision layer** between telemetry and execution: ingest structured signals, judge whether conclusions are justified, surface ranked insights, and recommend next actions with explicit confidence—all on **the customer’s live site**, respecting **per-property context** (“design DNA”), not prescribing a generic Forge look. Expanded positioning—**site improver vs site builder**, **credibility demos**, **third-party composition**, autonomy levels—is in `**docs/SITE_IMPROVER_VISION_PRD.md`**.
 
-Long-term, Forge pairs deterministic cores with richer integrations and outcome feedback. Near-term, Forge ships a **thin vertical slice**: ingest → score → recommend → inspect.
+**Experience vision:** Users connect **URL, repository, and/or analytics** (any combination that gives Forge enough signal). Forge runs **baseline collection and understanding** (sync, snapshots, rollups, audits) **while** the user completes onboarding. The product then delivers **ongoing, prioritized suggestions** with reasoning and evidence, supports **preview** of changes where feasible, and **always** provides a credible path to **measure impact in production** (experiments, flags, or linked PostHog artifacts)—presented in a **dashboard** that uses clear, creative visualization so teams can **see** status, variants, and lifts—not only read JSON.
+
+Long-term, Forge pairs deterministic cores with richer integrations and outcome feedback. **Near-term**, the vertical slice is **not** only ingest → score → recommend → inspect; it must include **inspect → preview (where applicable) → ship/measure** as first-class UX, or the backend remains under-utilized.
+
+---
+
+## 3.1 Product experience principle — UI is load-bearing
+
+Forge’s Phase 1–2 **engines** (readiness, insights, Phase 2 audit rules, receipts) already produce substantial value **in code**. Without a coherent **product surface**, customers cannot reliably:
+
+- See **integration health**, job progress, and **why** a gate blocked “trustworthy” output.
+- Move from a **finding** to an **approved change** with a defined **preview** and **production measurement** plan.
+- Run an **ongoing** loop (new data → new suggestions → experiments) from a **single cockpit**.
+
+Therefore **UX for the improver cockpit, preview, and production measurement is not sequenced as “after backends are done.”** It is developed **in parallel** with connectors and audit quality, scoped so each slice is shippable. `**docs/CUSTOMER_READINESS_BACKLOG.md` Epic I** tracks this layer explicitly.
+
+---
+
+## 3.2 Current capabilities vs gaps (living)
+
+
+| Area                      | **Shipped / strong today**                                                                                    | **Gap for stated product promise**                                                                                                                                      |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Telemetry & events**    | PostHog sync, Segment webhook, canonical events, scheduled sync path                                          | Surfacing **freshness**, failures, and “enough data yet?” in a **cockpit**, not only APIs                                                                               |
+| **Analysis & evidence**   | Phase 1 readiness/recommendations; Phase 2 insights run, validation gate, audit rules, Markdown/JSON receipts | **Ranked backlog UI**, deep links to evidence, **suggestion lifecycle** (proposed → in test → shipped → measured)                                                       |
+| **Design / page context** | Page snapshots, DNA-oriented audit rules                                                                      | **Progressive disclosure** in UI (what we fetched, what changed); optional richer previews (Epic F)                                                                     |
+| **Git / code**            | Directional (PR drafts in backlog)                                                                            | **Connect repo**, map repo ↔ site, surface **patch / PR path** from a finding                                                                                           |
+| **Preview**               | Not a first-class product object                                                                              | **Preview story**: staging URL, branch preview, screenshot/mock slot, or flag-driven variant — **minimum tier** defined in Epic I                                       |
+| **Production impact**     | Hypothesis linkage story (FORGE-060); receipts cite windows                                                   | **Experiment / flag entity** in product: primary metric, audience, duration, **results vs baseline**, guardrails — **Preview → measure** must be **one navigable flow** |
+| **Dashboard**             | Fragmented operator pages (`/phase1`, `/phase2`, `/onboarding` starters)                                      | **Unified improver dashboard**: connections, jobs, findings, previews, experiments, visualization                                                                       |
+| **Auth / tenancy**        | Evolution toward Clerk + API keys (see customer readiness backlog)                                            | Roles, audit log, collaboration (existing epics)                                                                                                                        |
+
+
+This table is updated as surfaces ship; implementation truth lives in repo + backlog IDs.
 
 ---
 
 ## 4. Personas
 
-| Persona | Needs |
-| --- | --- |
-| **Operator PM / growth** | Defensible prioritization; transparent “why we believe we have enough signal.” |
-| **Engineer (integrations)** | Stable APIs, predictable validation errors, sensible dev vs prod config. |
-| **Founder / GTM** | A credible pilot story: week-one value, proof definition, pricing experiments. |
+
+| Persona                     | Needs                                                                          |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| **Operator PM / growth**    | Defensible prioritization; transparent “why we believe we have enough signal.” |
+| **Engineer (integrations)** | Stable APIs, predictable validation errors, sensible dev vs prod config.       |
+| **Founder / GTM**           | A credible pilot story: week-one value, proof definition, pricing experiments. |
+
 
 ---
 
@@ -76,12 +113,19 @@ Long-term, Forge pairs deterministic cores with richer integrations and outcome 
 
 ### Phase 1 — Sufficiency, readiness, insights core
 
-**Goal:** Ship a **deterministic analysis core** and **repository-backed APIs** so real traffic can flow without rebuilding foundations.
+**Goal:** Ship a **deterministic analysis core** and **repository-backed APIs** so real traffic can flow without rebuilding foundations — and expose outcomes through **operator UI** sufficient to act (not only curl/README).
+
+**Product surface (required alongside APIs):**
+
+- A path from **site + events** to **visible** readiness/recommendations (dashboard or embedded views).
+- Clear display of **uncertainty** (sufficiency / gates) so users do not over-trust thin samples.
+
+Without this, Phase 1 remains an integration burden rather than a product.
 
 **In scope:**
 
 - **Engines:** Sufficiency (`evaluateAllCategories`), readiness snapshot derivation from events, heuristic recommendations, insights rules over structured aggregates.
-- **HTTP API:** `/api/phase1/*` — health, sites, events, readiness, recommendations, sufficiency, insights.
+- **HTTP API:** `/api/phase1/`* — health, sites, events, readiness, recommendations, sufficiency, insights.
 - **Persistence:** Org-aware repository — **Vercel Blob** with **partitioned JSON per record** (no read-modify-write append on shared NDJSON for Phase 1 collections); **Postgres** via Drizzle for production-shaped workloads; local fallback when Blob token absent.
 - **Readiness:** Computes snapshots using the real sufficiency engine (aggregated evidence from events); persists snapshots to Postgres when using the Postgres driver.
 - **Tenancy:** Configurable org identity (`PHASE1_ORG_IDENTITY_MODE`: dev vs `header_required`).
@@ -118,19 +162,22 @@ Long-term, Forge pairs deterministic cores with richer integrations and outcome 
 
 ### Phase 3 — Guided action loops & outcome tracking
 
-**Goal:** Close the loop from **recommendation → shipped change → measured outcome**.
+**Goal:** Close the loop from **recommendation → preview (where applicable) → shipped / flagged change → measured outcome in production**. This phase is the **experiential spine** of Forge as a site improver—not an optional add-on after “core analytics.”
 
 **In scope (directional):**
 
-- Experiments or “bets” linked to recommendations; tracking uplift vs baseline.
-- Operator workflows: assign owners, deadlines, status on findings.
-- Notifications (email/Slack) for readiness thresholds and shipped outcomes.
+- **Preview:** Minimum viable **preview artifact** per suggestion class—e.g. linked **staging URL**, **preview deployment**, **image/mock**, or **documented flag key**—so stakeholders can **see** the change before it touches most traffic.
+- **Production measurement:** **Experiment or rollout object** with hypothesis, **primary metric**, audience/segment, planned duration, **guardrails**, and link to **customer-owned truth** (PostHog experiment, feature flag, or dashboard URL) so lift claims stay **auditable**.
+- **Unified cockpit:** Single dashboard for **connections**, **running jobs**, **backlog of findings**, **active experiments**, and **history** (aligned with `**CUSTOMER_READINESS_BACKLOG.md` Epic I**).
+- Operator workflows: assign owners, deadlines, **status** on findings (extends Epic G “bet status”).
+- Notifications (email/Slack) for gate flips, experiment milestones, and integration failures.
 
 **Success criteria:**
 
-- Pilots can answer “did the recommended change move the metric?” within an agreed window.
+- A pilot can complete **preview → production measure** for at least one real suggestion class without leaving Forge’s guided surfaces (external tools may host the experiment, but Forge **orchestrates and displays** status and links).
+- Teams can answer **“did the change move the metric, with what confidence?”** within an agreed window—and see **where** that answer lives (receipt + external dashboard).
 
-**Non-goals:** Full project management suite.
+**Non-goals:** Full project management suite; Forge replacing PostHog’s full analytics UI; guaranteed lift refunds without auditable KPIs (see vision PRD).
 
 ---
 
@@ -169,51 +216,63 @@ Long-term, Forge pairs deterministic cores with richer integrations and outcome 
 
 ### 6.4 Security & tenancy
 
-- Org resolution via `x-org-id` / query / body (dev) vs strict header mode (prod-style shared environments).
+- **Production direction:** authenticated users / orgs (e.g. IdP + active org) and **machine API keys** with scopes — see `**docs/CUSTOMER_READINESS_BACKLOG.md` Epic A** and shipped patterns in-repo.
+- Legacy / dev: org resolution via header, query, or body where explicitly supported for local demos (`PHASE1_ORG_IDENTITY_MODE`, defaults).
 
 ---
 
 ## 7. Metrics (north stars)
 
-| Area | Metric |
-| --- | --- |
-| Activation | Sites created + events ingested + readiness/recommendations fetched successfully |
-| Quality | % of recommendations acted on in pilots (manual tracking early) |
-| Engineering | Build green; smoke tests for critical APIs |
+
+| Area            | Metric                                                                                                                                    |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Activation      | Sites created + events ingested + readiness/recommendations fetched successfully                                                          |
+| Loop completion | **Preview → production measure:** % of pilot suggestions that reach **measured** status with linked metric dashboard or experiment record |
+| Product surface | Time-to-first **cockpit** session where user sees backlog + integration health without engineer assistance                                |
+| Quality         | % of recommendations acted on in pilots (manual tracking early); **trustworthy receipt rate**                                             |
+| Engineering     | Build green; smoke tests for critical APIs                                                                                                |
+
 
 ---
 
 ## 8. Risks & mitigations
 
-| Risk | Mitigation |
-| --- | --- |
+
+| Risk                           | Mitigation                                                       |
+| ------------------------------ | ---------------------------------------------------------------- |
 | Sparse data → wrong confidence | Sufficiency thresholds; readiness states communicate uncertainty |
-| Blob concurrency / growth | Partitioned objects; Postgres for heavy workloads |
-| Tenant leakage | `header_required` org mode; tests for org filters |
+| Blob concurrency / growth      | Partitioned objects; Postgres for heavy workloads                |
+| Tenant leakage                 | `header_required` org mode; tests for org filters                |
+
 
 ---
 
 ## 9. Open questions
 
 - Pilot success definition: conversion lift vs velocity of decisions vs revenue?
+- **Minimum preview tier** for v1 pilots (staging link only vs branch preview vs in-product iframe)—cost and fraud constraints?
+- **Flag / deployment model:** customer feature-flag vendor vs Forge-hosted toggles vs Git-only PR flow?
 - First analytics providers to prioritize for Phase 2 mappings?
 - SLA targets for ingestion latency and API availability?
+- How much **creative visualization** (beyond charts/tables) is required for v1 credibility vs Phase 2 polish?
 
 ---
 
 ## 10. References (documents & code)
 
-| Topic | Location |
-| --- | --- |
-| **Site Improver Vision & credibility demos** | `forge/docs/SITE_IMPROVER_VISION_PRD.md` |
-| **Customer readiness backlog (commercial epics)** | `forge/docs/CUSTOMER_READINESS_BACKLOG.md` |
-| Evidence model / Phase 2 audits | `forge/docs/PHASE2_EVIDENCE_MODEL.md` |
-| Phase 1 APIs | `src/app/api/phase1/` |
-| Sufficiency engine | `src/lib/phase1/sufficiency/` |
-| Insights rules | `src/lib/phase1/insights/rules.ts` |
-| Readiness from events | `src/lib/phase1/computeReadinessSnapshot.ts` |
-| Discovery validation | `src/lib/discovery/schema.ts` |
-| README / env matrix | `forge/README.md` |
+
+| Topic                                                                       | Location                                     |
+| --------------------------------------------------------------------------- | -------------------------------------------- |
+| **Site Improver Vision & credibility demos**                                | `forge/docs/SITE_IMPROVER_VISION_PRD.md`     |
+| **Customer readiness backlog (commercial epics + Epic I experience layer)** | `forge/docs/CUSTOMER_READINESS_BACKLOG.md`   |
+| Evidence model / Phase 2 audits                                             | `forge/docs/PHASE2_EVIDENCE_MODEL.md`        |
+| Phase 1 APIs                                                                | `src/app/api/phase1/`                        |
+| Sufficiency engine                                                          | `src/lib/phase1/sufficiency/`                |
+| Insights rules                                                              | `src/lib/phase1/insights/rules.ts`           |
+| Readiness from events                                                       | `src/lib/phase1/computeReadinessSnapshot.ts` |
+| Discovery validation                                                        | `src/lib/discovery/schema.ts`                |
+| README / env matrix                                                         | `forge/README.md`                            |
+
 
 ---
 
