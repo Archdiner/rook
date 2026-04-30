@@ -9,6 +9,7 @@
  */
 
 import type { CtaCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
+import type { GoalConfig, GoalType } from "@/lib/phase2/types";
 
 import {
   clamp,
@@ -24,6 +25,7 @@ import {
   topByCount,
 } from "./helpers";
 import type { SessionTrace } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -106,6 +108,9 @@ export const bounceOnKeyPage: AuditRule = {
           referrers: bucket.referrers,
           sessionDevices: bucket.sessionDevices,
           snapshot,
+          windowDays: windowDaysFromTimeWindow(ctx.window),
+          goalType: ctx.config.goalType,
+          goalConfig: ctx.config.goalConfig,
         }),
       );
     }
@@ -121,10 +126,16 @@ interface FindingInputs {
   referrers: string[];
   sessionDevices: Map<string, string>;
   snapshot: PageSnapshot | undefined;
+  windowDays: number;
+  goalType?: GoalType;
+  goalConfig?: GoalConfig;
 }
 
 function buildFinding(inputs: FindingInputs): AuditFinding {
-  const { pathRef, entries, bounces, bounceRate, referrers, sessionDevices, snapshot } = inputs;
+  const {
+    pathRef, entries, bounces, bounceRate, referrers, sessionDevices, snapshot,
+    windowDays, goalType, goalConfig,
+  } = inputs;
   const primary = snapshot ? pickPrimaryCta(snapshot.data.ctas) : null;
   const topReferrers = topByCount(referrers, (r) => r).slice(0, 3);
   const deviceCounts = countDevices(sessionDevices);
@@ -183,6 +194,31 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
       }
     : undefined;
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: bounceRate,
+    windowVolume: entries,
+    windowDays,
+    goalType,
+    goalConfig,
+    signalDescription: `sessions landing on ${pathRef}`,
+  });
+
+  const ctaClause = primary
+    ? `Raise the prominence of ${quote(primary.text)} (your highest-weight CTA) to hero position — it should be the first thing visitors read, not something they find after scrolling.`
+    : `Place a single, prominent CTA above the fold that matches the promise in the referrer or ad copy that sent visitors here.`;
+
+  const prescription = {
+    whatToChange:
+      `${ctaClause} Rewrite the hero headline to answer the implied question in the top referrer traffic, not just describe the product.`,
+    whyItWorks:
+      `${pct(bounceRate)}% of visitors land on ${pathRef} and leave without a single click. ` +
+      `The page is receiving traffic but not giving visitors a reason to engage. ` +
+      `The fix is a match between arrival intent and first-visible content — not more content.`,
+    experimentVariantDescription:
+      `Variant B: hero headline and primary CTA rewritten to reflect top referrer intent. ` +
+      `Primary metric: bounce rate and first CTA click rate on ${pathRef}.`,
+  };
+
   return {
     id: `bounce-on-key-page:${sanitizeIdSegment(pathRef)}`,
     ruleId: "bounce-on-key-page",
@@ -194,6 +230,8 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     title: 'High bounce on key page',
     summary,
     recommendation,
+    prescription,
+    impactEstimate,
     evidence,
     ...(refs !== undefined ? { refs } : {}),
   };

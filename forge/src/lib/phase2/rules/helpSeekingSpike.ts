@@ -8,7 +8,7 @@
  * looking for help instead of letting them act — emit a finding.
  */
 
-import type { CanonicalEvent } from "@/lib/phase2/types";
+import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
 
 import {
   clamp,
@@ -22,6 +22,7 @@ import {
   siteBaselineRate,
   topByCount,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -111,6 +112,9 @@ export const helpSeekingSpike: AuditRule = {
           baselineRate,
           multiple: localRate / baselineRate,
           helpEvents,
+          windowDays: windowDaysFromTimeWindow(ctx.window),
+          goalType: ctx.config.goalType,
+          goalConfig: ctx.config.goalConfig,
         }),
       );
     }
@@ -128,6 +132,9 @@ interface FindingInputs {
   baselineRate: number;
   multiple: number;
   helpEvents: CanonicalEvent[];
+  windowDays: number;
+  goalType?: GoalType;
+  goalConfig?: GoalConfig;
 }
 
 function buildFinding(inputs: FindingInputs): AuditFinding {
@@ -141,6 +148,9 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     baselineRate,
     multiple,
     helpEvents,
+    windowDays,
+    goalType,
+    goalConfig,
   } = inputs;
 
   const topGroups = topByCount(helpEvents, (e) => readStringProp(e.properties, "cta_text") ?? "")
@@ -187,6 +197,29 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     });
   }
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: localRate,
+    windowVolume: pageCtaClicks,
+    windowDays,
+    goalType,
+    goalConfig,
+    signalDescription: `CTA clicks on ${pathRef} deflected to help instead of conversion`,
+  });
+
+  const faqTopics = topGroups.slice(0, 2).map((g) => quote(g.key)).join(' and ');
+  const prescription = {
+    whatToChange:
+      `Add a 2-3 question FAQ accordion to ${pathRef} that directly addresses the doubts visitors are shopping for. ` +
+      `Base the questions on the actual help-CTA labels clicked: ${faqTopics || 'the help labels in the evidence below'}. ` +
+      `Place the FAQ immediately above the primary CTA, not at the bottom of the page.`,
+    whyItWorks:
+      `${pct(localRate)}% of CTA clicks on this page go to help — ${round(multiple, 1)}× the site baseline. ` +
+      `Visitors want to convert but have an unanswered question. Inlining the answer removes the deflection without losing them to a support page.`,
+    experimentVariantDescription:
+      `Variant B: 2-3 question FAQ accordion added above the primary CTA on ${pathRef}, addressing the top help-seeking labels. ` +
+      `Primary metric: help-CTA click rate and primary CTA conversion rate on ${pathRef}.`,
+  };
+
   return {
     id: `help-seeking-spike:${sanitizeIdSegment(pathRef)}`,
     ruleId: "help-seeking-spike",
@@ -197,6 +230,8 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     pathRef,
     title: `Help-seeking spike on ${pathRef}`,
     summary,
+    prescription,
+    impactEstimate,
     recommendation,
     evidence,
   };

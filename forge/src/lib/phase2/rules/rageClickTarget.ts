@@ -7,7 +7,7 @@
  * its page rage-click it, the affordance is misleading — emit a finding.
  */
 
-import type { CanonicalEvent } from "@/lib/phase2/types";
+import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
 
 import {
   clamp,
@@ -19,6 +19,7 @@ import {
   readStringProp,
   sanitizeIdSegment,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -92,7 +93,7 @@ export const rageClickTarget: AuditRule = {
     for (const key of orderedGroupKeys) {
       const group = groups.get(key);
       if (!group) continue;
-      const finding = evaluateGroup(group, sessionsByPath, ctx);
+      const finding = evaluateGroup(group, sessionsByPath, ctx, windowDaysFromTimeWindow(ctx.window));
       if (finding !== null) {
         findings.push(finding);
       }
@@ -105,6 +106,7 @@ function evaluateGroup(
   group: RageGroup,
   sessionsByPath: Map<string, number>,
   ctx: AuditRuleContext,
+  windowDays: number,
 ): AuditFinding | null {
   const rageCount = group.events.length;
   if (rageCount < MIN_RAGE_CLICKS) return null;
@@ -186,6 +188,27 @@ function evaluateGroup(
     matchedRef ?? group.rageTargetRef ?? (sanitizeIdSegment(displayText) || "_");
   const refsCtaRef = matchedRef ?? group.rageTargetRef ?? undefined;
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: rageRate,
+    windowVolume: totalSessionsOnPage,
+    windowDays,
+    goalType: ctx.config.goalType,
+    goalConfig: ctx.config.goalConfig,
+    signalDescription: `sessions on ${group.pathRef} that rage-click ${quote(displayText)}`,
+  });
+
+  const prescription = {
+    whatToChange:
+      `If ${quote(displayText)} is meant to be clickable: add a visible hover/focus state and verify its click handler fires. ` +
+      `If it's decorative text or an icon: remove pointer cursor and change its visual treatment so it no longer reads as a button.`,
+    whyItWorks:
+      `${pct(rageRate)}% of sessions on ${group.pathRef} rage-click this element — visitors expect it to respond and it doesn't. ` +
+      `Fixing affordance mismatches like this removes a frustration signal that erodes trust on conversion-critical pages.`,
+    experimentVariantDescription:
+      `Variant B: ${quote(displayText)} given correct interactive treatment (working handler + hover state) or visually demoted to plain text. ` +
+      `Primary metric: rage_click rate on ${group.pathRef}.`,
+  };
+
   return {
     id: `rage-click-target:${group.pathRef}:${sanitizeIdSegment(idSlug)}`,
     ruleId: "rage-click-target",
@@ -196,6 +219,8 @@ function evaluateGroup(
     pathRef: group.pathRef,
     title: `Rage clicks cluster on ${quote(displayText)}`,
     summary,
+    prescription,
+    impactEstimate,
     recommendation,
     evidence,
     refs: {

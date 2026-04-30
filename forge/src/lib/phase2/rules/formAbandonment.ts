@@ -10,7 +10,7 @@
  */
 
 import type { FormCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
-import type { CanonicalEvent } from "@/lib/phase2/types";
+import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
 
 import {
   clamp,
@@ -22,6 +22,7 @@ import {
   sanitizeIdSegment,
   share,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -91,6 +92,9 @@ export const formAbandonment: AuditRule = {
             formSubmits,
             abandonmentRate: 1 - submitRate,
             submitButtonText: modeStringProp(submitCtaEvents, "cta_text"),
+            windowDays: windowDaysFromTimeWindow(ctx.window),
+            goalType: ctx.config.goalType,
+            goalConfig: ctx.config.goalConfig,
           }),
         );
       }
@@ -106,10 +110,16 @@ interface FindingInputs {
   formSubmits: number;
   abandonmentRate: number;
   submitButtonText: string | null;
+  windowDays: number;
+  goalType?: GoalType;
+  goalConfig?: GoalConfig;
 }
 
 function buildFinding(inputs: FindingInputs): AuditFinding {
-  const { snapshot, form, formViews, formSubmits, abandonmentRate, submitButtonText } = inputs;
+  const {
+    snapshot, form, formViews, formSubmits, abandonmentRate, submitButtonText,
+    windowDays, goalType, goalConfig,
+  } = inputs;
   const pathRef = snapshot.pathRef;
   const requiredLabels = collectRequiredLabels(form);
   const top3Required = requiredLabels.slice(0, 3);
@@ -162,6 +172,53 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     { label: "Form landmark", value: form.landmark },
   ];
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: abandonmentRate,
+    windowVolume: formViews,
+    windowDays,
+    goalType,
+    goalConfig,
+    signalDescription: `form sessions on ${pathRef}`,
+  });
+
+  const submitCopyClause =
+    submitButtonText && submitButtonText.trim().length > 0
+      ? `Change the submit button copy from ${quote(submitButtonText)} to a value-forward phrase like "Get started — no credit card required"`
+      : `Rewrite the submit button to use a value-forward phrase like "Get started — free"`;
+
+  const prescription = {
+    whatToChange:
+      `${submitCopyClause}. Move any non-essential required fields (phone number, company size) ` +
+      `to a second step after the user has already committed by clicking the primary button.`,
+    whyItWorks:
+      `${pct(abandonmentRate)}% of visitors start this form but never finish it. ` +
+      `Each required field that isn't essential to lead intake is a drop-off gate. ` +
+      `Reducing friction at the submit step and deferring optional fields typically improves ` +
+      `form completion by 20–40% without reducing lead quality.`,
+    experimentVariantDescription:
+      `Variant B: submit button copy changed to value-forward phrase; ${
+        top5Required.length > 1
+          ? `${quote(top5Required[top5Required.length - 1])} field moved to step 2`
+          : 'optional fields deferred to step 2'
+      }. Primary metric: form_submit rate on ${pathRef}.`,
+  };
+
+  const snapshotDiagram = {
+    type: 'form-funnel' as const,
+    pathRef,
+    funnelSteps: [
+      { label: 'Viewed form', value: formViews },
+      { label: 'Submitted', value: formSubmits, isFlagged: true },
+    ],
+    items: form.inputs.slice(0, 8).map((input) => ({
+      type: 'form' as const,
+      text: input.labelText ?? input.name ?? `(field ${input.type})`,
+      isFlagged: input.required,
+      subtext: input.required ? 'required' : 'optional',
+    })),
+    proposedFix: `Move optional required fields to step 2. Rewrite submit button copy to reduce commitment anxiety.`,
+  };
+
   return {
     id: `form-abandonment:${sanitizeIdSegment(pathRef)}:${sanitizeIdSegment(form.ref)}`,
     ruleId: "form-abandonment",
@@ -173,6 +230,9 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     title: `High form abandonment on ${pathRef}`,
     summary,
     recommendation,
+    prescription,
+    impactEstimate,
+    snapshotDiagram,
     evidence,
     refs: { snapshotId: snapshot.id, formRef: form.ref },
   };

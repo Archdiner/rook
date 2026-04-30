@@ -8,7 +8,7 @@
  */
 
 import type { CtaCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
-import type { CanonicalEvent } from "@/lib/phase2/types";
+import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
 
 import {
   clamp,
@@ -20,6 +20,7 @@ import {
   share,
   topByCount,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -58,7 +59,7 @@ export const heroHierarchyInversion: AuditRule = {
       const snapshot = ctx.pageSnapshotsByPath.get(pathRef);
       if (!snapshot) continue;
 
-      const finding = evaluatePage(pathRef, snapshot, clicks);
+      const finding = evaluatePage(pathRef, snapshot, clicks, ctx);
       if (finding !== null) {
         findings.push(finding);
       }
@@ -72,6 +73,7 @@ function evaluatePage(
   pathRef: string,
   snapshot: PageSnapshot,
   clicks: CanonicalEvent[],
+  ctx: AuditRuleContext,
 ): AuditFinding | null {
   const totalClicks = clicks.length;
 
@@ -162,6 +164,29 @@ function evaluatePage(
     { label: "Sample size", value: totalClicks, context: "CTA clicks in window" },
   ];
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: clickedShare,
+    windowVolume: totalClicks,
+    windowDays: windowDaysFromTimeWindow(ctx.window),
+    goalType: ctx.config.goalType,
+    goalConfig: ctx.config.goalConfig,
+    signalDescription: `CTA clicks on ${pathRef} going to a lower-priority element`,
+  });
+
+  const prescription = {
+    whatToChange:
+      `Give ${quote(clickedText ?? heavy.text)} the visual weight currently held by ${quote(heavy.text)}. ` +
+      `Specifically: apply ${heavy.visualWeightSignals.slice(0, 2).join(' + ')} to ${quote(clickedText ?? '')} ` +
+      `and demote ${quote(heavy.text)} to a secondary style.`,
+    whyItWorks:
+      `Users vote with their clicks — ${pct(clickedShare)}% of CTA clicks go to ${quote(clickedText ?? '')} ` +
+      `but ${quote(heavy.text)} gets the most visual attention. Aligning design emphasis with user preference ` +
+      `removes the mismatch that forces visitors to hunt for the thing they actually want.`,
+    experimentVariantDescription:
+      `Variant B: ${quote(clickedText ?? '')} promoted to primary visual treatment; ` +
+      `${quote(heavy.text)} demoted to secondary. Primary metric: CTA click rate on ${pathRef}.`,
+  };
+
   return {
     id: `hero-hierarchy-inversion:${pathRef}`,
     ruleId: "hero-hierarchy-inversion",
@@ -172,6 +197,8 @@ function evaluatePage(
     pathRef,
     title: `Visual hierarchy inverts user preference on ${pathRef}`,
     summary,
+    prescription,
+    impactEstimate,
     recommendation,
     evidence,
     refs: { snapshotId: snapshot.id, ctaRef: heavy.ref },

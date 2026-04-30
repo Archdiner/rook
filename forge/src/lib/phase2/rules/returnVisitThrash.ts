@@ -8,7 +8,7 @@
  * (or aren't resolving).
  */
 
-import type { NarrativeConfig } from "@/lib/phase2/types";
+import type { GoalConfig, GoalType, NarrativeConfig } from "@/lib/phase2/types";
 
 import type { SessionTrace } from "./helpers";
 import {
@@ -22,6 +22,7 @@ import {
   sanitizeIdSegment,
   topByCount,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -81,13 +82,14 @@ export const returnVisitThrash: AuditRule = {
       }
     }
 
+    const windowDays = windowDaysFromTimeWindow(ctx.window);
     const findings: AuditFinding[] = [];
     const ordered = [...aggregates.values()].sort((a, b) => a.pathRef.localeCompare(b.pathRef));
     for (const agg of ordered) {
       if (agg.pathSessions < MIN_PATH_SESSIONS) continue;
       const thrashRate = agg.thrashSessions / agg.pathSessions;
       if (thrashRate <= MIN_THRASH_RATE) continue;
-      findings.push(buildFinding(agg, thrashRate, narrativesBySource.get(agg.pathRef)));
+      findings.push(buildFinding(agg, thrashRate, narrativesBySource.get(agg.pathRef), windowDays, ctx.config.goalType, ctx.config.goalConfig));
     }
     return findings;
   },
@@ -153,6 +155,9 @@ function buildFinding(
   agg: ThrashAggregate,
   thrashRate: number,
   narrative: NarrativeConfig | undefined,
+  windowDays: number,
+  goalType?: GoalType,
+  goalConfig?: GoalConfig,
 ): AuditFinding {
   const median = round(medianOf(agg.pathCountsAcrossThrash), 1);
   const deviceMode = topOf(agg.deviceTags);
@@ -209,6 +214,30 @@ function buildFinding(
     });
   }
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: thrashRate,
+    windowVolume: agg.pathSessions,
+    windowDays,
+    goalType,
+    goalConfig,
+    signalDescription: `sessions looping on ${agg.pathRef} without progressing`,
+  });
+
+  const interimClause = interimTop.length > 0
+    ? `Visitors leave, visit ${interimTop.slice(0, 2).map((p) => quote(p.key)).join(' and ')}, then come back — those pages aren't answering the question either. Fix the answer on ${agg.pathRef} itself.`
+    : `Add a TL;DR or anchor navigation at the top of ${agg.pathRef} so returning visitors can jump to what they're looking for.`;
+
+  const prescription = {
+    whatToChange:
+      `Add a "Quick answer" section or anchor navigation at the top of ${agg.pathRef} that surfaces the ${narrative ? `${narrative.expectedPathRefs.length} expected destinations` : 'most common follow-up destinations'} visitors expect to find here. ${interimClause}`,
+    whyItWorks:
+      `${formatCount(agg.thrashSessions)} sessions visit ${agg.pathRef} 3+ times without progressing — ${pct(thrashRate)}% of all sessions touching this page. ` +
+      `They keep coming back because they haven't found what they need. Making the answer findable on the first visit eliminates the loop.`,
+    experimentVariantDescription:
+      `Variant B: top-of-page quick-answer section or anchor navigation added to ${agg.pathRef}. ` +
+      `Primary metric: return-visit rate and funnel progression rate from ${agg.pathRef}.`,
+  };
+
   return {
     id: `return-visit-thrash:${sanitizeIdSegment(agg.pathRef)}`,
     ruleId: "return-visit-thrash",
@@ -219,6 +248,8 @@ function buildFinding(
     pathRef: agg.pathRef,
     title: 'Return-visit thrash',
     summary,
+    prescription,
+    impactEstimate,
     recommendation: [docPara, narrativePara],
     evidence,
   };

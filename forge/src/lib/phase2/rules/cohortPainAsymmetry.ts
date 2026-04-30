@@ -240,6 +240,23 @@ function buildFinding(inputs: Inputs): AuditFinding {
   }
   if (deviceMode !== null) evidence.push({ label: "Top device type in cohort", value: deviceMode });
 
+  const topRagePath = topRagePaths[0]?.key ?? null;
+  const topErrorPath = topErrorPaths[0]?.key ?? null;
+  const prescription = {
+    whatToChange:
+      `Pull session recordings for ${quote(top.label)} users — filter by rage or error events` +
+      (topRagePath ? ` on ${topRagePath}` : '') +
+      `. Identify the single highest-friction moment and fix it specifically for this cohort's context. ` +
+      `Do not apply a site-wide change before understanding whether the cause is content, interaction, or loading.`,
+    whyItWorks:
+      `${quote(top.label)} users have ${round(multiple, 1)}× the pain index of the cohort median. ` +
+      `This gap almost always has a concrete source — a broken feature for a specific device type, a message that doesn't match this cohort's expectation, or a loading issue on a specific plan tier. ` +
+      `Watching 5-10 recordings is faster than guessing.`,
+    experimentVariantDescription:
+      `Once the root cause is identified from recordings: targeted fix for ${quote(top.label)} cohort. ` +
+      `Primary metric: composite pain index (rage rate + error rate + shallow-session rate) for ${quote(top.label)} vs ${quote(referenceRow.label)}.`,
+  };
+
   return {
     id: `cohort-pain-asymmetry:${sanitizeIdSegment(dim.id)}:${sanitizeIdSegment(top.label)}`,
     ruleId: "cohort-pain-asymmetry",
@@ -251,6 +268,7 @@ function buildFinding(inputs: Inputs): AuditFinding {
     pathRef: null,
     title: `Cohort ${quote(top.label)} pain index ${round(multiple, 1)}× cohort median`,
     summary,
+    prescription,
     recommendation: [para1, para2],
     evidence,
   };

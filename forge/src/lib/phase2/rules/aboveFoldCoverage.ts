@@ -12,11 +12,14 @@ import type { CtaCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
 import type { CanonicalEvent } from "@/lib/phase2/types";
 
 import { clamp, formatCount, pct, quote, readScrollFraction } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
   AuditRule,
   AuditRuleContext,
+  SnapshotDiagram,
+  SnapshotDiagramItem,
 } from "./types";
 
 const MIN_PAGEVIEWS = 30;
@@ -44,12 +47,14 @@ export const aboveFoldCoverage: AuditRule = {
       bucket.push(event);
     }
 
+    const windowDays = windowDaysFromTimeWindow(ctx.window);
+
     for (const [pathRef, pageviews] of pageviewsByPath) {
       if (pageviews.length < MIN_PAGEVIEWS) continue;
       const snapshot = ctx.pageSnapshotsByPath.get(pathRef);
       if (!snapshot) continue;
 
-      const finding = evaluatePage(pathRef, snapshot, pageviews);
+      const finding = evaluatePage(pathRef, snapshot, pageviews, windowDays, ctx);
       if (finding !== null) {
         findings.push(finding);
       }
@@ -63,6 +68,8 @@ function evaluatePage(
   pathRef: string,
   snapshot: PageSnapshot,
   pageviews: CanonicalEvent[],
+  windowDays: number,
+  ctx: AuditRuleContext,
 ): AuditFinding | null {
   const primary = pickPrimaryBelowFoldCta(snapshot.data.ctas);
   if (!primary) return null;
@@ -109,6 +116,62 @@ function evaluatePage(
     { label: "Page", value: pathRef },
   ];
 
+  // Build page-structure diagram for the UI wireframe
+  const diagramItems: SnapshotDiagramItem[] = [];
+  // Add headings (H1 first, then H2s) in document order
+  for (const h of snapshot.data.headings.slice(0, 5)) {
+    diagramItems.push({
+      type: h.level === 1 ? 'h1' : h.level === 2 ? 'h2' : 'h3',
+      text: h.text.length > 60 ? h.text.slice(0, 57) + '…' : h.text,
+      isFlagged: false,
+    });
+  }
+  // Add CTAs in document order (flag the primary below-fold one)
+  for (const cta of snapshot.data.ctas.slice(0, 4)) {
+    diagramItems.push({
+      type: 'cta',
+      text: cta.text.length > 40 ? cta.text.slice(0, 37) + '…' : cta.text,
+      isFlagged: cta.ref === primary.ref,
+      foldGuess: cta.foldGuess,
+      proposedPosition: cta.ref === primary.ref ? 'above-fold' : undefined,
+      subtext: `weight ${cta.visualWeight.toFixed(1)}, ${cta.landmark}`,
+    });
+  }
+  // Fold line: after the last item whose foldGuess is 'above', or after index 2
+  const lastAboveIdx = diagramItems.reduce((acc, item, idx) =>
+    item.foldGuess === 'above' ? idx : acc, 1);
+  const foldAfterIndex = Math.max(0, lastAboveIdx);
+
+  const snapshotDiagram: SnapshotDiagram = {
+    type: 'page-structure',
+    pathRef,
+    items: diagramItems,
+    foldAfterIndex,
+    proposedFix: `Move ${quote(primary.text)} above the fold line — duplicate it as a hero CTA or sticky element.`,
+  };
+
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: belowFoldShare,
+    windowVolume: totalPageviews,
+    windowDays,
+    goalType: ctx.config.goalType,
+    goalConfig: ctx.config.goalConfig,
+    signalDescription: `pageviews on ${pathRef}`,
+  });
+
+  const prescription = {
+    whatToChange:
+      `Move ${quote(primary.text)} above the fold on ${pathRef}. ` +
+      `If the layout can't be restructured, add a sticky version or duplicate it as a hero button.`,
+    whyItWorks:
+      `${pct(belowFoldShare)}% of sessions never scroll past 40% of the page. ` +
+      `${quote(primary.text)} has visual weight ${primary.visualWeight} — it's designed to convert, ` +
+      `but most visitors never reach it. Moving it above the fold puts the ask where the attention is.`,
+    experimentVariantDescription:
+      `Variant B: ${quote(primary.text)} repositioned above the fold in the hero section. ` +
+      `All other content unchanged. Primary metric: CTA click rate on ${pathRef}.`,
+  };
+
   return {
     id: `above-fold-coverage:${pathRef}`,
     ruleId: "above-fold-coverage",
@@ -120,6 +183,9 @@ function evaluatePage(
     title: 'Primary CTA hidden below the fold',
     summary,
     recommendation,
+    prescription,
+    impactEstimate,
+    snapshotDiagram,
     evidence,
     refs: { snapshotId: snapshot.id, ctaRef: primary.ref },
   };

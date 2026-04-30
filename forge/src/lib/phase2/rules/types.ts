@@ -50,6 +50,70 @@ export interface AuditFindingEvidence {
   context?: string;
 }
 
+/**
+ * Operator-facing impact estimate — what fixing this finding is worth, expressed
+ * in the site's goal units (revenue, signups, sessions, or a custom label).
+ */
+export interface AuditFindingImpactEstimate {
+  /** Numeric value of the estimate. */
+  value: number;
+  /** Unit string, e.g. 'USD', 'signups', 'sessions', 'donations'. */
+  unit: string;
+  /** Period, always 'monthly' for now. */
+  period: 'monthly';
+  /** Human-readable formatted string ready for display, e.g. '~$1,200/month'. */
+  formatted: string;
+  /** Napkin-math basis so the estimate is auditable. */
+  basis: string;
+}
+
+/**
+ * Opinionated brief that tells the operator exactly what to change and why —
+ * more specific and action-oriented than the analytical `recommendation` field.
+ */
+export interface AuditFindingPrescription {
+  /** The concrete action to take. E.g. "Move 'Get started' above the fold on mobile." */
+  whatToChange: string;
+  /** Causal explanation of why this works. */
+  whyItWorks: string;
+  /** Description of the A/B variant to run. Pre-fills the experiment creation panel. */
+  experimentVariantDescription: string;
+}
+
+/**
+ * Structural page or funnel diagram derived from snapshot + event data.
+ * Rendered by the finding detail UI as a before/after wireframe — no screenshot
+ * service required; built purely from existing analysis artifacts.
+ */
+export interface SnapshotDiagramItem {
+  type: 'h1' | 'h2' | 'h3' | 'cta' | 'form' | 'content-block';
+  text: string;
+  isFlagged: boolean;
+  foldGuess?: 'above' | 'below' | 'uncertain';
+  /** Where the proposed fix repositions this item. */
+  proposedPosition?: 'above-fold';
+  /** Secondary detail, e.g. required field labels. */
+  subtext?: string;
+}
+
+export interface SnapshotFunnelStep {
+  label: string;
+  value: number;
+  isFlagged?: boolean;
+}
+
+export interface SnapshotDiagram {
+  /** 'page-structure' renders a wireframe with a fold line; 'form-funnel' renders a funnel. */
+  type: 'page-structure' | 'form-funnel';
+  pathRef: string;
+  items?: SnapshotDiagramItem[];
+  /** Index in `items` after which the fold line is drawn. */
+  foldAfterIndex?: number;
+  funnelSteps?: SnapshotFunnelStep[];
+  /** One-sentence description of the proposed fix shown below the diagram. */
+  proposedFix: string;
+}
+
 export interface AuditFinding {
   /** Stable, human-readable id, e.g. `hero-hierarchy-inversion:/pricing`. */
   id: string;
@@ -68,6 +132,21 @@ export interface AuditFinding {
   /** Designer- / researcher-voiced paragraph(s). Each string is one paragraph. */
   recommendation: string[];
   evidence: AuditFindingEvidence[];
+  /**
+   * Opinionated fix brief. More concrete than `recommendation` — tells the
+   * operator exactly what to change, not just what the problem is.
+   */
+  prescription?: AuditFindingPrescription;
+  /**
+   * Impact estimate in the site's goal units. Present when the site has
+   * `goalConfig` set, or defaults to sessions-affected when it doesn't.
+   */
+  impactEstimate?: AuditFindingImpactEstimate;
+  /**
+   * Structural visualization derived from snapshot data. Rendered by the
+   * finding detail page as a before/after wireframe.
+   */
+  snapshotDiagram?: SnapshotDiagram;
   /**
    * Optional refs into snapshots/CTAs/element ancestry so a UI can deep-link
    * back into the artifact that produced the finding.

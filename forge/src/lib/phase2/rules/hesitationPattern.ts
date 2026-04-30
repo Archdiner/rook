@@ -11,7 +11,7 @@
  */
 
 import type { CtaCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
-import type { CanonicalEvent } from "@/lib/phase2/types";
+import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
 
 import {
   clamp,
@@ -23,6 +23,7 @@ import {
   sanitizeIdSegment,
   share,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -112,6 +113,9 @@ export const hesitationPattern: AuditRule = {
           medianActiveSeconds: medianRounded(bucket.hesitationActiveSeconds),
           primary,
           snapshot,
+          windowDays: windowDaysFromTimeWindow(ctx.window),
+          goalType: ctx.config.goalType,
+          goalConfig: ctx.config.goalConfig,
         }),
       );
     }
@@ -127,6 +131,9 @@ interface FindingInputs {
   medianActiveSeconds: number;
   primary: CtaCandidate | null;
   snapshot: PageSnapshot | undefined;
+  windowDays: number;
+  goalType?: GoalType;
+  goalConfig?: GoalConfig;
 }
 
 function buildFinding(inputs: FindingInputs): AuditFinding {
@@ -138,6 +145,9 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     medianActiveSeconds,
     primary,
     snapshot,
+    windowDays,
+    goalType,
+    goalConfig,
   } = inputs;
 
   const summary =
@@ -173,6 +183,32 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     });
   }
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: hesitationShare,
+    windowVolume: longDwellSessions,
+    windowDays,
+    goalType,
+    goalConfig,
+    signalDescription: `long-dwell sessions on ${pathRef} that don't convert`,
+  });
+
+  const ctaClause = primary
+    ? `Rewrite the copy on ${quote(primary.text)} to answer "what specifically changes when I do this?" — not just label the action.`
+    : `Add a single, direct CTA with copy that answers the implied question keeping visitors on this page for ${medianActiveSeconds}s.`;
+
+  const prescription = {
+    whatToChange:
+      `${ctaClause} Add 1-3 sentences of proof immediately above the CTA: a specific outcome, a number, or a quote. ` +
+      `Do not add more content to the page — reduce and sharpen.`,
+    whyItWorks:
+      `Visitors spend a median ${medianActiveSeconds}s actively on ${pathRef} before leaving without acting. ` +
+      `They're reading, not confused — they need a reason to commit, not more information. ` +
+      `Proof + specificity on the CTA is the pattern that closes long-dwell hesitation.`,
+    experimentVariantDescription:
+      `Variant B: primary CTA copy updated with specific outcome language; 1-3 proof points added above fold. ` +
+      `Primary metric: CTA click rate from long-dwell sessions on ${pathRef}.`,
+  };
+
   return {
     id: `hesitation-pattern:${sanitizeIdSegment(pathRef)}`,
     ruleId: "hesitation-pattern",
@@ -183,6 +219,8 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     pathRef,
     title: `Hesitation without follow-up on ${pathRef}`,
     summary,
+    prescription,
+    impactEstimate,
     recommendation,
     evidence,
     ...(snapshot ? { refs: { snapshotId: snapshot.id } } : {}),

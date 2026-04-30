@@ -22,6 +22,7 @@ import {
   share,
   topByCount,
 } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -86,7 +87,8 @@ export const errorExposure: AuditRule = {
       })
       .slice(0, MAX_GROUPS);
 
-    return eligible.map((group) => buildFinding(group, sessionsByPath, ctx));
+    const windowDays = windowDaysFromTimeWindow(ctx.window);
+    return eligible.map((group) => buildFinding(group, sessionsByPath, ctx, windowDays));
   },
 };
 
@@ -94,6 +96,7 @@ function buildFinding(
   group: ErrorGroup,
   sessionsByPath: Map<string, Set<string>>,
   ctx: AuditRuleContext,
+  windowDays: number,
 ): AuditFinding {
   const errorCount = group.events.length;
   const distinctSessions = new Set(group.events.map((e) => e.sessionId)).size;
@@ -195,6 +198,31 @@ function buildFinding(
     `${sanitizeIdSegment(group.pathRef)}:${sanitizeIdSegment(group.errorType)}:` +
     sanitizeIdSegment(group.messageKey).slice(0, ID_MESSAGE_LIMIT);
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: impactedShare ?? Math.min(distinctSessions / Math.max(pageSessionsTotal, 1), 1),
+    windowVolume: pageSessionsTotal || distinctSessions,
+    windowDays,
+    goalType: ctx.config.goalType,
+    goalConfig: ctx.config.goalConfig,
+    signalDescription: `sessions exposed to ${quote(group.errorType)} on ${group.pathRef}`,
+  });
+
+  const sourceClause = errorSource !== null ? ` in ${errorSource}` : "";
+  const prescription = {
+    whatToChange:
+      `Fix ${quote(group.errorType)}${sourceClause}: ${shortenMessage(messageRaw)}. ` +
+      (isHandled
+        ? `The error is currently caught — remove the silent fallback and replace it with a user-visible recovery path or a proper fix.`
+        : `The error is unhandled — add a try/catch and either fix the root cause or show a clear error state with a retry action.`),
+    whyItWorks:
+      `${formatCount(distinctSessions)} sessions hit this exception in the window. ` +
+      `${isHandled ? 'Even handled errors degrade the experience' : 'Unhandled exceptions stop script execution mid-page'} — ` +
+      `users on ${group.pathRef} are encountering broken state${keyPath ? ' on a key funnel page' : ''}.`,
+    experimentVariantDescription:
+      `Fix deployed: ${quote(group.errorType)} resolved${sourceClause}. ` +
+      `Primary metric: error rate and conversion rate on ${group.pathRef}.`,
+  };
+
   return {
     id: `error-exposure:${idSlug}`,
     ruleId: "error-exposure",
@@ -211,6 +239,8 @@ function buildFinding(
     pathRef: group.pathRef,
     title: `${formatCount(errorCount)} ${quote(group.errorType)} exceptions on ${group.pathRef}`,
     summary,
+    prescription,
+    impactEstimate,
     recommendation: [para1, para2],
     evidence,
   };

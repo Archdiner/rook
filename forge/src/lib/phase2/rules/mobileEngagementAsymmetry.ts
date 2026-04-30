@@ -13,10 +13,13 @@
 
 import type {
   CanonicalEvent,
+  GoalConfig,
+  GoalType,
   OnboardingStepConfig,
 } from "@/lib/phase2/types";
 
 import { clamp, formatCount, modeStringProp, pct } from "./helpers";
+import { computeImpactEstimate, windowDaysFromTimeWindow } from "./impactEstimate";
 import type {
   AuditFinding,
   AuditFindingEvidence,
@@ -92,6 +95,9 @@ export const mobileEngagementAsymmetry: AuditRule = {
           gap,
           mobileStarts: mobile.starts,
           desktopStarts: desktop.starts,
+          windowDays: windowDaysFromTimeWindow(ctx.window),
+          goalType: ctx.config.goalType,
+          goalConfig: ctx.config.goalConfig,
         }),
       );
     }
@@ -107,10 +113,13 @@ interface FindingInputs {
   gap: number;
   mobileStarts: number;
   desktopStarts: number;
+  windowDays: number;
+  goalType?: GoalType;
+  goalConfig?: GoalConfig;
 }
 
 function buildFinding(inputs: FindingInputs): AuditFinding {
-  const { step, mobileRate, desktopRate, gap, mobileStarts, desktopStarts } = inputs;
+  const { step, mobileRate, desktopRate, gap, mobileStarts, desktopStarts, windowDays, goalType, goalConfig } = inputs;
   const totalStarts = mobileStarts + desktopStarts;
 
   const summary =
@@ -146,6 +155,29 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     },
   ];
 
+  const impactEstimate = computeImpactEstimate({
+    affectedRate: gap,
+    windowVolume: mobileStarts,
+    windowDays,
+    goalType,
+    goalConfig,
+    signalDescription: `mobile sessions failing to complete "${step.label}"`,
+  });
+
+  const prescription = {
+    whatToChange:
+      `Audit the "${step.label}" step on a real mobile device (not just responsive preview). ` +
+      `Check: are touch targets ≥44×44px? Do any dropdowns or date pickers require desktop-style interaction? ` +
+      `Is the primary action button visible without scrolling on a 375px viewport?`,
+    whyItWorks:
+      `Mobile completes this step at ${pct(mobileRate)}% vs ${pct(desktopRate)}% on desktop — a ${pct(gap)}-point gap. ` +
+      `This scale of gap almost always has a specific interaction or layout cause, not a content one. ` +
+      `Fixing the mobile interaction surface typically closes most of the gap without needing a full redesign.`,
+    experimentVariantDescription:
+      `Variant B: "${step.label}" step layout optimized for mobile — larger touch targets, ` +
+      `simplified inputs, primary CTA pinned above keyboard. Primary metric: mobile step completion rate.`,
+  };
+
   return {
     id: `mobile-engagement-asymmetry:${step.id}`,
     ruleId: "mobile-engagement-asymmetry",
@@ -156,6 +188,8 @@ function buildFinding(inputs: FindingInputs): AuditFinding {
     pathRef: null,
     title: `Mobile underperforms desktop on onboarding step "${step.label}"`,
     summary,
+    prescription,
+    impactEstimate,
     recommendation,
     evidence,
   };
