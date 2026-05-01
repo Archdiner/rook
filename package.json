@@ -3,20 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
-    "forge"
+    "zybit"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=forge",
-    "build": "npm run build --workspace=forge",
-    "start": "npm run start --workspace=forge",
-    "lint": "npm run lint --workspace=forge"
-  },
-  "dependencies": {
-    "lightningcss": "1.32.0",
-    "next": "16.2.4",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "tailwindcss": "^4",
-    "@tailwindcss/postcss": "^4"
+    "dev": "npm run dev --workspace=zybit",
+    "build": "npm run build --workspace=zybit",
+    "start": "npm run start --workspace=zybit",
+    "lint": "npm run lint --workspace=zybit"
   }
 }
