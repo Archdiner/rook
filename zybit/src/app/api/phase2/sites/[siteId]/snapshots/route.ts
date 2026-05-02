@@ -126,54 +126,53 @@ export async function POST(request: Request, context: RouteContext) {
     });
     if (!siteGate.ok) return siteGate.response;
 
-    const results: SnapshotRunPathResult[] = [];
+    const results: SnapshotRunPathResult[] = await Promise.all(
+      paths.map(async (rawPath): Promise<SnapshotRunPathResult> => {
+        let absoluteUrl: string;
+        try {
+          absoluteUrl = buildAbsoluteUrl(baseUrl, rawPath);
+        } catch (err) {
+          return {
+            path: rawPath,
+            pathRef: null,
+            url: '',
+            status: 'error',
+            errorCode: 'INVALID_URL',
+            errorMessage: err instanceof Error ? err.message : 'cannot build url',
+          };
+        }
 
-    for (const rawPath of paths) {
-      let absoluteUrl: string;
-      try {
-        absoluteUrl = buildAbsoluteUrl(baseUrl, rawPath);
-      } catch (err) {
-        results.push({
-          path: rawPath,
-          pathRef: null,
-          url: '',
-          status: 'error',
-          errorCode: 'INVALID_URL',
-          errorMessage: err instanceof Error ? err.message : 'cannot build url',
-        });
-        continue;
-      }
-
-      try {
-        const fetched = await runSnapshot(absoluteUrl, options);
-        const pathRef = normalizePathRef(fetched.finalUrl);
-        const snapshot = await repository.upsertPageSnapshot({
-          organizationId: actorResult.actor.organizationId,
-          siteId,
-          pathRef,
-          url: fetched.finalUrl,
-          data: fetched.data,
-          fetchedAt: new Date(fetched.data.parsedAt),
-        });
-        results.push({
-          path: rawPath,
-          pathRef: snapshot.pathRef,
-          url: snapshot.url,
-          status: 'ok',
-          snapshotId: snapshot.id,
-        });
-      } catch (err) {
-        const { code, message } = classifyError(err);
-        results.push({
-          path: rawPath,
-          pathRef: null,
-          url: absoluteUrl,
-          status: 'error',
-          errorCode: code,
-          errorMessage: message,
-        });
-      }
-    }
+        try {
+          const fetched = await runSnapshot(absoluteUrl, options);
+          const pathRef = normalizePathRef(fetched.finalUrl);
+          const snapshot = await repository.upsertPageSnapshot({
+            organizationId: actorResult.actor.organizationId,
+            siteId,
+            pathRef,
+            url: fetched.finalUrl,
+            data: fetched.data,
+            fetchedAt: new Date(fetched.data.parsedAt),
+          });
+          return {
+            path: rawPath,
+            pathRef: snapshot.pathRef,
+            url: snapshot.url,
+            status: 'ok',
+            snapshotId: snapshot.id,
+          };
+        } catch (err) {
+          const { code, message } = classifyError(err);
+          return {
+            path: rawPath,
+            pathRef: null,
+            url: absoluteUrl,
+            status: 'error',
+            errorCode: code,
+            errorMessage: message,
+          };
+        }
+      })
+    );
 
     const report: SnapshotRunReport = {
       total: results.length,

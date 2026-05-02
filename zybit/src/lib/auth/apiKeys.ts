@@ -30,10 +30,14 @@ export async function validateForgeApiKeyBearer(
   const row = rows[0];
   if (!row) return null;
 
-  await db
-    .update(zybitApiKeys)
-    .set({ lastUsedAt: new Date() })
-    .where(eq(zybitApiKeys.id, row.id));
+  // Throttle writes: only update lastUsedAt if not set or older than 1 hour
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  if (!row.lastUsedAt || Date.now() - new Date(row.lastUsedAt).getTime() > ONE_HOUR_MS) {
+    await db
+      .update(zybitApiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(zybitApiKeys.id, row.id));
+  }
 
   return {
     id: row.id,

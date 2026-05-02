@@ -9,7 +9,7 @@
 
 import { createHash } from 'crypto';
 import { randomUUID } from 'crypto';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { badRequest, mapRouteError, parseJsonObject, parseString, success } from '@/app/api/phase1/_shared';
 import { resolveZybitActor } from '@/lib/auth/actor';
 import { getDb } from '@/lib/db/client';
@@ -127,15 +127,13 @@ export async function POST(request: Request) {
 
     const db = getDb();
 
-    // Upsert each finding — preserve operator status/preview if already set
+    // Batch-upsert all findings — preserve operator status/preview if already set
     const upserted: string[] = [];
-    for (const f of auditFindings) {
-      const pk = findingPk(siteId, f.ruleId, f.pathRef);
-      upserted.push(pk);
-
-      await db
-        .insert(zybitFindings)
-        .values({
+    if (auditFindings.length > 0) {
+      const values = auditFindings.map((f) => {
+        const pk = findingPk(siteId, f.ruleId, f.pathRef);
+        upserted.push(pk);
+        return {
           id: pk,
           organizationId: actorResult.actor.organizationId,
           siteId,
@@ -150,26 +148,31 @@ export async function POST(request: Request) {
           recommendation: f.recommendation,
           evidence: f.evidence,
           refs: f.refs ?? null,
-          status: 'open',
+          status: 'open' as const,
           lastSeenAt: now,
           insightWindowStart: new Date(startMs),
           insightWindowEnd: new Date(endMs),
-        })
+        };
+      });
+
+      await db
+        .insert(zybitFindings)
+        .values(values)
         .onConflictDoUpdate({
           target: zybitFindings.id,
           set: {
             // Refresh analytical fields
-            severity: f.severity,
-            confidence: f.confidence,
-            priorityScore: f.priorityScore,
-            title: f.title,
-            summary: f.summary,
-            recommendation: f.recommendation,
-            evidence: f.evidence,
-            refs: f.refs ?? null,
-            lastSeenAt: now,
-            insightWindowStart: new Date(startMs),
-            insightWindowEnd: new Date(endMs),
+            severity: sql`excluded.severity`,
+            confidence: sql`excluded.confidence`,
+            priorityScore: sql`excluded.priority_score`,
+            title: sql`excluded.title`,
+            summary: sql`excluded.summary`,
+            recommendation: sql`excluded.recommendation`,
+            evidence: sql`excluded.evidence`,
+            refs: sql`excluded.refs`,
+            lastSeenAt: sql`excluded.last_seen_at`,
+            insightWindowStart: sql`excluded.insight_window_start`,
+            insightWindowEnd: sql`excluded.insight_window_end`,
             updatedAt: now,
             // Note: status / preview fields are NOT overwritten — operator decisions persist
           },

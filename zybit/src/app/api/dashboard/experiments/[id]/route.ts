@@ -109,8 +109,7 @@ export async function PATCH(
     if (typeof body.resultConfidence === 'number') update.resultConfidence = body.resultConfidence;
     if (typeof body.resultParticipants === 'number') update.resultParticipants = Math.floor(body.resultParticipants);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.update(zybitExperiments).set(update as any).where(eq(zybitExperiments.id, id));
+    await db.update(zybitExperiments).set(update as Partial<typeof zybitExperiments.$inferInsert>).where(eq(zybitExperiments.id, id));
 
     const updated = await db
       .select()

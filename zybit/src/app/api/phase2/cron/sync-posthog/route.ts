@@ -90,49 +90,49 @@ async function upsertFindings(
   const db = getDb();
   const now = new Date();
 
-  for (const f of auditFindings) {
-    const pk = findingPk(siteId, f.ruleId, f.pathRef);
-    await db
-      .insert(zybitFindings)
-      .values({
-        id: pk,
-        organizationId,
-        siteId,
-        ruleId: f.ruleId,
-        category: f.category,
-        severity: f.severity,
-        confidence: f.confidence,
-        priorityScore: f.priorityScore,
-        pathRef: f.pathRef,
-        title: f.title,
-        summary: f.summary,
-        recommendation: f.recommendation,
-        evidence: f.evidence,
-        refs: f.refs ?? null,
-        status: 'open',
-        lastSeenAt: now,
-        insightWindowStart: new Date(windowStart),
-        insightWindowEnd: new Date(windowEnd),
-      })
-      .onConflictDoUpdate({
-        target: zybitFindings.id,
-        set: {
-          severity: f.severity,
-          confidence: f.confidence,
-          priorityScore: f.priorityScore,
-          title: f.title,
-          summary: f.summary,
-          recommendation: f.recommendation,
-          evidence: f.evidence,
-          refs: f.refs ?? null,
-          lastSeenAt: now,
-          insightWindowStart: new Date(windowStart),
-          insightWindowEnd: new Date(windowEnd),
-          updatedAt: now,
-          // Note: status / preview fields are preserved on conflict
-        },
-      });
-  }
+  const values = auditFindings.map((f) => ({
+    id: findingPk(siteId, f.ruleId, f.pathRef),
+    organizationId,
+    siteId,
+    ruleId: f.ruleId,
+    category: f.category,
+    severity: f.severity,
+    confidence: f.confidence,
+    priorityScore: f.priorityScore,
+    pathRef: f.pathRef,
+    title: f.title,
+    summary: f.summary,
+    recommendation: f.recommendation,
+    evidence: f.evidence,
+    refs: f.refs ?? null,
+    status: 'open' as const,
+    lastSeenAt: now,
+    insightWindowStart: new Date(windowStart),
+    insightWindowEnd: new Date(windowEnd),
+  }));
+
+  await db
+    .insert(zybitFindings)
+    .values(values)
+    .onConflictDoUpdate({
+      target: zybitFindings.id,
+      set: {
+        severity: sql`excluded.severity`,
+        confidence: sql`excluded.confidence`,
+        priorityScore: sql`excluded.priority_score`,
+        title: sql`excluded.title`,
+        summary: sql`excluded.summary`,
+        recommendation: sql`excluded.recommendation`,
+        evidence: sql`excluded.evidence`,
+        refs: sql`excluded.refs`,
+        lastSeenAt: sql`excluded.last_seen_at`,
+        insightWindowStart: sql`excluded.insight_window_start`,
+        insightWindowEnd: sql`excluded.insight_window_end`,
+        updatedAt: now,
+        // Note: status / preview fields are preserved on conflict
+      },
+    });
+
   return auditFindings.length;
 }
 
@@ -161,7 +161,7 @@ async function runHandler(request: Request) {
     const db = getDb();
     const now = new Date();
 
-    const results: Array<{
+    type IntegrationResult = {
       id: string;
       siteId: string;
       organizationId: string;
@@ -172,9 +172,11 @@ async function runHandler(request: Request) {
       sessionDelta?: number;
       code?: string;
       message?: string;
-    }> = [];
+    };
 
-    for (const integration of integrations) {
+    async function processIntegration(
+      integration: (typeof integrations)[number]
+    ): Promise<IntegrationResult> {
       const { siteId, organizationId } = integration;
 
       // ── 1. Pull new events ──────────────────────────────────────────────
@@ -185,7 +187,7 @@ async function runHandler(request: Request) {
       });
 
       if (!syncOutcome.ok) {
-        results.push({
+        return {
           id: integration.id,
           siteId,
           organizationId,
@@ -193,19 +195,14 @@ async function runHandler(request: Request) {
           insightsTriggered: false,
           code: syncOutcome.code,
           message: syncOutcome.message,
-        });
-        continue;
+        };
       }
 
-      // ── 2. Count current sessions ────────────────────────────────────────
-      const currentSessions = await countSiteSessions(siteId);
-
-      // ── 3. Load (or initialise) site meta ────────────────────────────────
-      const metaRows = await db
-        .select()
-        .from(zybitSiteMeta)
-        .where(eq(zybitSiteMeta.siteId, siteId))
-        .limit(1);
+      // ── 2. Count current sessions + load site meta in parallel ──────────
+      const [currentSessions, metaRows] = await Promise.all([
+        countSiteSessions(siteId),
+        db.select().from(zybitSiteMeta).where(eq(zybitSiteMeta.siteId, siteId)).limit(1),
+      ]);
 
       const meta = metaRows[0] ?? null;
       const prevSessions = meta?.sessionCountAtLastRun ?? 0;
@@ -217,7 +214,7 @@ async function runHandler(request: Request) {
       let insightsSynced = 0;
 
       if (shouldRunInsights) {
-        // ── 4. Run insights pipeline ─────────────────────────────────────
+        // ── 3. Run insights pipeline ─────────────────────────────────────
         const endMs = Date.now();
         const startMs = endMs - 7 * 86_400_000;
         const window = {
@@ -241,7 +238,7 @@ async function runHandler(request: Request) {
           endMs
         );
 
-        // ── 5. Update site meta with new session count ───────────────────
+        // ── 4. Update site meta with new session count ───────────────────
         await db
           .insert(zybitSiteMeta)
           .values({
@@ -274,7 +271,7 @@ async function runHandler(request: Request) {
           .onConflictDoNothing();
       }
 
-      results.push({
+      return {
         id: integration.id,
         siteId,
         organizationId,
@@ -283,7 +280,32 @@ async function runHandler(request: Request) {
         insightsTriggered: shouldRunInsights,
         insightsSynced,
         sessionDelta,
-      });
+      };
+    }
+
+    // Process integrations in parallel batches of 5 to avoid overwhelming
+    // external APIs while staying well within the 300s function timeout.
+    const CONCURRENCY = 5;
+    const results: IntegrationResult[] = [];
+    for (let i = 0; i < integrations.length; i += CONCURRENCY) {
+      const chunk = integrations.slice(i, i + CONCURRENCY);
+      const settled = await Promise.allSettled(chunk.map(processIntegration));
+      for (const outcome of settled) {
+        if (outcome.status === 'fulfilled') {
+          results.push(outcome.value);
+        } else {
+          // Unexpected rejection — surface it without aborting the whole run
+          results.push({
+            id: 'unknown',
+            siteId: 'unknown',
+            organizationId: 'unknown',
+            syncOk: false,
+            insightsTriggered: false,
+            code: 'INTERNAL_ERROR',
+            message: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+          });
+        }
+      }
     }
 
     return NextResponse.json({ success: true, data: { synced: results.length, results } });

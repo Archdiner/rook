@@ -48,7 +48,7 @@ export async function GET(request: Request) {
     };
 
     // Parallel fetches — all lightweight
-    const [integrations, events, config, findingCountRows] = await Promise.all([
+    const [integrations, events, config, findingCountRows, metaRows] = await Promise.all([
       repository.listIntegrations({
         organizationId: actorResult.actor.organizationId,
         siteId,
@@ -67,6 +67,8 @@ export async function GET(request: Request) {
         .select({ count: count() })
         .from(zybitFindings)
         .where(eq(zybitFindings.siteId, siteId)),
+      // Revenue context for impact framing
+      getDb().select().from(zybitSiteMeta).where(eq(zybitSiteMeta.siteId, siteId)).limit(1),
     ]);
 
     // Run just the gate (no audit rules — no expensive AI calls)
@@ -106,8 +108,6 @@ export async function GET(request: Request) {
 
     const openFindings = Number((findingCountRows[0] as { count: number } | undefined)?.count ?? 0);
 
-    // Revenue context for impact framing
-    const metaRows = await getDb().select().from(zybitSiteMeta).where(eq(zybitSiteMeta.siteId, siteId)).limit(1);
     const siteMeta = metaRows[0] ?? null;
 
     return success({
