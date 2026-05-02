@@ -194,7 +194,7 @@ function ExperimentsContent() {
         <div style={{ background: "#fff", border: `1px solid ${HAIRLINE}`, borderRadius: 14, padding: "48px 24px", textAlign: "center" }}>
           <p style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600 }}>No experiments yet.</p>
           <p style={{ margin: "0 0 20px", fontSize: 13, color: MUTED }}>
-            Approve a finding from the backlog, then click "Start measuring" to create an experiment.
+            Approve a finding from the backlog, then click &ldquo;Start measuring&rdquo; to create an experiment.
           </p>
           <Link
             href={`/dashboard/findings?siteId=${siteId}`}
@@ -218,8 +218,10 @@ function ExperimentsContent() {
       {!loading && filtered.length > 0 && (
         <div style={{ display: "grid", gap: 10 }}>
           {filtered.map((e) => {
+            // eslint-disable-next-line react-hooks/purity
+            const nowMs = Date.now();
             const daysElapsed = e.startedAt
-              ? Math.floor((Date.now() - new Date(e.startedAt).getTime()) / 86_400_000)
+              ? Math.floor((nowMs - new Date(e.startedAt).getTime()) / 86_400_000)
               : 0;
             const lift = e.resultControlRate && e.resultVariantRate
               ? ((e.resultVariantRate - e.resultControlRate) / e.resultControlRate) * 100

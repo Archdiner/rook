@@ -151,7 +151,7 @@ function FindingsContent() {
     }
   }
 
-  useEffect(() => { void loadFindings(); }, [siteId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadFindings(); }, [siteId]); // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
 
   async function runSync() {
     if (!siteId) return;

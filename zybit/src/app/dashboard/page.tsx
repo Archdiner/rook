@@ -769,9 +769,11 @@ function CockpitContent() {
                   </h2>
                   <div style={{ display: "grid", gap: 10 }}>
                     {activeExperiments.map((e) => {
+                      // eslint-disable-next-line react-hooks/purity
+                      const nowMs = Date.now();
                       const daysElapsed = e.startedAt
                         ? Math.floor(
-                            (Date.now() - new Date(e.startedAt).getTime()) / 86_400_000
+                            (nowMs - new Date(e.startedAt).getTime()) / 86_400_000
                           )
                         : 0;
                       const confidence = e.resultConfidence ?? 0;

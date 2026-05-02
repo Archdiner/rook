@@ -17,7 +17,7 @@
 
 import { createHash } from 'crypto';
 import { NextResponse } from 'next/server';
-import { desc, eq, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { createPhase1Repository } from '@/lib/phase1';
 import { mapRouteError, unauthorized } from '@/app/api/phase1/_shared';
 import { runPostHogPullSyncJob } from '@/lib/phase2/jobs/runPostHogPullSyncJob';

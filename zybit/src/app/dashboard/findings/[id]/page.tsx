@@ -608,7 +608,7 @@ function FindingDetailContent() {
             <Card>
               <SectionLabel>Start measuring</SectionLabel>
               <p style={{ margin: "0 0 20px", fontSize: 13, color: MUTED, lineHeight: 1.6 }}>
-                Define how you'll measure impact in production. This creates an experiment record in
+                Define how you&apos;ll measure impact in production. This creates an experiment record in
                 Zybit—link it to your analytics provider so lift claims stay auditable.
               </p>
               <div style={{ display: "grid", gap: 14 }}>

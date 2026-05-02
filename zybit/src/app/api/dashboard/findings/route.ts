@@ -8,8 +8,7 @@
  */
 
 import { createHash } from 'crypto';
-import { randomUUID } from 'crypto';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { badRequest, mapRouteError, parseJsonObject, parseString, success } from '@/app/api/phase1/_shared';
 import { resolveZybitActor } from '@/lib/auth/actor';
 import { getDb } from '@/lib/db/client';

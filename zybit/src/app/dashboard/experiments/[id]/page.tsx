@@ -337,8 +337,10 @@ function ExperimentDetailContent() {
   if (loading) return <div style={{ padding: 48, color: MUTED, fontSize: 14, fontFamily: "var(--font-inter), system-ui, sans-serif" }}>Loading…</div>;
   if (!exp) return <div style={{ padding: 48, fontFamily: "var(--font-inter), system-ui, sans-serif" }}>Experiment not found.</div>;
 
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
   const daysElapsed = exp.startedAt
-    ? Math.floor((Date.now() - new Date(exp.startedAt).getTime()) / 86_400_000)
+    ? Math.floor((nowMs - new Date(exp.startedAt).getTime()) / 86_400_000)
     : 0;
   const hasResults = exp.resultControlRate !== null && exp.resultVariantRate !== null;
   const hasConfidence = exp.resultConfidence !== null;
