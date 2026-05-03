@@ -722,3 +722,208 @@ export function DocsParticleCanvas() {
     </div>
   );
 }
+
+// --- Auth: "Gateway Portal" (Used for Sign-In and Sign-Up) ---
+
+function getAuthSpawnPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const x = (Math.random() - 0.5) * 40;
+    const y = (Math.random() - 0.5) * 40;
+    const z = (Math.random() - 0.5) * 20 - 5;
+    points[i * 3] = x;
+    points[i * 3 + 1] = y;
+    points[i * 3 + 2] = z;
+  }
+  return points;
+}
+
+function getAuthGatewayPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = Math.random();
+    let x, y, z;
+
+    if (r < 0.6) {
+      // Main Gateway Ring (Torus)
+      const u = Math.random() * Math.PI * 2;
+      const v = Math.random() * Math.PI * 2;
+      const R = 8.0; // Major radius
+      const tubeR = 1.2 + Math.random() * 0.8; // Minor radius with variation
+      
+      x = (R + tubeR * Math.cos(v)) * Math.cos(u);
+      y = (R + tubeR * Math.cos(v)) * Math.sin(u);
+      z = tubeR * Math.sin(v);
+    } else if (r < 0.85) {
+      // Inner Event Horizon (Disc pulling inward)
+      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.random() * 6.5; 
+      x = Math.cos(angle) * radius;
+      y = Math.sin(angle) * radius;
+      z = (Math.random() - 0.5) * 0.5;
+    } else {
+      // Energy beams streaming outward along Z-axis
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 8.0 + Math.random() * 3.0;
+      x = Math.cos(angle) * radius;
+      y = Math.sin(angle) * radius;
+      z = (Math.random() - 0.5) * 12.0;
+    }
+
+    // Apply a dramatic cinematic tilt
+    const tiltX = Math.PI / 4; 
+    const tiltY = Math.PI / 6; 
+
+    const ty = y * Math.cos(tiltX) - z * Math.sin(tiltX);
+    const tz = y * Math.sin(tiltX) + z * Math.cos(tiltX);
+
+    const fx = x * Math.cos(tiltY) + tz * Math.sin(tiltY);
+    const fz = -x * Math.sin(tiltY) + tz * Math.cos(tiltY);
+
+    points[i * 3] = fx;
+    points[i * 3 + 1] = ty;
+    points[i * 3 + 2] = fz;
+  }
+  return points;
+}
+
+const authVertexShader = `
+attribute vec3 spawnPos;
+attribute vec3 position;
+
+uniform float uTime;
+uniform float uSpawnTime;
+uniform float uMobile;
+
+float cheapNoise(vec3 p) {
+  return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
+}
+
+void main() {
+  vec3 p = position;
+  float calm = 1.0 - uMobile * 0.4;
+
+  // Majestic rotation of the portal
+  float rotSpeed = uTime * 0.08 * calm;
+  float cx = p.x * cos(rotSpeed) - p.z * sin(rotSpeed);
+  float cz = p.x * sin(rotSpeed) + p.z * cos(rotSpeed);
+  p.x = cx;
+  p.z = cz;
+
+  // Inner horizon pull effect
+  float dist = length(p.xy);
+  if (dist < 6.5) {
+    // Pull particles towards center slightly over time
+    float pull = sin(uTime * 0.5 + dist) * 0.1;
+    p.x -= p.x * pull;
+    p.y -= p.y * pull;
+  }
+
+  // Energy beams undulating
+  if (abs(p.z) > 2.0) {
+    p.z += sin(p.x * 0.5 + uTime * 2.0) * 0.5 * calm;
+  }
+
+  float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0);
+  vec3 chaotic = spawnPos;
+  
+  // High turbulence during spawn
+  float wobble = (1.0 - spawnEase) * 5.0;
+  chaotic += vec3(
+    (cheapNoise(chaotic + uTime) - 0.5) * wobble,
+    (cheapNoise(chaotic.yxz + uTime * 0.8) - 0.5) * wobble,
+    (cheapNoise(chaotic.zxy + uTime * 1.2) - 0.5) * wobble
+  );
+
+  vec3 finalPos = mix(chaotic, p, spawnEase);
+
+  // Shift slightly to the right for layout balance, centered for mobile
+  float offsetX = mix(3.0, 0.0, uMobile); 
+  finalPos.x += offsetX;
+
+  vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  
+  gl_PointSize = max(1.0, (45.0 - uMobile * 18.0) / -mvPosition.z) * spawnEase;
+}
+`;
+
+const authFragmentShader = `
+void main() {
+  float dist = distance(gl_PointCoord, vec2(0.5));
+  if (dist > 0.5) discard;
+  // Deep sharp particle
+  float alpha = smoothstep(0.5, 0.2, dist) * 0.7;
+  gl_FragColor = vec4(0.066, 0.066, 0.066, alpha); // #111111
+}
+`;
+
+const AUTH_PARTICLE_DESKTOP = 35000;
+const AUTH_PARTICLE_MOBILE = 15000;
+
+function AuthParticleSwarm() {
+  const shaderRef = useRef<THREE.ShaderMaterial>(null);
+  const { size } = useThree();
+  const isMobile = size.width < 768;
+  const count = isMobile ? AUTH_PARTICLE_MOBILE : AUTH_PARTICLE_DESKTOP;
+  const mountTimeRef = useRef<number | null>(null);
+
+  const buffers = useMemo(
+    () => ({
+      spawn: getAuthSpawnPoints(count),
+      gateway: getAuthGatewayPoints(count),
+    }),
+    [count],
+  );
+
+  const uniforms = useMemo(
+    () => ({
+      uTime: { value: 0 },
+      uSpawnTime: { value: 0 },
+      uMobile: { value: isMobile ? 1.0 : 0.0 },
+    }),
+    [isMobile],
+  );
+
+  useFrame((state) => {
+    if (!shaderRef.current) return;
+    const time = state.clock.getElapsedTime();
+    const spawnDuration = isMobile ? 1200 : 2000;
+    if (mountTimeRef.current === null) {
+      mountTimeRef.current = Date.now();
+    }
+    const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
+    shaderRef.current.uniforms.uTime.value = time;
+    shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
+  });
+
+  return (
+    <points frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[buffers.gateway, 3]} />
+        <bufferAttribute attach="attributes-spawnPos" args={[buffers.spawn, 3]} />
+      </bufferGeometry>
+      <shaderMaterial
+        ref={shaderRef}
+        vertexShader={authVertexShader}
+        fragmentShader={authFragmentShader}
+        uniforms={uniforms}
+        transparent={true}
+        depthWrite={false}
+        blending={THREE.NormalBlending}
+      />
+    </points>
+  );
+}
+
+/** Distinctive Gateway Portal for Auth flows */
+export function AuthParticleCanvas() {
+  return (
+    <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
+      <Canvas camera={{ position: [0, 0, 16], fov: 45 }} dpr={[1, 1.5]}>
+        <ambientLight intensity={1} />
+        <AuthParticleSwarm />
+      </Canvas>
+    </div>
+  );
+}
