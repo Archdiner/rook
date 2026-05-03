@@ -24,6 +24,7 @@ const NAV_LINKS: NavLink[] = [
   { href: "/dashboard/findings", label: "Findings" },
   { href: "/dashboard/experiments", label: "Experiments" },
   { href: "/dashboard/connect", label: "Connect" },
+  { href: "/dashboard/settings", label: "Settings" },
 ];
 
 function SidebarInner({ siteId }: { siteId: string }) {

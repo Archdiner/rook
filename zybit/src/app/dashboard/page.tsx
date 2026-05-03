@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
+import WelcomeState from "@/components/dashboard/WelcomeState";
 
 // ---------------------------------------------------------------------------
 // Design tokens (matches site brand)
@@ -557,7 +558,29 @@ function CockpitContent() {
         </Card>
       )}
 
-      {siteId && (
+      {/* Welcome state: site connected + integration exists + no findings + gate not met */}
+      {siteId &&
+        integrations.length > 0 &&
+        findings.length === 0 &&
+        siteStatus &&
+        !siteStatus.gate.trustworthy && (
+          <WelcomeState
+            domain={
+              sites.find((s) => s.id === siteId)?.domain ?? siteId
+            }
+            sessionsObserved={siteStatus.pipeline.sessionCount7d}
+            threshold={100}
+            siteId={siteId}
+          />
+        )}
+
+      {siteId &&
+        !(
+          integrations.length > 0 &&
+          findings.length === 0 &&
+          siteStatus &&
+          !siteStatus.gate.trustworthy
+        ) && (
         <>
           {/* Stat cards */}
           <div
@@ -1143,6 +1166,7 @@ function CockpitContent() {
 // ---------------------------------------------------------------------------
 // Export with Suspense (required for useSearchParams)
 // ---------------------------------------------------------------------------
+
 export default function CockpitPage() {
   return (
     <Suspense

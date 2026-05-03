@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import EmptyFindings from "@/components/dashboard/EmptyFindings";
 
 // ---------------------------------------------------------------------------
 // Design tokens
@@ -117,6 +118,9 @@ function FindingsContent() {
   const [actionPending, setActionPending] = useState<string | null>(null);
   const [syncMsg, setSyncMsg] = useState("");
   const [monthlyRevCents, setMonthlyRevCents] = useState<number | null>(null);
+  const [hasIntegration, setHasIntegration] = useState<boolean | null>(null);
+  const [sessionCount7d, setSessionCount7d] = useState<number>(0);
+  const [gateTrustworthy, setGateTrustworthy] = useState<boolean>(true);
 
   const apiFetch = useCallback(
     (input: RequestInfo | URL, init?: RequestInit) => {
@@ -138,9 +142,24 @@ function FindingsContent() {
         apiFetch(`/api/dashboard/findings?siteId=${siteId}`),
         apiFetch(`/api/dashboard/status?siteId=${siteId}`),
       ]);
-      const statusJson = await statusRes.json() as { success?: boolean; data?: { revenue?: { monthlyRevenueCents?: number | null } } };
+      const statusJson = await statusRes.json() as {
+        success?: boolean;
+        data?: {
+          revenue?: { monthlyRevenueCents?: number | null };
+          pipeline?: { integrations?: unknown[]; sessionCount7d?: number };
+          gate?: { trustworthy?: boolean };
+        };
+      };
       if (statusJson.success && statusJson.data?.revenue?.monthlyRevenueCents) {
         setMonthlyRevCents(statusJson.data.revenue.monthlyRevenueCents);
+      }
+      if (statusJson.success && statusJson.data) {
+        const intCount = Array.isArray(statusJson.data.pipeline?.integrations)
+          ? statusJson.data.pipeline.integrations.length
+          : 0;
+        setHasIntegration(intCount > 0);
+        setSessionCount7d(statusJson.data.pipeline?.sessionCount7d ?? 0);
+        setGateTrustworthy(statusJson.data.gate?.trustworthy ?? true);
       }
       const json = await res.json() as { success?: boolean; data?: unknown };
       if (json.success && Array.isArray(json.data)) {
@@ -313,43 +332,70 @@ function FindingsContent() {
         <p style={{ fontSize: 14, color: MUTED }}>Loading findings…</p>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — context-aware */}
       {siteId && !loading && filtered.length === 0 && (
-        <div style={{
-          background: "#fff",
-          border: `1px solid ${HAIRLINE}`,
-          borderRadius: 14,
-          padding: "48px 24px",
-          textAlign: "center",
-        }}>
-          <p style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600 }}>
-            No {statusFilter !== "all" ? statusFilter : ""} findings yet.
-          </p>
-          <p style={{ margin: "0 0 20px", fontSize: 13, color: MUTED }}>
-            {statusFilter === "open"
-              ? "Run an audit to discover what to fix first."
-              : `No findings with status "${statusFilter}".`}
-          </p>
-          {statusFilter === "open" && (
-            <button
-              type="button"
-              onClick={() => void runSync()}
-              disabled={syncLoading}
-              style={{
-                padding: "9px 18px",
-                borderRadius: 999,
-                border: `1px solid ${HAIRLINE}`,
-                background: "transparent",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                color: INK,
-              }}
-            >
-              Run audit
-            </button>
+        <>
+          {/* When filtering by a non-"all" status that has no matches, show a simple message */}
+          {statusFilter !== "all" && statusFilter !== "open" && findings.length > 0 ? (
+            <div style={{
+              background: "#fff",
+              border: `1px solid ${HAIRLINE}`,
+              borderRadius: 14,
+              padding: "48px 24px",
+              textAlign: "center",
+            }}>
+              <p style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600 }}>
+                No {statusFilter} findings yet.
+              </p>
+              <p style={{ margin: 0, fontSize: 13, color: MUTED }}>
+                {`No findings with status "${statusFilter}".`}
+              </p>
+            </div>
+          ) : /* Context-aware empty states when there are truly no findings */
+          hasIntegration === false ? (
+            <EmptyFindings reason="no-integration" />
+          ) : hasIntegration && !gateTrustworthy && sessionCount7d === 0 ? (
+            <EmptyFindings reason="no-events" />
+          ) : hasIntegration && !gateTrustworthy ? (
+            <EmptyFindings
+              reason="gate-not-met"
+              sessionsObserved={sessionCount7d}
+              threshold={100}
+            />
+          ) : (
+            <div style={{
+              background: "#fff",
+              border: `1px solid ${HAIRLINE}`,
+              borderRadius: 14,
+              padding: "48px 24px",
+              textAlign: "center",
+            }}>
+              <p style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 600 }}>
+                No findings yet.
+              </p>
+              <p style={{ margin: "0 0 20px", fontSize: 13, color: MUTED }}>
+                Run an audit to discover what to fix first.
+              </p>
+              <button
+                type="button"
+                onClick={() => void runSync()}
+                disabled={syncLoading}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 999,
+                  border: `1px solid ${HAIRLINE}`,
+                  background: "transparent",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  color: INK,
+                }}
+              >
+                Run audit
+              </button>
+            </div>
           )}
-        </div>
+        </>
       )}
 
       {/* Findings list */}

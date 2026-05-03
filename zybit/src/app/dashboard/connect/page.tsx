@@ -375,7 +375,7 @@ function ConnectContent() {
                 Revenue context <span style={{ fontWeight: 400, color: MUTED }}>— optional but recommended</span>
               </p>
               <p style={{ margin: "3px 0 0", fontSize: 12, color: MUTED }}>
-                Zybit uses this to estimate how much each friction point is costing you per month.
+                Revenue data lets Zybit estimate dollar impact per finding.
               </p>
             </div>
             {revenueSaved && (

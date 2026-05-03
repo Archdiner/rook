@@ -25,6 +25,7 @@ import { runPhase2InsightsPipeline } from '@/lib/phase2';
 import { getDb } from '@/lib/db/client';
 import { zybitSiteMeta, zybitFindings } from '@/lib/db/schema';
 import type { AuditFinding } from '@/lib/phase2/rules/types';
+import { logger, cronitorPing, trackSyncResult } from '@/lib/observability';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -141,12 +142,23 @@ async function upsertFindings(
 // ---------------------------------------------------------------------------
 
 async function runHandler(request: Request) {
+  const startMs = Date.now();
+  const cronService = 'cron-sync' as const;
+  const monitorKey = 'sync-posthog';
+
+  await cronitorPing(monitorKey, 'run');
+  logger.info('started', { service: cronService });
+
   try {
     const authErr = assertCronAuth(request);
-    if (authErr) return authErr;
+    if (authErr) {
+      await cronitorPing(monitorKey, 'fail', 'auth failed');
+      return authErr;
+    }
 
     const repository = createPhase1Repository();
     if (repository.driver !== 'postgres') {
+      await cronitorPing(monitorKey, 'complete', 'skipped — not postgres');
       return NextResponse.json({
         success: true,
         data: { skipped: true, reason: 'Postgres driver required for scheduled multi-tenant sync.' },
@@ -187,6 +199,14 @@ async function runHandler(request: Request) {
       });
 
       if (!syncOutcome.ok) {
+        await trackSyncResult(integration.id, false, syncOutcome.code);
+        logger.warn('sync failed for integration', {
+          service: cronService,
+          integrationId: integration.id,
+          siteId,
+          organizationId,
+          code: syncOutcome.code,
+        });
         return {
           id: integration.id,
           siteId,

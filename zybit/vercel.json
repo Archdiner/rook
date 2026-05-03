@@ -3,6 +3,10 @@
     {
       "path": "/api/phase2/cron/sync-posthog",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/health/alert",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

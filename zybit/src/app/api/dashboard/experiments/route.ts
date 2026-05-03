@@ -13,6 +13,7 @@ import { getDb } from '@/lib/db/client';
 import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
 import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 import { createPhase1Repository } from '@/lib/phase1';
+import type { VariantModification } from '@/lib/experiments/types';
 
 const VALID_STATUSES = ['draft', 'running', 'completed', 'stopped'] as const;
 
@@ -109,6 +110,20 @@ export async function POST(request: Request) {
       ? Math.min(Math.max(1, body.audienceControlPct), 99)
       : 50;
 
+    // Validate modifications array if provided
+    let modifications: VariantModification[] | null = null;
+    if (Array.isArray(body.modifications) && body.modifications.length > 0) {
+      const VALID_MOD_TYPES = ['css-inject', 'text-replace', 'element-hide', 'element-show', 'attribute-set', 'element-reorder'] as const;
+      for (const mod of body.modifications) {
+        if (!mod || typeof mod !== 'object' || !VALID_MOD_TYPES.includes(mod.type)) {
+          return badRequest('Each modification must have a valid `type`.');
+        }
+      }
+      modifications = body.modifications as VariantModification[];
+    }
+
+    const targetPath = parseString(body.targetPath) ?? null;
+
     const now = new Date();
     const startNow = body.startImmediately === true;
 
@@ -131,6 +146,8 @@ export async function POST(request: Request) {
         externalId: parseString(body.externalId) ?? null,
         guardrails: Array.isArray(body.guardrails) ? body.guardrails.map(String) : null,
         notes: parseString(body.notes) ?? null,
+        modifications,
+        targetPath,
         startedAt: startNow ? now : null,
       })
       .returning();
