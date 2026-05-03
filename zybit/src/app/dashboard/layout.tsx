@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import React, { Suspense, useState } from "react";
+import { Logo } from "@/components/logo";
 
 const CREAM = "#FAFAF8";
 const INK = "#111111";
@@ -65,15 +66,7 @@ function SidebarInner({ siteId }: { siteId: string }) {
             color: INK,
           }}
         >
-          <div
-            style={{
-              width: "22px",
-              height: "22px",
-              borderRadius: "5px",
-              backgroundColor: INK,
-              flexShrink: 0,
-            }}
-          />
+          <Logo style={{ width: "22px", height: "22px", color: INK }} />
           <span
             style={{
               fontSize: "16px",

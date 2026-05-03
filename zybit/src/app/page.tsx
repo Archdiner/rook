@@ -357,7 +357,7 @@ function MinimalDOM() {
           </h1>
           <div className="sans-text text-sm sm:text-xl md:text-2xl font-medium text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p className="text-[#111]">
-              Zybit analyzes how people actually use your product—clicks, paths, sessions—and ranks what to change first.
+              Zybit analyzes how people actually use your product (clicks, paths, sessions) and ranks what to change first.
             </p>
             <p>
               The output is a prioritized fix list tied to real stalls and drop-offs, not opinion decks or generic redesign checklists.
@@ -371,7 +371,7 @@ function MinimalDOM() {
         <div className="max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
-            <p>If the journey is broken, your analytics already show it—missed clicks, weak conversion, repetitive loops.</p>
+            <p>If the journey is broken, your analytics already show it: missed clicks, weak conversion, repetitive loops.</p>
             <p className="text-[#111]">We ground recommendations in that behavior so you solve real friction, not placeholder roadmap items.</p>
           </div>
         </div>
@@ -383,7 +383,7 @@ function MinimalDOM() {
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>Priorities mirror the friction visible in your data.</p>
-            <p className="text-[#111]">You ship changes you can justify with evidence—not scattershot UX tweaks.</p>
+            <p className="text-[#111]">You ship changes you can justify with evidence, not scattershot UX tweaks.</p>
           </div>
         </div>
       </section>
@@ -396,7 +396,7 @@ function MinimalDOM() {
             <p>
               <span className="text-[#111]">Behavior-first:</span> product usage in; ranked, explainable priorities out.
             </p>
-            <p className="text-[#111]">Signal from your data—not gut feel—decides what ships.</p>
+            <p className="text-[#111]">Signal from your data, not gut feel, decides what ships.</p>
           </div>
         </div>
       </section>
