@@ -1,22 +1,6 @@
 "use client";
 
-/**
- * Gap 6 — Empty Findings State
- *
- * Context-aware empty state for the findings backlog. Shows different
- * messaging depending on whether the issue is:
- *   - no integration connected
- *   - integration connected but no events received yet
- *   - events flowing but session gate not met
- */
-
 import Link from "next/link";
-
-const INK = "#111111";
-const MUTED = "#6B6B6B";
-const HAIRLINE = "rgba(0,0,0,0.08)";
-const SUBTLE = "rgba(0,0,0,0.04)";
-const CREAM = "#FAFAF8";
 
 interface EmptyFindingsProps {
   reason: "no-integration" | "no-events" | "gate-not-met";
@@ -35,158 +19,71 @@ export default function EmptyFindings({
       : 0;
 
   return (
-    <div
-      style={{
-        background: "#fff",
-        border: `1px solid ${HAIRLINE}`,
-        borderRadius: 14,
-        padding: "48px 28px",
-        textAlign: "center",
-      }}
-    >
+    <div className="sans-text w-full min-h-[60vh] flex flex-col items-center justify-center text-center px-6 py-20">
       {reason === "no-integration" && (
-        <>
-          <p
-            style={{
-              margin: "0 0 8px",
-              fontSize: 16,
-              fontWeight: 600,
-              color: INK,
-            }}
-          >
-            Connect your analytics to start.
-          </p>
-          <p
-            style={{
-              margin: "0 0 20px",
-              fontSize: 14,
-              color: MUTED,
-              lineHeight: 1.5,
-              maxWidth: 400,
-              marginLeft: "auto",
-              marginRight: "auto",
-            }}
-          >
-            Zybit needs a data source to analyze your funnel and surface
-            findings. Connect PostHog or Segment to begin.
+        <div className="max-w-[700px] animate-[fadeIn_0.6s_ease-out]">
+          <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tighter text-[#111] mb-6 leading-[1.1]">
+            Connect your<br />analytics.
+          </h2>
+          <p className="text-lg md:text-xl text-[#6B6B6B] leading-relaxed mb-10 max-w-[500px] mx-auto">
+            Zybit requires a data source to build an understanding of your funnel and generate its first prescription.
           </p>
           <Link
             href="/dashboard/connect"
-            style={{
-              display: "inline-block",
-              padding: "10px 22px",
-              borderRadius: 999,
-              background: INK,
-              color: CREAM,
-              textDecoration: "none",
-              fontSize: 14,
-              fontWeight: 600,
-            }}
+            className="inline-flex items-center justify-center bg-[#111] text-[#FAFAF8] px-8 py-4 rounded-full text-lg font-bold shadow-2xl transition-transform duration-300 hover:scale-105 active:scale-95 group"
           >
-            Connect PostHog →
+            Connect PostHog
+            <svg 
+              className="w-5 h-5 ml-2 transition-transform duration-300 group-hover:translate-x-1" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor" 
+              strokeWidth="2.5"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
           </Link>
-        </>
+        </div>
       )}
 
       {reason === "no-events" && (
-        <>
-          <p
-            style={{
-              margin: "0 0 8px",
-              fontSize: 16,
-              fontWeight: 600,
-              color: INK,
-            }}
-          >
-            Your integration is connected.
+        <div className="max-w-[700px] animate-[fadeIn_0.6s_ease-out]">
+          <div className="w-16 h-16 mx-auto mb-8 border-4 border-[#111] border-r-transparent rounded-full animate-spin" />
+          <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tighter text-[#111] mb-6 leading-[1.1]">
+            Waiting for<br />signal.
+          </h2>
+          <p className="text-lg md:text-xl text-[#6B6B6B] leading-relaxed max-w-[500px] mx-auto">
+            Your integration is successfully connected. Events usually begin flowing within a few minutes. This view will update automatically.
           </p>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 14,
-              color: MUTED,
-              lineHeight: 1.5,
-              maxWidth: 400,
-              marginLeft: "auto",
-              marginRight: "auto",
-            }}
-          >
-            Events usually arrive within a few minutes. This page will update
-            automatically once data starts flowing.
-          </p>
-        </>
+        </div>
       )}
 
       {reason === "gate-not-met" && (
-        <>
-          <p
-            style={{
-              margin: "0 0 8px",
-              fontSize: 16,
-              fontWeight: 600,
-              color: INK,
-            }}
-          >
-            Zybit needs{" "}
-            {threshold && sessionsObserved !== undefined
-              ? `${(threshold - sessionsObserved).toLocaleString()} more`
-              : "more"}{" "}
-            sessions.
-          </p>
-          <p
-            style={{
-              margin: "0 0 20px",
-              fontSize: 14,
-              color: MUTED,
-              lineHeight: 1.5,
-              maxWidth: 400,
-              marginLeft: "auto",
-              marginRight: "auto",
-            }}
-          >
-            {sessionsObserved?.toLocaleString() ?? 0} /{" "}
-            {threshold?.toLocaleString() ?? "—"} observed so far. Findings
-            will be generated once the session threshold is met.
+        <div className="max-w-[700px] w-full animate-[fadeIn_0.6s_ease-out]">
+          <h2 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tighter text-[#111] mb-6 leading-[1.1]">
+            Accumulating<br />sessions.
+          </h2>
+          <p className="text-lg md:text-xl text-[#6B6B6B] leading-relaxed mb-16 max-w-[500px] mx-auto">
+            We need {(threshold && sessionsObserved !== undefined ? (threshold - sessionsObserved).toLocaleString() : "")} more sessions to reach statistical relevance for your first finding.
           </p>
 
-          {/* Progress bar */}
-          <div
-            style={{
-              maxWidth: 320,
-              margin: "0 auto",
-            }}
-          >
-            <div
-              style={{
-                height: 8,
-                borderRadius: 999,
-                background: SUBTLE,
-                overflow: "hidden",
-                marginBottom: 6,
-              }}
-            >
+          <div className="max-w-[400px] mx-auto">
+            <div className="flex justify-between items-end mb-4">
+              <span className="text-sm font-bold uppercase tracking-[0.1em] text-[#6B6B6B]">
+                {sessionsObserved?.toLocaleString() ?? 0} / {threshold?.toLocaleString() ?? "—"}
+              </span>
+              <span className="text-3xl font-bold tracking-tighter text-[#111]">
+                {percent}%
+              </span>
+            </div>
+            <div className="relative w-full h-3 bg-black/[0.04] rounded-full overflow-hidden">
               <div
-                style={{
-                  width: `${percent}%`,
-                  height: "100%",
-                  borderRadius: 999,
-                  background: INK,
-                  transition: "width 0.5s ease",
-                }}
+                className="absolute top-0 left-0 h-full bg-[#111] rounded-full transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                style={{ width: `${percent}%` }}
               />
             </div>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 13,
-                fontWeight: 600,
-                color: INK,
-              }}
-            >
-              {percent}%
-            </p>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

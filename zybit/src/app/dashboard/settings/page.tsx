@@ -1,48 +1,22 @@
 "use client";
 
-/**
- * Dashboard Settings / Billing page.
- *
- * Shows: current plan, usage bars, upgrade & manage buttons.
- */
-
 import { useCallback, useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-const INK = "#111111";
-const MUTED = "#6B6B6B";
-const HAIRLINE = "rgba(0,0,0,0.08)";
-const CREAM = "#FAFAF8";
-const SUBTLE = "rgba(0,0,0,0.04)";
-
 type PlanId = "starter" | "growth" | "scale" | "enterprise";
 
-const PLAN_DISPLAY: Record<
-  PlanId,
-  { name: string; price: string; priceNote: string }
-> = {
+const PLAN_DISPLAY: Record<PlanId, { name: string; price: string; priceNote: string }> = {
   starter: { name: "Starter", price: "$199", priceNote: "/mo" },
   growth: { name: "Growth", price: "$599", priceNote: "/mo" },
   scale: { name: "Scale", price: "$1,499", priceNote: "/mo" },
   enterprise: { name: "Enterprise", price: "Custom", priceNote: "" },
 };
 
-const PLAN_LIMITS: Record<
-  PlanId,
-  { sites: number; eventsPerMonth: number; concurrentExperiments: number }
-> = {
+const PLAN_LIMITS: Record<PlanId, { sites: number; eventsPerMonth: number; concurrentExperiments: number }> = {
   starter: { sites: 1, eventsPerMonth: 100_000, concurrentExperiments: 2 },
   growth: { sites: 3, eventsPerMonth: 500_000, concurrentExperiments: 10 },
-  scale: {
-    sites: 10,
-    eventsPerMonth: 2_000_000,
-    concurrentExperiments: Infinity,
-  },
-  enterprise: {
-    sites: Infinity,
-    eventsPerMonth: Infinity,
-    concurrentExperiments: Infinity,
-  },
+  scale: { sites: 10, eventsPerMonth: 2_000_000, concurrentExperiments: Infinity },
+  enterprise: { sites: Infinity, eventsPerMonth: Infinity, concurrentExperiments: Infinity },
 };
 
 const UPGRADE_ORDER: PlanId[] = ["starter", "growth", "scale"];
@@ -54,47 +28,24 @@ function formatNum(n: number): string {
   return n.toLocaleString();
 }
 
-function UsageBar({
-  label,
-  current,
-  limit,
-}: {
-  label: string;
-  current: number;
-  limit: number;
-}) {
+function UsageBar({ label, current, limit }: { label: string; current: number; limit: number }) {
   const pct = limit === Infinity ? 0 : Math.min(100, (current / limit) * 100);
   const overThreshold = pct >= 80;
+  
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          marginBottom: 5,
-        }}
-      >
-        <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
-        <span style={{ fontSize: 13, color: MUTED }}>
-          {formatNum(current)} / {formatNum(limit)}
+    <div className="mb-6">
+      <div className="flex justify-between items-end mb-3">
+        <span className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B]">{label}</span>
+        <span className="text-[15px] font-bold text-[#111] tabular-nums">
+          {formatNum(current)} <span className="text-[#6B6B6B] font-medium">/ {formatNum(limit)}</span>
         </span>
       </div>
-      <div
-        style={{
-          height: 6,
-          borderRadius: 999,
-          background: HAIRLINE,
-          overflow: "hidden",
-        }}
-      >
+      <div className="relative h-2 rounded-full bg-black/[0.04] overflow-hidden">
         <div
-          style={{
-            width: `${pct}%`,
-            height: "100%",
-            borderRadius: 999,
-            background: overThreshold ? "#DC2626" : INK,
-            transition: "width 0.4s ease",
-          }}
+          className={`absolute top-0 left-0 h-full rounded-full transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+            overThreshold ? "bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.5)]" : "bg-[#111]"
+          }`}
+          style={{ width: `${pct}%` }}
         />
       </div>
     </div>
@@ -104,21 +55,11 @@ function UsageBar({
 function SettingsContent() {
   const searchParams = useSearchParams();
 
-  const clerkEnabled = useMemo(
-    () => process.env.NEXT_PUBLIC_FORGE_CLERK_ENABLED === "true",
-    []
-  );
-  const defaultOrg = useMemo(
-    () => process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? "org_default",
-    []
-  );
+  const clerkEnabled = useMemo(() => process.env.NEXT_PUBLIC_FORGE_CLERK_ENABLED === "true", []);
+  const defaultOrg = useMemo(() => process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? "org_default", []);
 
   const [plan] = useState<PlanId>("starter");
-  const [usage, setUsage] = useState({
-    eventsIngested: 0,
-    snapshotsTaken: 0,
-    insightsRuns: 0,
-  });
+  const [usage, setUsage] = useState({ eventsIngested: 0, snapshotsTaken: 0, insightsRuns: 0 });
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -126,16 +67,9 @@ function SettingsContent() {
 
   const apiFetch = useCallback(
     (input: RequestInfo | URL, init?: RequestInit) => {
-      const headers = new Headers(
-        (init?.headers as Record<string, string> | undefined) ?? {}
-      );
+      const headers = new Headers((init?.headers as Record<string, string> | undefined) ?? {});
       if (!clerkEnabled) headers.set("x-org-id", defaultOrg);
-      if (
-        !headers.has("Content-Type") &&
-        init?.method &&
-        !["GET", "HEAD"].includes(init.method) &&
-        init.body
-      ) {
+      if (!headers.has("Content-Type") && init?.method && !["GET", "HEAD"].includes(init.method) && init.body) {
         headers.set("Content-Type", "application/json");
       }
       return fetch(input, {
@@ -150,15 +84,9 @@ function SettingsContent() {
   useEffect(() => {
     async function load() {
       try {
-        const [usageRes] = await Promise.allSettled([
-          apiFetch("/api/billing/usage"),
-        ]);
-
+        const [usageRes] = await Promise.allSettled([apiFetch("/api/billing/usage")]);
         if (usageRes.status === "fulfilled" && usageRes.value.ok) {
-          const json = (await usageRes.value.json()) as {
-            success?: boolean;
-            data?: { eventsIngested?: number; snapshotsTaken?: number; insightsRuns?: number };
-          };
+          const json = (await usageRes.value.json()) as any;
           if (json.success && json.data) {
             setUsage({
               eventsIngested: json.data.eventsIngested ?? 0,
@@ -172,23 +100,14 @@ function SettingsContent() {
       }
     }
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [apiFetch]);
 
   async function handleManage() {
     setActionLoading(true);
     try {
-      const res = await apiFetch("/api/billing/portal", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      const json = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string };
-      };
-      if (json.success && json.data?.url) {
-        window.location.href = json.data.url;
-      }
+      const res = await apiFetch("/api/billing/portal", { method: "POST", body: JSON.stringify({}) });
+      const json = await res.json();
+      if (json.success && json.data?.url) window.location.href = json.data.url;
     } finally {
       setActionLoading(false);
     }
@@ -201,13 +120,8 @@ function SettingsContent() {
         method: "POST",
         body: JSON.stringify({ planId: targetPlan }),
       });
-      const json = (await res.json()) as {
-        success?: boolean;
-        data?: { url?: string };
-      };
-      if (json.success && json.data?.url) {
-        window.location.href = json.data.url;
-      }
+      const json = await res.json();
+      if (json.success && json.data?.url) window.location.href = json.data.url;
     } finally {
       setActionLoading(false);
     }
@@ -215,165 +129,77 @@ function SettingsContent() {
 
   const limits = PLAN_LIMITS[plan];
   const display = PLAN_DISPLAY[plan];
-  const nextPlan = UPGRADE_ORDER[UPGRADE_ORDER.indexOf(plan) + 1] as
-    | PlanId
-    | undefined;
+  const nextPlan = UPGRADE_ORDER[UPGRADE_ORDER.indexOf(plan) + 1] as PlanId | undefined;
 
   return (
-    <div
-      style={{
-        padding: "32px clamp(24px, 4vw, 48px)",
-        maxWidth: 720,
-        fontFamily: "var(--font-inter), system-ui, sans-serif",
-        color: INK,
-      }}
-    >
-      <p
-        style={{
-          margin: "0 0 4px",
-          fontSize: 11,
-          letterSpacing: "0.14em",
-          textTransform: "uppercase",
-          color: MUTED,
-        }}
-      >
+    <div className="sans-text max-w-[800px] w-full pt-8 pb-32">
+      <p className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#6B6B6B] mb-4">
         Settings
       </p>
-      <h1
-        style={{
-          margin: "0 0 28px",
-          fontSize: "clamp(22px, 3vw, 28px)",
-          fontWeight: 700,
-          letterSpacing: "-0.03em",
-        }}
-      >
-        Billing
+      <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter text-[#111] mb-12">
+        Billing & Usage
       </h1>
 
       {checkoutStatus === "success" && (
-        <div
-          style={{
-            padding: "12px 16px",
-            marginBottom: 20,
-            borderRadius: 10,
-            background: "rgba(22,163,74,0.08)",
-            border: "1px solid rgba(22,163,74,0.15)",
-            fontSize: 14,
-            color: "#065F46",
-          }}
-        >
-          Subscription activated. Your plan has been updated.
+        <div className="mb-10 p-6 rounded-2xl bg-green-50 border border-green-100 flex items-center gap-4 animate-[fadeIn_0.5s_ease-out]">
+          <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          </div>
+          <div>
+            <p className="font-bold text-green-900 text-lg tracking-tight mb-1">Subscription active</p>
+            <p className="text-sm text-green-800/80">Your plan has been successfully upgraded.</p>
+          </div>
         </div>
       )}
 
       {checkoutStatus === "cancel" && (
-        <div
-          style={{
-            padding: "12px 16px",
-            marginBottom: 20,
-            borderRadius: 10,
-            background: SUBTLE,
-            border: `1px solid ${HAIRLINE}`,
-            fontSize: 14,
-            color: MUTED,
-          }}
-        >
-          Checkout was cancelled. No changes were made.
+        <div className="mb-10 p-4 rounded-xl bg-black/[0.02] border border-black/[0.04] text-sm text-[#6B6B6B] font-medium">
+          Checkout was cancelled. No changes were made to your subscription.
         </div>
       )}
 
       {loading ? (
-        <p style={{ color: MUTED, fontSize: 14 }}>Loading...</p>
+        <div className="flex gap-2 items-center text-[#6B6B6B] py-12">
+          <div className="w-5 h-5 border-2 border-[#6B6B6B] border-r-transparent rounded-full animate-spin" />
+          <span className="font-medium tracking-tight">Loading usage data...</span>
+        </div>
       ) : (
-        <>
+        <div className="space-y-12">
           {/* Current plan card */}
-          <div
-            style={{
-              backgroundColor: "#fff",
-              border: `1px solid ${HAIRLINE}`,
-              borderRadius: 14,
-              padding: 24,
-              marginBottom: 24,
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                flexWrap: "wrap",
-                gap: 12,
-                marginBottom: 20,
-              }}
-            >
+          <div className="relative bg-white rounded-[2rem] p-8 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-black/[0.04] overflow-hidden group">
+            {/* Subtle glow effect behind current plan */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-transparent via-[#111]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000 blur-xl pointer-events-none" />
+            
+            <div className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-12">
               <div>
-                <p
-                  style={{
-                    margin: "0 0 4px",
-                    fontSize: 11,
-                    fontWeight: 600,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    color: MUTED,
-                  }}
-                >
-                  Current plan
+                <p className="text-[11px] font-bold tracking-[0.2em] uppercase text-[#6B6B6B] mb-4">
+                  Active Plan
                 </p>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: 24,
-                    fontWeight: 700,
-                    letterSpacing: "-0.02em",
-                  }}
-                >
-                  {display.name}{" "}
-                  <span
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 400,
-                      color: MUTED,
-                    }}
-                  >
-                    {display.price}
-                    {display.priceNote}
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-4xl md:text-5xl font-bold tracking-tighter text-[#111]">
+                    {display.name}
+                  </h2>
+                  <span className="text-lg md:text-xl font-medium text-[#6B6B6B]">
+                    {display.price}{display.priceNote}
                   </span>
-                </p>
+                </div>
               </div>
 
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => void handleManage()}
+                  onClick={handleManage}
                   disabled={actionLoading}
-                  style={{
-                    padding: "9px 18px",
-                    borderRadius: 999,
-                    border: `1px solid ${HAIRLINE}`,
-                    background: "transparent",
-                    color: INK,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: actionLoading ? "not-allowed" : "pointer",
-                  }}
+                  className="px-6 py-3 rounded-full border border-black/[0.08] bg-transparent text-sm font-bold text-[#111] transition-colors hover:bg-black/[0.02] disabled:opacity-50"
                 >
-                  Manage subscription
+                  Manage portal
                 </button>
                 {nextPlan && (
                   <button
                     type="button"
-                    onClick={() => void handleUpgrade(nextPlan)}
+                    onClick={() => handleUpgrade(nextPlan)}
                     disabled={actionLoading}
-                    style={{
-                      padding: "9px 18px",
-                      borderRadius: 999,
-                      border: "none",
-                      background: INK,
-                      color: CREAM,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: actionLoading ? "not-allowed" : "pointer",
-                    }}
+                    className="px-6 py-3 rounded-full border border-transparent bg-[#111] text-[#FAFAF8] text-sm font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:hover:scale-100"
                   >
                     Upgrade to {PLAN_DISPLAY[nextPlan].name}
                   </button>
@@ -381,127 +207,74 @@ function SettingsContent() {
               </div>
             </div>
 
-            {/* Usage bars */}
-            <UsageBar
-              label="Events this month"
-              current={usage.eventsIngested}
-              limit={limits.eventsPerMonth}
-            />
-            <UsageBar
-              label="Sites"
-              current={0}
-              limit={limits.sites}
-            />
-            <UsageBar
-              label="Concurrent experiments"
-              current={0}
-              limit={limits.concurrentExperiments}
-            />
+            <div className="relative p-6 rounded-[1.5rem] bg-[#FAFAF8] border border-black/[0.04]">
+              <UsageBar label="Events this month" current={usage.eventsIngested} limit={limits.eventsPerMonth} />
+              <UsageBar label="Connected Sites" current={0} limit={limits.sites} />
+              <UsageBar label="Concurrent Experiments" current={0} limit={limits.concurrentExperiments} />
+            </div>
           </div>
 
           {/* Plan comparison strip */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-              gap: 10,
-            }}
-          >
-            {(["starter", "growth", "scale", "enterprise"] as PlanId[]).map(
-              (pid) => {
+          <div>
+            <h3 className="text-2xl font-bold tracking-tight text-[#111] mb-6">Available Tiers</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {(["starter", "growth", "scale", "enterprise"] as PlanId[]).map((pid) => {
                 const d = PLAN_DISPLAY[pid];
                 const isCurrent = pid === plan;
                 return (
                   <div
                     key={pid}
-                    style={{
-                      backgroundColor: isCurrent ? "rgba(0,0,0,0.04)" : "#fff",
-                      border: `1px solid ${isCurrent ? INK : HAIRLINE}`,
-                      borderRadius: 12,
-                      padding: "16px 14px",
-                      textAlign: "center",
-                    }}
+                    className={`relative p-6 rounded-2xl flex flex-col transition-all duration-300 ${
+                      isCurrent
+                        ? "bg-[#111] text-[#FAFAF8] shadow-xl"
+                        : "bg-white border border-black/[0.06] hover:border-black/[0.15] hover:shadow-lg"
+                    }`}
                   >
-                    <p
-                      style={{
-                        margin: "0 0 4px",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        letterSpacing: "0.06em",
-                        textTransform: "uppercase",
-                        color: MUTED,
-                      }}
-                    >
-                      {d.name}
-                    </p>
-                    <p
-                      style={{
-                        margin: "0 0 10px",
-                        fontSize: 20,
-                        fontWeight: 700,
-                        letterSpacing: "-0.02em",
-                      }}
-                    >
-                      {d.price}
-                      {d.priceNote && (
-                        <span
-                          style={{
-                            fontSize: 12,
-                            fontWeight: 400,
-                            color: MUTED,
-                          }}
-                        >
-                          {d.priceNote}
+                    <div className="mb-8">
+                      <p className={`text-[11px] font-bold tracking-[0.15em] uppercase mb-2 ${isCurrent ? "text-[#A0A0A0]" : "text-[#6B6B6B]"}`}>
+                        {d.name}
+                      </p>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-bold tracking-tighter">
+                          {d.price}
                         </span>
+                        {d.priceNote && (
+                          <span className={`text-sm font-medium ${isCurrent ? "text-[#A0A0A0]" : "text-[#6B6B6B]"}`}>
+                            {d.priceNote}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-auto">
+                      {isCurrent ? (
+                        <div className="w-full text-center py-2.5 rounded-full bg-white/10 text-[13px] font-bold text-white tracking-wide">
+                          Current Plan
+                        </div>
+                      ) : pid !== "enterprise" ? (
+                        <button
+                          type="button"
+                          onClick={() => handleUpgrade(pid)}
+                          disabled={actionLoading}
+                          className="w-full text-center py-2.5 rounded-full border border-black/[0.1] bg-transparent text-[13px] font-bold text-[#111] transition-colors hover:bg-black/[0.04] disabled:opacity-50"
+                        >
+                          Select
+                        </button>
+                      ) : (
+                        <a
+                          href="mailto:sales@zybit.dev"
+                          className="block w-full text-center py-2.5 rounded-full border border-transparent bg-transparent text-[13px] font-bold text-[#6B6B6B] hover:text-[#111] transition-colors"
+                        >
+                          Contact sales
+                        </a>
                       )}
-                    </p>
-                    {isCurrent ? (
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: MUTED,
-                        }}
-                      >
-                        Current
-                      </span>
-                    ) : pid !== "enterprise" ? (
-                      <button
-                        type="button"
-                        onClick={() => void handleUpgrade(pid)}
-                        disabled={actionLoading}
-                        style={{
-                          padding: "6px 14px",
-                          borderRadius: 999,
-                          border: `1px solid ${HAIRLINE}`,
-                          background: "transparent",
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: INK,
-                          cursor: actionLoading ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        Select
-                      </button>
-                    ) : (
-                      <a
-                        href="mailto:sales@zybit.dev"
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          color: MUTED,
-                          textDecoration: "none",
-                        }}
-                      >
-                        Contact sales
-                      </a>
-                    )}
+                    </div>
                   </div>
                 );
-              }
-            )}
+              })}
+            </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -511,15 +284,8 @@ export default function SettingsPage() {
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            padding: "48px",
-            color: MUTED,
-            fontSize: 14,
-            fontFamily: "var(--font-inter), system-ui, sans-serif",
-          }}
-        >
-          Loading...
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <div className="w-8 h-8 border-4 border-[#111] border-r-transparent rounded-full animate-spin" />
         </div>
       }
     >
