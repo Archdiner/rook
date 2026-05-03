@@ -12,8 +12,31 @@ import {
 export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  plan: text('plan').notNull().default('starter'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  stripePriceId: text('stripe_price_id'),
+  planUpdatedAt: timestamp('plan_updated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const zybitUsage = pgTable(
+  'zybit_usage',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    period: text('period').notNull(),
+    eventsIngested: integer('events_ingested').notNull().default(0),
+    snapshotsTaken: integer('snapshots_taken').notNull().default(0),
+    insightsRuns: integer('insights_runs').notNull().default(0),
+  },
+  (table) => ({
+    orgPeriodIdx: uniqueIndex('zybit_usage_org_period_idx').on(
+      table.organizationId,
+      table.period
+    ),
+  })
+);
 
 export const phase1Sites = pgTable(
   'phase1_sites',
