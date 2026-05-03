@@ -64,7 +64,7 @@ export async function GET() {
           : null;
 
         await resend.emails.send({
-          from: 'Zybit Alerts <onboarding@resend.dev>',
+          from: 'Zybit Alerts <alerts@zybit.run>',
           to: alertTo,
           subject: `[Zybit] Stale sync: ${integration.provider} (${integration.siteId})`,
           text: [

@@ -14,6 +14,7 @@ import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
 import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
 import { createPhase1Repository } from '@/lib/phase1';
 import type { VariantModification } from '@/lib/experiments/types';
+import { validateModifications } from '@/lib/experiments/types';
 
 const VALID_STATUSES = ['draft', 'running', 'completed', 'stopped'] as const;
 
@@ -112,13 +113,9 @@ export async function POST(request: Request) {
 
     // Validate modifications array if provided
     let modifications: VariantModification[] | null = null;
-    if (Array.isArray(body.modifications) && body.modifications.length > 0) {
-      const VALID_MOD_TYPES = ['css-inject', 'text-replace', 'element-hide', 'element-show', 'attribute-set', 'element-reorder'] as const;
-      for (const mod of body.modifications) {
-        if (!mod || typeof mod !== 'object' || !VALID_MOD_TYPES.includes(mod.type)) {
-          return badRequest('Each modification must have a valid `type`.');
-        }
-      }
+    if (body.modifications !== undefined) {
+      const errorMsg = validateModifications(body.modifications);
+      if (errorMsg) return badRequest(errorMsg);
       modifications = body.modifications as VariantModification[];
     }
 

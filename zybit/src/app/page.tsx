@@ -109,9 +109,9 @@ export default function Home() {
         >
           <Link
             href="/dashboard"
-            className="pixel-text text-xs text-[#6B6B6B] transition-colors hover:text-[#111]"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
-            [INTERACTIVE PREVIEW]
+            Interactive Preview
           </Link>
           <button
             onClick={openModal}

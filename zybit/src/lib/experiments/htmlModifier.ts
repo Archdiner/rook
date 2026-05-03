@@ -39,6 +39,12 @@ export function applyModifications(
       case 'element-reorder': {
         const parent = root.querySelector(mod.parentSelector);
         if (parent) {
+          // Attempt to enforce display: flex if not already present
+          const currentStyle = parent.getAttribute('style') || '';
+          if (!currentStyle.includes('display: flex') && !currentStyle.includes('display: grid')) {
+            parent.setAttribute('style', currentStyle ? `${currentStyle}; display: flex;` : 'display: flex;');
+          }
+
           const children = parent.childNodes.filter(
             (n) => n.nodeType === 1,
           );

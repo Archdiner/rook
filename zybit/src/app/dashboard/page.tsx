@@ -61,7 +61,7 @@ export default function DashboardPage() {
             <div className="flex-1 w-full max-w-[500px] relative h-[300px] flex items-center hidden lg:flex">
               
               <motion.div className="absolute w-full" style={{ opacity: heroOpacity }}>
-                <div className="pixel-text text-xs text-[#111] mb-6 border-b border-black/[0.1] pb-2 inline-block">LIVE AUDIT VIEW</div>
+                <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] mb-6 border-b border-black/[0.1] pb-2 inline-block">LIVE AUDIT VIEW</div>
                 <h1 className="sans-text text-[2.5rem] sm:text-5xl font-bold tracking-tighter mb-4 leading-[0.9] text-[#111]">
                   See the system<br />in action.
                 </h1>
@@ -71,7 +71,7 @@ export default function DashboardPage() {
               </motion.div>
 
               <motion.div className="absolute w-full" style={{ opacity: phase1Opacity }}>
-                <div className="pixel-text text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 01</div>
+                <div className="sans-text font-bold text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 01</div>
                 <h2 className="sans-text text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-[#111]">Extract Design DNA.</h2>
                 <p className="sans-text text-sm sm:text-lg text-[#6B6B6B] leading-relaxed">
                   We build an exact structural replica of your application by mapping DOM topology and extracting core style tokens.
@@ -79,7 +79,7 @@ export default function DashboardPage() {
               </motion.div>
 
               <motion.div className="absolute w-full" style={{ opacity: phase2Opacity }}>
-                <div className="pixel-text text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 02</div>
+                <div className="sans-text font-bold text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 02</div>
                 <h2 className="sans-text text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-[#111]">Identify Deep Friction.</h2>
                 <p className="sans-text text-sm sm:text-lg text-[#6B6B6B] leading-relaxed">
                   We pinpoint exact moments of user failure, like hidden layout shifts or critical drop-off nodes in the journey.
@@ -87,7 +87,7 @@ export default function DashboardPage() {
               </motion.div>
 
               <motion.div className="absolute w-full" style={{ opacity: phase3Opacity }}>
-                <div className="pixel-text text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 03</div>
+                <div className="sans-text font-bold text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 03</div>
                 <h2 className="sans-text text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-[#111]">Autonomously A/B Test.</h2>
                 <p className="sans-text text-sm sm:text-lg text-[#6B6B6B] leading-relaxed">
                   Traffic is split instantly. We deploy algorithmically generated fixes against your control to measure pure conversion delta.
@@ -95,7 +95,7 @@ export default function DashboardPage() {
               </motion.div>
 
               <motion.div className="absolute w-full pointer-events-auto" style={{ opacity: phase4Opacity }}>
-                <div className="pixel-text text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 04</div>
+                <div className="sans-text font-bold text-[10px] text-[#6B6B6B] mb-2 uppercase tracking-widest">Phase 04</div>
                 <h2 className="sans-text text-4xl sm:text-5xl font-bold tracking-tighter mb-4 text-[#111]">Prove Significance.</h2>
                 <p className="sans-text text-sm sm:text-lg text-[#6B6B6B] leading-relaxed mb-8">
                   Ship confident, data-backed optimizations that directly impact your bottom line.

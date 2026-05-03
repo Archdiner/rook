@@ -56,7 +56,6 @@ export async function GET() {
 
     return NextResponse.json({
       status: overallStatus,
-      integrations: enriched,
       staleCount,
       total: enriched.length,
       checkedAt: new Date().toISOString(),
