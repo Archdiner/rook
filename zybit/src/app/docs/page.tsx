@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { DocsParticleCanvas } from "@/components/particle-background";
+import { Logo } from "@/components/logo";
 
 const ENDPOINTS: { method: string; path: string; note: string }[] = [
   { method: "GET", path: "/api/phase1/health", note: "Service health and capability flags." },
@@ -50,7 +51,7 @@ export default function DocsPage() {
     <main className="relative min-h-[220vh] w-full bg-[#FAFAF8] text-[#111]">
       <header className="fixed top-0 left-0 w-full z-50 flex flex-wrap items-center justify-between gap-y-4 px-6 py-6 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
         <Link href="/" className="flex items-center gap-3 no-underline">
-          <div className="h-6 w-6 rounded-md bg-[#111]" />
+          <Logo className="w-6 h-6 text-[#111]" />
           <span className="sans-text text-xl font-bold tracking-tight text-[#111]">Zybit</span>
         </Link>
         <nav

@@ -3,6 +3,7 @@
 import { SignUp } from '@clerk/nextjs';
 import { AuthParticleCanvas } from '@/components/particle-background';
 import Link from 'next/link';
+import { Logo } from '@/components/logo';
 
 export default function SignUpPage() {
   return (
@@ -40,7 +41,7 @@ export default function SignUpPage() {
             color: '#111',
           }}
         >
-          <div style={{ width: 22, height: 22, borderRadius: 5, background: '#111' }} />
+          <Logo style={{ width: 22, height: 22, color: '#111' }} />
           <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em' }}>Zybit</span>
         </Link>
       </header>

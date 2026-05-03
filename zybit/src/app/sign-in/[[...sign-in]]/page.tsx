@@ -3,6 +3,7 @@
 import { SignIn } from '@clerk/nextjs';
 import { AuthParticleCanvas } from '@/components/particle-background';
 import Link from 'next/link';
+import { Logo } from '@/components/logo';
 
 export default function SignInPage() {
   return (
@@ -42,14 +43,7 @@ export default function SignInPage() {
             color: '#111',
           }}
         >
-          <div
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 5,
-              background: '#111',
-            }}
-          />
+          <Logo style={{ width: 22, height: 22, color: '#111' }} />
           <span
             style={{
               fontSize: 16,

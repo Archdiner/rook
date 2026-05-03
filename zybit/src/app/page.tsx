@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { ParticleCanvas } from "@/components/particle-background";
 import { useAuth } from "@clerk/nextjs";
+import { Logo } from "@/components/logo";
 
 // --- Intake Form Modal ---
 
@@ -429,7 +430,7 @@ export default function Home() {
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
       <header className="fixed top-0 left-0 w-full px-6 py-6 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
         <Link href="/" className="flex items-center gap-3 no-underline">
-          <div className="w-6 h-6 rounded-md bg-[#111]" />
+          <Logo className="w-6 h-6 text-[#111]" />
           <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Zybit</span>
         </Link>
         <nav
