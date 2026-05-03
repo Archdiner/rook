@@ -389,8 +389,8 @@ function MinimalDOM() {
       </section>
 
       {/* Section 4: Microchip is flat/wide — text can be higher */}
-      <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="max-w-[500px] md:mt-[20vh]">
+      <section className="h-screen w-full flex flex-col pt-[15vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
+        <div className="max-w-[500px] md:mt-[15vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">What Zybit means.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>
