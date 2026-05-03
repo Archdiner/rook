@@ -97,7 +97,7 @@ export function AccessGateModal({
           ×
         </button>
 
-        <div className="pixel-text" style={{ fontSize: '48px', marginBottom: '16px', color: '#111' }}>
+        <div className="sans-text font-bold uppercase tracking-[0.2em]" style={{ fontSize: '48px', marginBottom: '16px', color: '#111' }}>
           LOCK
         </div>
         <h3

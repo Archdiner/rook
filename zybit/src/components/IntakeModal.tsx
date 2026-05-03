@@ -125,7 +125,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
 
         {status === 'success' ? (
           <div style={{ textAlign: 'center', padding: '24px 0' }}>
-            <div className="pixel-text" style={{ fontSize: '48px', marginBottom: '16px' }}>OK</div>
+            <div className="sans-text font-bold uppercase tracking-[0.2em]" style={{ fontSize: '48px', marginBottom: '16px' }}>OK</div>
             <h3
               style={{
                 fontSize: '28px',
@@ -149,7 +149,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
           </div>
         ) : (
           <>
-            <div className="pixel-text" style={{ color: '#111', fontSize: '12px', marginBottom: '8px', letterSpacing: '0.1em' }}>
+            <div className="sans-text font-bold uppercase" style={{ color: '#111', fontSize: '12px', marginBottom: '8px', letterSpacing: '0.1em' }}>
               PROVISIONING
             </div>
             <h3

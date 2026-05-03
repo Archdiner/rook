@@ -34,10 +34,6 @@ body {
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
-.pixel-text {
-  font-family: var(--font-dotgothic), monospace;
-  text-transform: uppercase;
-}
 
 .bg-dots {
   background-image: radial-gradient(rgba(0, 0, 0, 0.15) 1.5px, transparent 1.5px);

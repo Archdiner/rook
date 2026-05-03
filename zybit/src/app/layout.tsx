@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Newsreader, DotGothic16 } from "next/font/google";
+import { Inter, Newsreader } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
@@ -16,12 +16,6 @@ const newsreader = Newsreader({
   style: ["normal", "italic"],
 });
 
-const dotgothic = DotGothic16({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-dotgothic",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "Zybit — Clarity over intuition",
@@ -38,7 +32,7 @@ export default function RootLayout({
   const body = <body suppressHydrationWarning>{children}</body>;
 
   return (
-    <html lang="en" className={`${inter.variable} ${newsreader.variable} ${dotgothic.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${newsreader.variable}`} suppressHydrationWarning>
       {publishableKey ? <ClerkProvider>{body}</ClerkProvider> : body}
     </html>
   );
