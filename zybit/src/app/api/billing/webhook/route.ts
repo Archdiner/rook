@@ -50,12 +50,13 @@ export async function POST(request: Request) {
           ? session.customer
           : session.customer?.id;
       const planId = session.metadata?.planId;
+      const orgId = session.metadata?.orgId;
 
-      if (customerId && planId) {
+      if (orgId && planId && customerId) {
         const [org] = await db
           .select({ id: organizations.id })
           .from(organizations)
-          .where(eq(organizations.stripeCustomerId, customerId))
+          .where(eq(organizations.id, orgId))
           .limit(1);
 
         if (org) {
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
             .update(organizations)
             .set({
               plan: planId,
+              stripeCustomerId: customerId,
               stripeSubscriptionId: subscriptionId,
               planUpdatedAt: new Date(),
             })

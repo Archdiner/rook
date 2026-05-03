@@ -10,6 +10,7 @@ import {
 } from '@/lib/experiments/bucketing';
 import { applyModifications } from '@/lib/experiments/htmlModifier';
 import type { VariantModification } from '@/lib/experiments/types';
+import { get } from '@vercel/edge-config';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -72,19 +73,36 @@ async function handleProxyRequest(req: NextRequest): Promise<NextResponse> {
     return new NextResponse('Not Found', { status: 404 });
   }
 
-  // Fetch config from our own API
-  const configUrl = new URL(`/api/proxy/config?slug=${encodeURIComponent(slug)}`, req.url);
-  const configRes = await fetch(configUrl.toString());
-  if (!configRes.ok) {
-    return new NextResponse('Not Found', { status: 404 });
+  let proxyConfig: ProxyConfig | undefined;
+
+  // Try Edge Config first for low latency
+  try {
+    if (process.env.EDGE_CONFIG) {
+      const configMap = await get<{ [slug: string]: ProxyConfig }>('proxyConfigs');
+      if (configMap && configMap[slug]) {
+        proxyConfig = configMap[slug];
+      }
+    }
+  } catch {
+    // Silently fallback if Edge Config read fails
   }
 
-  const configJson = (await configRes.json()) as { success: boolean; data?: ProxyConfig };
-  if (!configJson.success || !configJson.data) {
-    return new NextResponse('Not Found', { status: 404 });
+  // Fallback to our API if Edge Config isn't available or configured
+  if (!proxyConfig) {
+    const configUrl = new URL(`/api/proxy/config?slug=${encodeURIComponent(slug)}`, req.url);
+    const configRes = await fetch(configUrl.toString());
+    if (!configRes.ok) {
+      return new NextResponse('Not Found', { status: 404 });
+    }
+
+    const configJson = (await configRes.json()) as { success: boolean; data?: ProxyConfig };
+    if (!configJson.success || !configJson.data) {
+      return new NextResponse('Not Found', { status: 404 });
+    }
+    proxyConfig = configJson.data;
   }
 
-  const { site, experiments } = configJson.data;
+  const { site, experiments } = proxyConfig;
   const requestPath = req.nextUrl.pathname;
 
   // Find experiments matching this path

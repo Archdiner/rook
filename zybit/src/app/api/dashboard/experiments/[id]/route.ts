@@ -11,6 +11,7 @@ import { resolveZybitActor } from '@/lib/auth/actor';
 import { getDb } from '@/lib/db/client';
 import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
 import type { VariantModification } from '@/lib/experiments/types';
+import { validateModifications } from '@/lib/experiments/types';
 
 const VALID_STATUSES = ['draft', 'running', 'completed', 'stopped'] as const;
 
@@ -106,16 +107,12 @@ export async function PATCH(
 
     // Modifications + target path
     if (body.modifications !== undefined) {
-      if (Array.isArray(body.modifications)) {
-        const VALID_MOD_TYPES = ['css-inject', 'text-replace', 'element-hide', 'element-show', 'attribute-set', 'element-reorder'] as const;
-        for (const mod of body.modifications) {
-          if (!mod || typeof mod !== 'object' || !VALID_MOD_TYPES.includes(mod.type)) {
-            return badRequest('Each modification must have a valid `type`.');
-          }
-        }
-        update.modifications = body.modifications as VariantModification[];
-      } else {
+      if (body.modifications === null) {
         update.modifications = null;
+      } else {
+        const errorMsg = validateModifications(body.modifications);
+        if (errorMsg) return badRequest(errorMsg);
+        update.modifications = body.modifications as VariantModification[];
       }
     }
     if (body.targetPath !== undefined) update.targetPath = parseString(body.targetPath) ?? null;
