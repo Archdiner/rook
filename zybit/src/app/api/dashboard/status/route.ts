@@ -10,7 +10,7 @@
  *   - open finding count (from forge_findings)
  *   - next cron estimate
  *
- * This is designed for the cockpit's "baseline learning" widget — cheap enough
+ * This is designed for the dashboard's "baseline learning" widget — cheap enough
  * to call on every page load without running the full insights pipeline.
  */
 

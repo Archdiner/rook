@@ -927,3 +927,252 @@ export function AuthParticleCanvas() {
     </div>
   );
 }
+
+import { MotionValue } from "framer-motion";
+
+// --- Dashboard: "Live Audit" (Wireframe particles) ---
+
+function getDashboardCloudPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    points[i*3] = (Math.random() - 0.5) * 20;
+    points[i*3+1] = (Math.random() - 0.5) * 20;
+    points[i*3+2] = (Math.random() - 0.5) * 10 - 2;
+  }
+  return points;
+}
+
+function getDashboardGridPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  const size = 12.0;
+  const step = 2.0;
+  for (let i = 0; i < count; i++) {
+    const x = Math.round((Math.random() - 0.5) * size / step) * step;
+    const y = Math.round((Math.random() - 0.5) * size / step) * step;
+    const z = Math.round((Math.random() - 0.5) * (size/2) / step) * step;
+    
+    const noise = 0.1;
+    points[i*3] = x + (Math.random()-0.5)*noise;
+    points[i*3+1] = y + (Math.random()-0.5)*noise;
+    points[i*3+2] = z + (Math.random()-0.5)*noise;
+  }
+  return points;
+}
+
+function getDashboardFunnelPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const t = Math.random();
+    const angle = Math.random() * Math.PI * 2 + t * 10;
+    
+    const y = (0.5 - t) * 15;
+    const r = Math.pow(1.0 - t, 2) * 8 + 0.5;
+    
+    points[i*3] = Math.cos(angle) * r;
+    points[i*3+1] = y;
+    points[i*3+2] = Math.sin(angle) * r;
+  }
+  return points;
+}
+
+function getDashboardSplitPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const t = Math.random();
+    const y = (0.5 - t) * 15;
+    
+    let x = 0;
+    const side = Math.random() > 0.5 ? 1 : -1;
+    if (t > 0.3) {
+      const splitT = (t - 0.3) / 0.7;
+      x = Math.pow(splitT, 1.5) * 6 * side;
+    }
+    
+    const noise = 0.4;
+    points[i*3] = x + (Math.random()-0.5)*noise;
+    points[i*3+1] = y;
+    points[i*3+2] = (Math.random()-0.5)*noise;
+  }
+  return points;
+}
+
+function getDashboardGrowthPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const t = Math.random();
+    const x = (t - 0.5) * 15;
+    const y = Math.pow(t, 3) * 15 - 5;
+    
+    const noise = 0.5;
+    points[i*3] = x + (Math.random()-0.5)*noise;
+    points[i*3+1] = y + (Math.random()-0.5)*noise;
+    points[i*3+2] = (Math.random()-0.5)*noise;
+  }
+  return points;
+}
+
+const dashboardVertexShader = `
+  attribute vec3 spawnPos;
+  attribute vec3 position1;
+  attribute vec3 position2;
+  attribute vec3 position3;
+  attribute vec3 position4;
+  attribute vec3 position5;
+
+  uniform float uTime;
+  uniform float uProgress;
+  uniform float uSpawnTime;
+  uniform float uMobile;
+  uniform vec3 uOffsets[5];
+
+float cheapNoise(vec3 p) {
+  return fract(sin(dot(p, vec3(12.9898, 78.233, 45.543))) * 43758.5453);
+}
+
+vec3 cheapTurbulence(vec3 p) {
+    float x = sin(p.y * 3.0) + cos(p.z * 2.0);
+    float y = sin(p.z * 3.0) + cos(p.x * 2.0);
+    float z = sin(p.x * 3.0) + cos(p.y * 2.0);
+    return vec3(x, y, z) * 0.5;
+}
+
+void main() {
+  vec3 p1 = position1;
+  
+  vec3 p2 = position2;
+  float a2 = uTime * 0.1;
+  p2.xz = vec2(p2.x*cos(a2)-p2.z*sin(a2), p2.x*sin(a2)+p2.z*cos(a2));
+
+  vec3 p3 = position3;
+  float a3 = uTime * 1.5;
+  p3.xz = vec2(p3.x*cos(a3)-p3.z*sin(a3), p3.x*sin(a3)+p3.z*cos(a3));
+
+  vec3 p4 = position4;
+  p4.y -= uTime * 2.0;
+  p4.y = mod(p4.y + 7.5, 15.0) - 7.5;
+
+  vec3 p5 = position5;
+  float flowT = mod(p5.x + uTime * 4.0 + 7.5, 15.0) / 15.0;
+  p5.x = (flowT - 0.5) * 15.0;
+  p5.y = pow(flowT, 3.0) * 15.0 - 5.0;
+
+  // We DO NOT offset vertically anymore because they stay sticky in center.
+  // We offset horizontally to fit in the right side container on desktop.
+  vec3 offsetDesktop = vec3(4.0, 0, 0);
+  vec3 offsetMobile = vec3(0, 0, 0);
+  vec3 posOffset = mix(offsetDesktop, offsetMobile, uMobile);
+
+  vec3 target;
+  float t = fract(uProgress);
+  float easedT = smoothstep(0.2, 0.8, t);
+  
+  if (uProgress < 1.0) { target = mix(p1, p2, easedT); }
+  else if (uProgress < 2.0) { target = mix(p2, p3, easedT); }
+  else if (uProgress < 3.0) { target = mix(p3, p4, easedT); }
+  else {
+    float lastT = smoothstep(0.2, 0.8, max(0.0, min(1.0, uProgress - 3.0)));
+    target = mix(p4, p5, lastT);
+  }
+  
+  // Apply the same offset to all to keep it centered
+  target += posOffset;
+
+  float morphChaos = sin(easedT * 3.14159) * 2.0;
+  target += cheapTurbulence(target + uTime) * morphChaos;
+
+  float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0);
+  vec3 chaotic = spawnPos + cheapTurbulence(spawnPos * 0.1 + uTime) * 10.0 * (1.0 - spawnEase);
+  vec3 finalPos = mix(chaotic, target, spawnEase);
+  
+  vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
+  gl_Position = projectionMatrix * mvPosition;
+  
+  // Larger size so they are more visible
+  gl_PointSize = max(1.0, (50.0 - uMobile * 15.0) / -mvPosition.z) * spawnEase;
+}
+`;
+
+const dashboardFragmentShader = `
+void main() {
+  float dist = distance(gl_PointCoord, vec2(0.5));
+  if (dist > 0.5) discard;
+  // Make particles much darker and more opaque
+  float alpha = smoothstep(0.5, 0.2, dist) * 0.95;
+  gl_FragColor = vec4(0.066, 0.066, 0.066, alpha);
+}
+`;
+
+const DASHBOARD_PARTICLE_DESKTOP = 45000;
+const DASHBOARD_PARTICLE_MOBILE = 25000;
+
+function DashboardParticleSwarm({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+  const shaderRef = useRef<THREE.ShaderMaterial>(null);
+  const { viewport, size } = useThree();
+  const isMobile = size.width < 768;
+  const count = isMobile ? DASHBOARD_PARTICLE_MOBILE : DASHBOARD_PARTICLE_DESKTOP;
+  const mountTimeRef = useRef<number | null>(null);
+
+  const buffers = useMemo(() => ({
+    spawn: getDashboardCloudPoints(count),
+    pos1: getDashboardCloudPoints(count),
+    pos2: getDashboardGridPoints(count),
+    pos3: getDashboardFunnelPoints(count),
+    pos4: getDashboardSplitPoints(count),
+    pos5: getDashboardGrowthPoints(count)
+  }), [count]);
+
+  const uniforms = useMemo(() => ({
+    uProgress: { value: 0 },
+    uTime: { value: 0 },
+    uSpawnTime: { value: 0 },
+    uMobile: { value: isMobile ? 1.0 : 0.0 },
+    uOffsets: { value: [] } // unused now
+  }), [isMobile]);
+
+  useFrame((state) => {
+    if (!shaderRef.current) return;
+    const time = state.clock.getElapsedTime();
+    const progress = scrollYProgress.get();
+    
+    const spawnDuration = isMobile ? 1500 : 3000;
+    if (mountTimeRef.current === null) mountTimeRef.current = Date.now();
+    const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
+    
+    shaderRef.current.uniforms.uTime.value = time;
+    shaderRef.current.uniforms.uProgress.value = progress * 4.0;
+    shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
+  });
+
+  return (
+    <points frustumCulled={false}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-spawnPos" args={[buffers.spawn, 3]} />
+        <bufferAttribute attach="attributes-position1" args={[buffers.pos1, 3]} />
+        <bufferAttribute attach="attributes-position2" args={[buffers.pos2, 3]} />
+        <bufferAttribute attach="attributes-position3" args={[buffers.pos3, 3]} />
+        <bufferAttribute attach="attributes-position4" args={[buffers.pos4, 3]} />
+        <bufferAttribute attach="attributes-position5" args={[buffers.pos5, 3]} />
+      </bufferGeometry>
+      <shaderMaterial
+        ref={shaderRef}
+        vertexShader={dashboardVertexShader}
+        fragmentShader={dashboardFragmentShader}
+        uniforms={uniforms}
+        transparent={true}
+        depthWrite={false}
+        blending={THREE.NormalBlending}
+      />
+    </points>
+  );
+}
+
+export function DashboardParticleCanvas({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+  return (
+    <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
+      <Canvas camera={{ position: [0, 0, 15], fov: 45 }} dpr={[1, 1.5]}>
+        <ambientLight intensity={1} />
+        <DashboardParticleSwarm scrollYProgress={scrollYProgress} />
+      </Canvas>
+    </div>
+  );
+}
