@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/phase2/cron/sync-posthog",
+      "schedule": "*/30 * * * *"
+    }
+  ]
+}
