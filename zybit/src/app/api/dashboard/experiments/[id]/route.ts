@@ -10,6 +10,7 @@ import { badRequest, forbidden, mapRouteError, parseJsonObject, parseString, suc
 import { resolveZybitActor } from '@/lib/auth/actor';
 import { getDb } from '@/lib/db/client';
 import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
+import type { VariantModification } from '@/lib/experiments/types';
 
 const VALID_STATUSES = ['draft', 'running', 'completed', 'stopped'] as const;
 
@@ -102,6 +103,22 @@ export async function PATCH(
     if (body.externalProvider !== undefined) update.externalProvider = parseString(body.externalProvider) ?? null;
     if (body.externalId !== undefined) update.externalId = parseString(body.externalId) ?? null;
     if (body.notes !== undefined) update.notes = parseString(body.notes) ?? null;
+
+    // Modifications + target path
+    if (body.modifications !== undefined) {
+      if (Array.isArray(body.modifications)) {
+        const VALID_MOD_TYPES = ['css-inject', 'text-replace', 'element-hide', 'element-show', 'attribute-set', 'element-reorder'] as const;
+        for (const mod of body.modifications) {
+          if (!mod || typeof mod !== 'object' || !VALID_MOD_TYPES.includes(mod.type)) {
+            return badRequest('Each modification must have a valid `type`.');
+          }
+        }
+        update.modifications = body.modifications as VariantModification[];
+      } else {
+        update.modifications = null;
+      }
+    }
+    if (body.targetPath !== undefined) update.targetPath = parseString(body.targetPath) ?? null;
 
     // Results update
     if (typeof body.resultControlRate === 'number') update.resultControlRate = body.resultControlRate;

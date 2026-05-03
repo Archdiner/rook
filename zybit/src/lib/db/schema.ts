@@ -12,8 +12,31 @@ import {
 export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
+  plan: text('plan').notNull().default('starter'),
+  stripeCustomerId: text('stripe_customer_id'),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  stripePriceId: text('stripe_price_id'),
+  planUpdatedAt: timestamp('plan_updated_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const zybitUsage = pgTable(
+  'zybit_usage',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    period: text('period').notNull(),
+    eventsIngested: integer('events_ingested').notNull().default(0),
+    snapshotsTaken: integer('snapshots_taken').notNull().default(0),
+    insightsRuns: integer('insights_runs').notNull().default(0),
+  },
+  (table) => ({
+    orgPeriodIdx: uniqueIndex('zybit_usage_org_period_idx').on(
+      table.organizationId,
+      table.period
+    ),
+  })
+);
 
 export const phase1Sites = pgTable(
   'phase1_sites',
@@ -23,10 +46,12 @@ export const phase1Sites = pgTable(
     name: text('name').notNull(),
     domain: text('domain').notNull(),
     analyticsProvider: text('analytics_provider'),
+    proxySlug: text('proxy_slug'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     orgIdx: index('phase1_sites_org_idx').on(table.organizationId),
+    proxySlugIdx: uniqueIndex('phase1_sites_proxy_slug_idx').on(table.proxySlug),
   })
 );
 
@@ -100,6 +125,7 @@ export const phase2Integrations = pgTable(
     cursor: jsonb('cursor').$type<Record<string, unknown> | null>(),
     lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
     lastErrorCode: text('last_error_code'),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -229,6 +255,8 @@ export const zybitExperiments = pgTable(
     externalUrl: text('external_url'), // link to PostHog / LaunchDarkly etc
     externalProvider: text('external_provider'), // 'posthog'|'custom'
     externalId: text('external_id'),
+    modifications: jsonb('modifications').$type<import('@/lib/experiments/types').VariantModification[]>(),
+    targetPath: text('target_path'),
     guardrails: jsonb('guardrails').$type<string[]>(),
     notes: text('notes'),
     // Results snapshot (optional — updated manually or via future webhook)
