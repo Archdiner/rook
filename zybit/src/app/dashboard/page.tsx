@@ -42,7 +42,7 @@ export default function DashboardPage() {
   const phase1Opacity = useTransform(scrollYProgress, [0, 0.1, 0.15, 0.3, 0.35, 1], [0, 0, 1, 1, 0, 0]);
   const phase2Opacity = useTransform(scrollYProgress, [0, 0.35, 0.4, 0.55, 0.6, 1], [0, 0, 1, 1, 0, 0]);
   const phase3Opacity = useTransform(scrollYProgress, [0, 0.6, 0.65, 0.8, 0.85, 1], [0, 0, 1, 1, 0, 0]);
-  const phase4Opacity = useTransform(scrollYProgress, [0, 0.85, 0.9], [0, 0, 1]);
+  const phase4Opacity = useTransform(scrollYProgress, [0, 0.85, 0.9, 1], [0, 0, 1, 1]);
 
   return (
     <div className="bg-[#FAFAF8] font-sans selection:bg-[#111] selection:text-[#FAFAF8] relative">
