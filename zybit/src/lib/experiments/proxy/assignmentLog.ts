@@ -9,15 +9,18 @@ export interface AssignmentEvent {
   timestamp: string;
 }
 
-export function logAssignment(baseUrl: string, event: AssignmentEvent): void {
+export async function logAssignment(
+  baseUrl: string,
+  event: AssignmentEvent,
+): Promise<void> {
   try {
     const url = new URL('/api/proxy/assignment', baseUrl);
-    void fetch(url.toString(), {
+    await fetch(url.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(event),
-    }).catch(() => {});
+    });
   } catch {
-    // URL construction or fetch dispatch failed — never block the response
+    // Never throw — assignment logging is best-effort.
   }
 }

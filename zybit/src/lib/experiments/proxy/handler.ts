@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextFetchEvent, NextResponse } from 'next/server';
 import {
   assignBucket,
   bucketCookieMaxAge,
@@ -13,7 +13,10 @@ import { loadProxyConfig, type ProxyExperiment } from './config';
 import { logAssignment } from './assignmentLog';
 import { extractSlug } from './host';
 
-export async function handleProxyRequest(req: NextRequest): Promise<NextResponse> {
+export async function handleProxyRequest(
+  req: NextRequest,
+  event: NextFetchEvent,
+): Promise<NextResponse> {
   const slug = extractSlug(req.nextUrl.hostname);
   if (!slug) return new NextResponse('Not Found', { status: 404 });
 
@@ -25,9 +28,10 @@ export async function handleProxyRequest(req: NextRequest): Promise<NextResponse
   const userAgent = req.headers.get('user-agent') || '';
   const originUrl = `https://${site.domain}${requestPath}${req.nextUrl.search}`;
 
-  const matching = experiments.filter(
-    (exp) => !exp.targetPath || exp.targetPath === requestPath,
-  );
+  // Most-specific path wins; null targetPath (wildcard) sorts last.
+  const matching = experiments
+    .filter((exp) => !exp.targetPath || exp.targetPath === requestPath)
+    .sort((a, b) => (b.targetPath?.length ?? 0) - (a.targetPath?.length ?? 0));
 
   if (matching.length === 0) {
     return passthrough(originUrl, userAgent);
@@ -62,14 +66,16 @@ export async function handleProxyRequest(req: NextRequest): Promise<NextResponse
     });
   }
 
-  logAssignment(req.url, {
-    experimentId: experiment.id,
-    bucket,
-    visitorId,
-    siteId: site.id,
-    path: requestPath,
-    timestamp: new Date().toISOString(),
-  });
+  event.waitUntil(
+    logAssignment(req.url, {
+      experimentId: experiment.id,
+      bucket,
+      visitorId,
+      siteId: site.id,
+      path: requestPath,
+      timestamp: new Date().toISOString(),
+    }),
+  );
 
   return response;
 }
@@ -111,8 +117,16 @@ async function fetchAndMaybeModify(
 
   const html = await originRes.text();
   const modified = applyModifications(html, experiment.modifications);
+
+  // Preserve origin headers (Set-Cookie, Cache-Control, CSP, etc.) but drop
+  // the encoding/length headers that no longer match the modified body.
+  const headers = new Headers(originRes.headers);
+  headers.set('content-type', contentType);
+  headers.delete('content-encoding');
+  headers.delete('content-length');
+
   return new NextResponse(modified, {
     status: originRes.status,
-    headers: { 'content-type': contentType },
+    headers,
   });
 }

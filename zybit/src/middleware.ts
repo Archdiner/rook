@@ -23,9 +23,15 @@ function clerkProtectionEnabled(): boolean {
   return process.env.FORGE_CLERK_ENABLED === '1' && Boolean(process.env.CLERK_SECRET_KEY);
 }
 
-export default clerkMiddleware(async (auth, req) => {
+export default clerkMiddleware(async (auth, req, event) => {
+  const pathname = req.nextUrl.pathname;
+
+  if (pathname.startsWith('/api/proxy/')) {
+    return NextResponse.next();
+  }
+
   if (isProxyHost(req.nextUrl.hostname)) {
-    return handleProxyRequest(req);
+    return handleProxyRequest(req, event);
   }
 
   if (!clerkProtectionEnabled()) {
@@ -36,7 +42,6 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
-  const pathname = req.nextUrl.pathname;
   if (isSegmentWebhookPath(pathname)) {
     const authz = req.headers.get('authorization');
     const hasBearerCred =
@@ -60,10 +65,6 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   if (pathname === '/api/phase2/cron/sync-posthog') {
-    return NextResponse.next();
-  }
-
-  if (pathname.startsWith('/api/proxy/')) {
     return NextResponse.next();
   }
 
