@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 
 export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const [formData, setFormData] = useState({ name: '', email: '', url: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', url: '', analytics: '' });
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -39,7 +39,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     // Reset after animation
     setTimeout(() => {
       setStatus('idle');
-      setFormData({ name: '', email: '', url: '' });
+      setFormData({ name: '', email: '', url: '', analytics: '' });
       setErrorMsg('');
     }, 300);
   };
@@ -137,9 +137,35 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             >
               Request received.
             </h3>
-            <p style={{ fontSize: '16px', color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
-              We&apos;ll review your domain and be in touch to arrange provisioned access.
+            <p style={{ fontSize: '15px', color: '#6B6B6B', margin: '0 0 24px', lineHeight: 1.5 }}>
+              We review every domain personally and will be in touch shortly.
             </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', marginBottom: '24px' }}>
+              <a
+                href="https://calendly.com/zybit/15min"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  fontSize: '14px',
+                  color: '#111',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '4px',
+                }}
+              >
+                Book 15 minutes with the founders
+              </a>
+              <a
+                href="mailto:sar367@cornell.edu"
+                style={{
+                  fontSize: '13px',
+                  color: '#6B6B6B',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '4px',
+                }}
+              >
+                or email us directly
+              </a>
+            </div>
             <button
               onClick={handleClose}
               className="btn-brutalist"
@@ -244,6 +270,48 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
                   className="input-field"
                   style={{ boxSizing: 'border-box', borderRadius: 0, border: '1px solid #111' }}
                 />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="intake-analytics"
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#6B6B6B',
+                    marginBottom: '6px',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  Analytics tool
+                </label>
+                <select
+                  id="intake-analytics"
+                  required
+                  value={formData.analytics}
+                  onChange={(e) => setFormData({ ...formData, analytics: e.target.value })}
+                  className="input-field"
+                  style={{
+                    boxSizing: 'border-box',
+                    borderRadius: 0,
+                    border: '1px solid #111',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    backgroundImage:
+                      "url(\"data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23111' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E\")",
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 18px center',
+                    backgroundSize: '10px 6px',
+                    paddingRight: '40px',
+                  }}
+                >
+                  <option value="" disabled>Select one</option>
+                  <option value="posthog">PostHog</option>
+                  <option value="segment">Segment</option>
+                  <option value="ga4">GA4</option>
+                  <option value="other">Other / none</option>
+                </select>
               </div>
 
               {status === 'error' && (

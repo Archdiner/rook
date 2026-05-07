@@ -18,6 +18,9 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
       {/* Hero: Data Core is compact, text can sit close below */}
       <section className="h-screen w-full flex flex-col justify-end md:justify-center px-6 md:px-24 pb-10 md:pb-0 pointer-events-none">
         <div className="w-full max-w-[700px]">
+          <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-4 md:mb-6">
+            For product managers
+          </div>
           <h1 className="sans-text text-[2.5rem] sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-4 md:mb-8 leading-[0.9]">
             Clarity over<br />
             intuition.
@@ -68,7 +71,63 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
         </div>
       </section>
 
-      {/* Section 5: CTA */}
+      {/* Section 5: Sample Finding (receipt) */}
+      <section className="h-screen w-full flex items-center justify-center px-6 pointer-events-none">
+        <div className="w-full max-w-[640px]">
+          <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-4 text-center">
+            Sample finding
+          </div>
+          <div
+            className="sans-text bg-[#FAFAF8] border-2 border-[#111]"
+            style={{ boxShadow: '8px 8px 0px #111' }}
+          >
+            <div className="flex items-center justify-between px-5 py-3 border-b-2 border-[#111] text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B]">
+              <span>Finding · F-0042</span>
+              <span>Pain · rage-click</span>
+            </div>
+            <div className="px-5 py-5 border-b border-[#111]/15">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
+                Title
+              </div>
+              <div className="text-lg md:text-xl font-bold leading-snug tracking-tight text-[#111]">
+                Rage-clicks on checkout promo-code field
+              </div>
+            </div>
+            <div className="px-5 py-5 border-b border-[#111]/15">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
+                Evidence
+              </div>
+              <div className="text-sm md:text-base text-[#111] leading-relaxed">
+                847 rage-click events on{' '}
+                <span className="font-mono text-[0.95em]">#promo-code</span> over 7 days.
+                Checkout completion at 2.1% vs 3.4% on the variant without the field exposed.
+              </div>
+            </div>
+            <div className="px-5 py-5 border-b border-[#111]/15">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
+                Recommended change
+              </div>
+              <div className="text-sm md:text-base text-[#111] leading-relaxed">
+                Move the promo-code field below the primary CTA and collapse it behind a
+                &ldquo;Have a code?&rdquo; toggle.
+              </div>
+            </div>
+            <div className="px-5 py-4 flex items-center justify-between bg-[#111] text-[#FAFAF8]">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">
+                Estimated impact
+              </div>
+              <div className="text-sm md:text-base font-bold tracking-tight">
+                ~$3.2k / month
+              </div>
+            </div>
+          </div>
+          <p className="sans-text text-xs md:text-sm text-[#6B6B6B] mt-4 text-center">
+            Every finding is traceable to specific behavioral evidence. No invented numbers.
+          </p>
+        </div>
+      </section>
+
+      {/* Section 6: CTA */}
       <section className="h-screen w-full flex flex-col items-center justify-center text-center px-6">
         <h2 className="sans-text text-3xl sm:text-5xl md:text-8xl font-bold tracking-tighter mb-4 md:mb-6 pointer-events-none">
           See if Zybit fits.
@@ -84,6 +143,13 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
           Request Access
         </button>
       </section>
+
+      {/* Footer: human attribution */}
+      <footer className="relative z-20 w-full bg-[#FAFAF8] border-t border-black/[0.06] px-6 py-6 text-center pointer-events-none">
+        <p className="sans-text text-[11px] font-medium uppercase tracking-[0.2em] text-[#6B6B6B]">
+          Built by Jad and Asad · Cornell University · We review every submission
+        </p>
+      </footer>
 
     </div>
   );
@@ -113,6 +179,14 @@ export default function Home() {
           >
             Interactive Preview
           </Link>
+          <a
+            href="https://calendly.com/zybit/15min"
+            target="_blank"
+            rel="noreferrer"
+            className="hidden md:inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
+          >
+            Talk to founders
+          </a>
           <button
             onClick={openModal}
             className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] transition-colors hover:text-[#555] bg-transparent border-none cursor-pointer"
