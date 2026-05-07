@@ -17,7 +17,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
     <div className="w-full text-[#111]">
       {/* Hero: Data Core is compact, text can sit close below */}
       <section className="h-screen w-full flex flex-col justify-end md:justify-center px-6 md:px-24 pb-10 md:pb-0 pointer-events-none">
-        <div className="max-w-[700px]">
+        <div className="w-full max-w-[700px]">
           <h1 className="sans-text text-[2.5rem] sm:text-6xl md:text-8xl lg:text-9xl font-bold tracking-tighter mb-4 md:mb-8 leading-[0.9]">
             Clarity over<br />
             intuition.
@@ -33,9 +33,9 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
         </div>
       </section>
 
-      {/* Section 2: DNA is 11 units tall — text must start very low */}
-      <section className="h-screen w-full flex flex-col pt-[62vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="max-w-[500px] md:mt-[20vh]">
+      {/* Section 2: DNA — on mobile text starts below the helix */}
+      <section className="h-screen w-full flex flex-col pt-[65vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
+        <div className="w-full md:max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>If the journey is broken, your analytics already show it: missed clicks, weak conversion, repetitive loops.</p>
@@ -44,9 +44,9 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
         </div>
       </section>
 
-      {/* Section 3: Jet is wide but not tall — text can be higher */}
-      <section className="h-screen w-full flex flex-col pt-[50vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
-        <div className="max-w-[500px] md:mt-[20vh]">
+      {/* Section 3: Jet — text sits below the jet silhouette */}
+      <section className="h-screen w-full flex flex-col pt-[55vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
+        <div className="w-full md:max-w-[500px] md:mt-[20vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>Priorities mirror the friction visible in your data.</p>
@@ -55,9 +55,9 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
         </div>
       </section>
 
-      {/* Section 4: Microchip is flat/wide — text can be higher */}
-      <section className="h-screen w-full flex flex-col pt-[15vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="max-w-[500px] md:mt-[15vh]">
+      {/* Section 4: Microchip — text near top, chip rendered below */}
+      <section className="h-screen w-full flex flex-col pt-[12vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
+        <div className="w-full md:max-w-[500px] md:mt-[15vh]">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">What Zybit means.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>

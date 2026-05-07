@@ -32,7 +32,7 @@ function CodeBlock({ children }: { children: string }) {
 
   return (
     <div className="relative group mb-4">
-      <pre className="overflow-x-auto rounded-2xl border border-black/[0.08] bg-[#111/[0.035]] px-5 py-4 text-left font-mono text-[12px] leading-[1.8] text-[#111] md:text-[13px]">
+      <pre className="max-w-full overflow-x-auto rounded-2xl border border-black/[0.08] bg-[#111/[0.035]] px-5 py-4 text-left font-mono text-[12px] leading-[1.8] text-[#111] md:text-[13px]">
         {children.trim()}
       </pre>
       <button
