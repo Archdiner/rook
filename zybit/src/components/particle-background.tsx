@@ -276,6 +276,7 @@ const vertexShader = `
   uniform float uProgress;
   uniform float uSpawnTime;
   uniform float uScale;
+  uniform float uCoreScale;
   uniform float uMobile;
   uniform vec3 uOffsets[5];
 
@@ -296,7 +297,7 @@ vec3 cheapTurbulence(vec3 p) {
 
 void main() {
   // 1. Data Core: Rings orbit the center at different speeds
-  vec3 p1 = position1 * uScale;
+  vec3 p1 = position1 * uCoreScale;
   float dist1 = length(p1.xz);
   float angle1 = uTime * (0.4 / (dist1 + 0.5));
   float tmpX1 = p1.x * cos(angle1) - p1.z * sin(angle1);
@@ -407,7 +408,10 @@ function ParticleSwarm() {
   
   const isMobile = size.width < 768;
   const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
-  const shapeScale = isMobile ? 0.65 : 1.0;
+  const shapeScale = isMobile ? 0.32 : 1.0;
+  // Data Core gets its own larger scale on mobile so the hero orb has presence
+  // without making DNA/Jet/Microchip/Silk Wave overlap surrounding text.
+  const coreScale = isMobile ? 0.65 : 1.0;
   
   const mountTimeRef = useRef<number | null>(null);
 
@@ -454,10 +458,11 @@ function ParticleSwarm() {
     uTime: { value: 0 },
     uSpawnTime: { value: 0 },
     uScale: { value: shapeScale },
+    uCoreScale: { value: coreScale },
     uMobile: { value: isMobile ? 1.0 : 0.0 },
     uOffsets: { value: offsets }
-   
-  }), [offsets, shapeScale, isMobile]);
+
+  }), [offsets, shapeScale, coreScale, isMobile]);
 
   useFrame((state) => {
     if (!shaderRef.current || !pointsRef.current) return;
