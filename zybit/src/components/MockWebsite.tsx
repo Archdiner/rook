@@ -4,25 +4,29 @@ import React, { useState, useEffect } from "react";
 import { motion, MotionValue, useTransform } from "framer-motion";
 
 export function MockWebsite({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+  // Anchor keyframes at scroll=0 and scroll=1 are required: framer-motion v12 drives
+  // these via WAAPI ScrollTimeline, and outside the defined keyframe range the value
+  // interpolates back toward the first keyframe instead of clamping at the last one.
+
   // Phase 1: Scanner (0.0 to 0.25)
-  const scannerY = useTransform(scrollYProgress, [0, 0.25], ["0%", "100%"]);
-  const scannerOpacity = useTransform(scrollYProgress, [0, 0.05, 0.2, 0.25], [0, 1, 1, 0]);
+  const scannerY = useTransform(scrollYProgress, [0, 0.25, 1], ["0%", "100%", "100%"]);
+  const scannerOpacity = useTransform(scrollYProgress, [0, 0.05, 0.2, 0.25, 1], [0, 1, 1, 0, 0]);
 
   // Phase 2: Friction (0.25 to 0.5)
-  const cursorsOpacity = useTransform(scrollYProgress, [0.25, 0.3, 0.45, 0.5], [0, 1, 1, 0]);
-  const rageClickScale = useTransform(scrollYProgress, [0.35, 0.4, 0.45], [1, 1.5, 1]);
-  const rageClickOpacity = useTransform(scrollYProgress, [0.35, 0.4, 0.45], [0, 1, 0]);
+  const cursorsOpacity = useTransform(scrollYProgress, [0, 0.25, 0.3, 0.45, 0.5, 1], [0, 0, 1, 1, 0, 0]);
+  const rageClickScale = useTransform(scrollYProgress, [0, 0.35, 0.4, 0.45, 1], [1, 1, 1.5, 1, 1]);
+  const rageClickOpacity = useTransform(scrollYProgress, [0, 0.35, 0.4, 0.45, 1], [0, 0, 1, 0, 0]);
 
   // Phase 3: Split (0.5 to 0.75)
-  const splitGap = useTransform(scrollYProgress, [0.5, 0.55], ["0%", "4%"]);
-  const leftWidth = useTransform(scrollYProgress, [0.5, 0.55], ["100%", "48%"]);
-  const rightWidth = useTransform(scrollYProgress, [0.5, 0.55], ["0%", "48%"]);
-  const rightOpacity = useTransform(scrollYProgress, [0.5, 0.55], [0, 1]);
-  const variantOpacity = useTransform(scrollYProgress, [0.55, 0.6], [0, 1]);
+  const splitGap = useTransform(scrollYProgress, [0, 0.5, 0.55, 1], ["0%", "0%", "4%", "4%"]);
+  const leftWidth = useTransform(scrollYProgress, [0, 0.5, 0.55, 1], ["100%", "100%", "48%", "48%"]);
+  const rightWidth = useTransform(scrollYProgress, [0, 0.5, 0.55, 1], ["0%", "0%", "48%", "48%"]);
+  const rightOpacity = useTransform(scrollYProgress, [0, 0.5, 0.55, 1], [0, 0, 1, 1]);
+  const variantOpacity = useTransform(scrollYProgress, [0, 0.55, 0.6, 1], [0, 0, 1, 1]);
 
   // Phase 4: Chart (0.75 to 1.0)
-  const chartOpacity = useTransform(scrollYProgress, [0.75, 0.8], [0, 1]);
-  const chartY = useTransform(scrollYProgress, [0.75, 0.8], ["20px", "0px"]);
+  const chartOpacity = useTransform(scrollYProgress, [0, 0.75, 0.8, 1], [0, 0, 1, 1]);
+  const chartY = useTransform(scrollYProgress, [0, 0.75, 0.8, 1], ["20px", "20px", "0px", "0px"]);
 
   // We need a little hack for cursors moving continuously during phase 2
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });

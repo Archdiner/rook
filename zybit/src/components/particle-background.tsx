@@ -296,9 +296,11 @@ vec3 cheapTurbulence(vec3 p) {
 }
 
 void main() {
-  // 1. Data Core: Rings orbit the center at different speeds
+  // 1. Data Core: Rings orbit the center at different speeds.
+  // Use the *unscaled* position to compute orbit distance so rotation speed
+  // stays consistent across devices regardless of uCoreScale.
   vec3 p1 = position1 * uCoreScale;
-  float dist1 = length(p1.xz);
+  float dist1 = length(position1.xz);
   float angle1 = uTime * (0.4 / (dist1 + 0.5));
   float tmpX1 = p1.x * cos(angle1) - p1.z * sin(angle1);
   float tmpZ1 = p1.x * sin(angle1) + p1.z * cos(angle1);
@@ -320,14 +322,18 @@ void main() {
       p3.y += (hash(p3 + uTime + 1.0) - 0.5) * thrusterIntensity;
   }
   
-  // 4. Microchip: Energy pulses
+  // 4. Microchip: Energy pulses.
+  // Frequency uses unscaled position so the pulse pattern looks the same
+  // at any uScale; amplitude (0.1 * uScale) tracks the shape's size.
   vec3 p4 = position4 * uScale;
-  p4.y += max(0.0, sin(p4.x * 4.0 + p4.z * 4.0 - uTime * 3.0)) * 0.1 * uScale; 
-  
-  // 5. Silk Wave: Ocean-like undulation
+  p4.y += max(0.0, sin(position4.x * 4.0 + position4.z * 4.0 - uTime * 3.0)) * 0.1 * uScale;
+
+  // 5. Silk Wave: Ocean-like undulation.
+  // Frequency uses unscaled position; amplitude is scaled by uScale so the
+  // wave doesn't blow out of proportion when the shape is shrunk on mobile.
   vec3 p5 = position5 * uScale;
   float waveIntensity = 1.0 - uMobile * 0.4;
-  p5.y += (sin(p5.x * 0.3 + uTime * 0.6) * 1.2 + cos(p5.z * 0.4 + uTime * 0.4) * 0.8) * waveIntensity;
+  p5.y += (sin(position5.x * 0.3 + uTime * 0.6) * 1.2 + cos(position5.z * 0.4 + uTime * 0.4) * 0.8) * waveIntensity * uScale;
 
   // Apply world offsets
   vec3 w1 = p1 + uOffsets[0];
@@ -399,7 +405,7 @@ void main() {
 // --- The GPU Particle Swarm ---
 
 const PARTICLE_COUNT_DESKTOP = 50000;
-const PARTICLE_COUNT_MOBILE = 30000;
+const PARTICLE_COUNT_MOBILE = 20000;
 
 function ParticleSwarm() {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
@@ -516,9 +522,13 @@ function ParticleSwarm() {
 
 /** Same GPU black-particle field as the homepage — fixed behind content. */
 export function ParticleCanvas() {
+  // Cap DPR at 1 on phones to cut fragment-shader fillrate on retina screens
+  // — animation stays smooth at 60fps without visible quality loss for points.
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const dpr: [number, number] = isMobile ? [1, 1] : [1, 1.5];
   return (
     <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
-      <Canvas camera={{ position: [0, 0, 10], fov: 45 }} dpr={[1, 1.5]}>
+      <Canvas camera={{ position: [0, 0, 10], fov: 45 }} dpr={dpr}>
         <ambientLight intensity={1} />
         <ParticleSwarm />
       </Canvas>
@@ -1108,7 +1118,7 @@ void main() {
 `;
 
 const DASHBOARD_PARTICLE_DESKTOP = 45000;
-const DASHBOARD_PARTICLE_MOBILE = 25000;
+const DASHBOARD_PARTICLE_MOBILE = 18000;
 
 function DashboardParticleSwarm({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
@@ -1172,9 +1182,11 @@ function DashboardParticleSwarm({ scrollYProgress }: { scrollYProgress: MotionVa
 }
 
 export function DashboardParticleCanvas({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const dpr: [number, number] = isMobile ? [1, 1] : [1, 1.5];
   return (
     <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
-      <Canvas camera={{ position: [0, 0, 15], fov: 45 }} dpr={[1, 1.5]}>
+      <Canvas camera={{ position: [0, 0, 15], fov: 45 }} dpr={dpr}>
         <ambientLight intensity={1} />
         <DashboardParticleSwarm scrollYProgress={scrollYProgress} />
       </Canvas>
