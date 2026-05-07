@@ -407,7 +407,7 @@ function ParticleSwarm() {
   
   const isMobile = size.width < 768;
   const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
-  const shapeScale = isMobile ? 0.32 : 1.0;
+  const shapeScale = isMobile ? 0.65 : 1.0;
   
   const mountTimeRef = useRef<number | null>(null);
 

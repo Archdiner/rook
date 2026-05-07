@@ -39,7 +39,7 @@ export function MockWebsite({ scrollYProgress }: { scrollYProgress: MotionValue<
   }, []);
 
   return (
-    <div className="relative w-full max-w-4xl aspect-[16/10] mx-auto flex items-center justify-center pointer-events-none scale-[0.7] sm:scale-100">
+    <div className="relative w-full max-w-4xl aspect-[16/10] mx-auto flex items-center justify-center pointer-events-none">
       
       {/* Container that splits into two */}
       <motion.div className="w-full h-full flex justify-between absolute" style={{ gap: splitGap }}>
@@ -148,14 +148,14 @@ export function MockWebsite({ scrollYProgress }: { scrollYProgress: MotionValue<
       </motion.div>
 
       {/* Phase 4: Significance Chart Overlay */}
-      <motion.div 
-        className="absolute z-30 bg-white border-2 border-[#111] shadow-[16px_16px_0px_rgba(17,17,17,1)] p-8 flex flex-col items-center justify-center w-[80%] max-w-[500px]"
+      <motion.div
+        className="absolute z-30 bg-white border-2 border-[#111] shadow-[8px_8px_0px_rgba(17,17,17,1)] lg:shadow-[16px_16px_0px_rgba(17,17,17,1)] p-4 lg:p-8 flex flex-col items-center justify-center w-[80%] max-w-[280px] lg:max-w-[500px]"
         style={{ opacity: chartOpacity, y: chartY }}
       >
         <div className="text-[10px] uppercase tracking-widest text-[#6B6B6B] mb-2 font-mono">Statistical Engine</div>
-        <div className="text-5xl font-bold tracking-tighter text-[#111] mb-6">+14.2% Lift</div>
-        
-        <div className="w-full h-32 border-b border-l border-[#111] relative flex items-end gap-4 p-4">
+        <div className="text-3xl lg:text-5xl font-bold tracking-tighter text-[#111] mb-3 lg:mb-6">+14.2% Lift</div>
+
+        <div className="w-full h-16 lg:h-32 border-b border-l border-[#111] relative flex items-end gap-4 p-2 lg:p-4">
           <div className="w-1/2 bg-[#111]/20 h-1/2" />
           <div className="w-1/2 bg-[#111] h-full relative">
             <motion.div 
