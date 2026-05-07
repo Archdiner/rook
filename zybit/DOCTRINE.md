@@ -8,7 +8,7 @@
 
 Zybit is a conversion intelligence platform for product managers.
 
-You connect your website or product. Zybit audits it — learning your brand DNA, visual hierarchy, and messaging — then watches how your real users move through it. It identifies exactly where conversions are being lost, proposes specific evidence-backed changes, and deploys live A/B tests against your production site. You see what worked. The cycle repeats. Your product gets measurably better.
+You connect your product. Zybit audits it — learning your brand DNA, visual hierarchy, and messaging — then watches how your real users move through it. It identifies exactly where conversions are being lost, proposes specific evidence-backed changes, and deploys live A/B tests against your production product. You see what worked. The cycle repeats. Your product gets measurably better.
 
 ---
 
@@ -18,7 +18,7 @@ You connect your website or product. Zybit audits it — learning your brand DNA
 
 **Primary user:** The PM who owns growth. Someone who knows their product needs work but can't justify which change to prioritize — and doesn't want to spend weeks inside analytics dashboards to find out.
 
-**Not for:** Developers (they integrate Zybit; PMs use it). Teams that want more charts. People building sites from scratch.
+**Not for:** Developers (they integrate Zybit; PMs use it). Teams that want more charts. People building products from scratch.
 
 The PM-first framing is non-negotiable. Every UI decision, every output format, every finding must be evaluated by: *would a product manager understand this and know what to do next?*
 
@@ -29,7 +29,7 @@ The PM-first framing is non-negotiable. Every UI decision, every output format, 
 Zybit runs a repeating six-step cycle. The loop is the product — every feature we build either advances the loop or it doesn't belong.
 
 ### 1. Understand
-Full-site audit via headless browser. Zybit reads your brand DNA: visual hierarchy, heading structure, CTA inventory, form complexity, messaging. It doesn't impose a template — it learns what makes your site yours, so it can identify deviations from your own intent, not from some generic rulebook.
+Full-product audit via headless browser. Zybit reads your brand DNA: visual hierarchy, heading structure, CTA inventory, form complexity, messaging. It doesn't impose a template — it learns what makes your product yours, so it can identify deviations from your own intent, not from some generic rulebook.
 
 ### 2. Watch
 Behavioral data collection from your analytics stack (PostHog, Segment, or direct). Zybit tracks how real users move: where they hesitate, where they abandon, which cohorts convert differently, what gets rage-clicked.
@@ -52,7 +52,7 @@ Test outcomes — what moved the metric, what didn't — feed back into the mode
 
 **Evidence-first.** Every finding is traceable to specific behavioral data. If we can't cite the evidence, we don't make the suggestion.
 
-**Brand-aware.** Zybit understands your site before it criticizes it. Per-site normalization means we compare you to yourself, not to a generic template. A finding that would harm what makes your product distinctive is a bad finding.
+**Brand-aware.** Zybit understands your product before it criticizes it. Per-product normalization means we compare you to yourself, not to a generic template. A finding that would harm what makes your product distinctive is a bad finding.
 
 **Closed-loop measurement.** Not just "here's what to change" but "here's what we tested and what we learned." The value compounds as results feed into better future suggestions.
 
@@ -64,15 +64,44 @@ Test outcomes — what moved the metric, what didn't — feed back into the mode
 
 **Close the loop entirely.** Today Zybit tells you what to change and runs the test. The next step is learning from every test result automatically, across every customer — so each round of suggestions is measurably better than the last.
 
-**Simulate before shipping.** Once we have enough data on how humans interact with websites at scale, we can simulate A/B test outcomes before running them live. Ship the winning variant on day one, with model-backed confidence.
+**Own the behavioral data pipeline.** PostHog and Segment are starting points, not endpoints. The long-term moat is first-party behavioral data collected directly by Zybit — clickstream events, session signals, interaction patterns — owned entirely by us. Every customer we onboard grows the dataset that makes the model smarter. This is why getting product teams on Zybit early matters beyond revenue: we are buying training data with every pilot.
 
-The endgame: your product improves continuously, without you thinking about it. Product managers and CPOs would pay significant money for a product that genuinely does this. Nobody has fully built it yet.
+**Simulate before shipping.** Once we have enough data on how humans interact with products at scale, we can simulate A/B test outcomes before running them live. Ship the winning variant on day one, with model-backed confidence. This requires deep behavioral modeling — synthetic user models trained on real interaction data — and represents the most technically ambitious part of the vision. It is also where the moat becomes essentially unassailable, because it requires years of proprietary behavioral data to build.
+
+**The endgame: your product improves continuously, without you thinking about it.** Product managers and CPOs would pay significant money for a product that genuinely does this. Nobody has fully built it yet. We are building toward it one loop at a time.
+
+---
+
+## Roadmap
+
+### Phase 1 — Foundation (now)
+Ship the core loop. Audit, hypothesize, deploy, measure. Get the PM-facing dashboard live. Onboard 3-5 product teams, get real conversion lift numbers, and document the results. The goal is not revenue — it is proof. One result like "increased activation rate 18% in three weeks" unlocks the enterprise conversation.
+
+### Phase 2 — Own the data (year one)
+Get off PostHog dependency. Build Zybit's own first-party event collection layer so we control the full behavioral data pipeline. This is both a strategic moat and a technical prerequisite for phase three. Every session recording, every interaction pattern, every test result collected here becomes the substrate for simulation later. Treat data infrastructure as seriously as the product surface.
+
+### Phase 3 — Simulate (year two)
+Build synthetic user models trained on real behavioral data. Given enough signal on how humans move through products, we can predict A/B test outcomes before running them live. This is research-grade work requiring reinforcement learning, behavioral embeddings, and potentially multimodal models that understand UI visually. The right technical advisor from an HCI or ML background becomes important here. This is also the layer that makes the product genuinely defensible — it cannot be replicated without years of proprietary data.
+
+---
+
+## Data strategy
+
+Zybit's long-term moat is behavioral data, not the model or the product surface. Models commoditize. Data does not.
+
+**What we collect:** Clickstream events, session signals, A/B test outcomes, conversion deltas. Every interaction a real user has with a real product, mapped to what changed and what the result was.
+
+**What we own:** Starting with PostHog and Segment as connectors. Moving to first-party collection as soon as the core loop is stable. The goal is to never be dependent on a third party for the data that trains our models.
+
+**Why it matters:** Every customer we onboard is feeding the simulation layer we will build in phase three. The PM who signs a pilot today is contributing behavioral signal that makes every future customer's results better. This is the flywheel. Getting product teams on Zybit early is not just a revenue decision — it is a data strategy decision.
+
+**The risk to manage:** PostHog could change their API, price us out, or build what we are building. Segment could do the same. First-party data collection is not optional in the long run — it is the foundation everything else sits on.
 
 ---
 
 ## What Zybit is not
 
-- A site builder or CMS
+- A site or product builder
 - A replacement for your analytics stack (PostHog, Segment, GA4)
 - A "UX best practices" checklist
 - An AI that writes copy or redesigns your pages
@@ -84,7 +113,7 @@ The endgame: your product improves continuously, without you thinking about it. 
 
 The analysis engine is complete. Zybit can:
 
-- Audit any website's visual hierarchy via static page snapshots
+- Audit any product's visual hierarchy via static page snapshots
 - Ingest behavioral data from PostHog and Segment
 - Run 12 deterministic audit rules (5 design + 7 pain) across combined behavioral and design signals
 - Surface specific findings with A/B prescriptions and revenue impact estimates
@@ -109,7 +138,7 @@ The engine is ready. The immediate priority is the product surface that makes it
 
 **The loop, not the feature.** We don't build analytics features or dashboard charts for their own sake. We build what advances the cycle: understand → propose → test → learn.
 
-**Third-party where it's better.** We own the conversion intelligence layer. We don't own auth (Clerk), email (Resend), analytics ingestion (PostHog/Segment), or hosting (Vercel). Integrate the rest; build only what's differentiated.
+**Third-party where it's better.** We own the conversion intelligence layer. We don't own auth (Clerk), email (Resend), analytics ingestion (PostHog/Segment), or hosting (Vercel/edge infrastructure). Integrate the rest; build only what's differentiated.
 
 **PM-first at every layer.** The PM is the user. Engineering integrates Zybit; PMs run it. Every output — finding title, evidence summary, export format — is written for someone who owns a product, not someone who reads curl responses.
 
