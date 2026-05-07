@@ -39,7 +39,7 @@ export function MockWebsite({ scrollYProgress }: { scrollYProgress: MotionValue<
   }, []);
 
   return (
-    <div className="relative w-full max-w-4xl aspect-[16/10] mx-auto flex items-center justify-center pointer-events-none">
+    <div className="relative w-full max-w-4xl aspect-[16/10] mx-auto flex items-center justify-center pointer-events-none scale-[0.7] sm:scale-100">
       
       {/* Container that splits into two */}
       <motion.div className="w-full h-full flex justify-between absolute" style={{ gap: splitGap }}>

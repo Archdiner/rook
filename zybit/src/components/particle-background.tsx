@@ -192,26 +192,26 @@ function getMicrochipPoints(count: number) {
     let x, y, z;
     if (r < 0.3) {
       // Central Die (Raised)
-      const s = 2.0;
+      const s = 1.6;
       const face = Math.random();
-      if (face < 0.2) { x = (Math.random()-0.5)*s; y = 0.4; z = (Math.random()-0.5)*s; } 
-      else if (face < 0.4) { x = (Math.random()-0.5)*s; y = Math.random()*0.4; z = s/2; } 
-      else if (face < 0.6) { x = (Math.random()-0.5)*s; y = Math.random()*0.4; z = -s/2; } 
-      else if (face < 0.8) { x = s/2; y = Math.random()*0.4; z = (Math.random()-0.5)*s; } 
-      else { x = -s/2; y = Math.random()*0.4; z = (Math.random()-0.5)*s; } 
+      if (face < 0.2) { x = (Math.random()-0.5)*s; y = 0.4; z = (Math.random()-0.5)*s; }
+      else if (face < 0.4) { x = (Math.random()-0.5)*s; y = Math.random()*0.4; z = s/2; }
+      else if (face < 0.6) { x = (Math.random()-0.5)*s; y = Math.random()*0.4; z = -s/2; }
+      else if (face < 0.8) { x = s/2; y = Math.random()*0.4; z = (Math.random()-0.5)*s; }
+      else { x = -s/2; y = Math.random()*0.4; z = (Math.random()-0.5)*s; }
     } else if (r < 0.5) {
       // Flat Substrate base
-      const s = 6.0;
+      const s = 5.0;
       x = (Math.random() - 0.5) * s;
       y = 0;
       z = (Math.random() - 0.5) * s;
     } else {
       // Circuit Pins
-      const s = 6.0;
+      const s = 5.0;
       const side = Math.floor(Math.random() * 4);
-      const pos = (Math.random() - 0.5) * s; 
-      const pinLength = Math.random() * 0.8 + 0.2; 
-      const pinDrop = Math.random() * 0.6; 
+      const pos = (Math.random() - 0.5) * s;
+      const pinLength = Math.random() * 0.8 + 0.2;
+      const pinDrop = Math.random() * 0.6;
       
       const part = Math.random();
       if (side === 0) { 
@@ -407,7 +407,7 @@ function ParticleSwarm() {
   
   const isMobile = size.width < 768;
   const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
-  const shapeScale = isMobile ? 0.75 : 1.0;
+  const shapeScale = isMobile ? 0.32 : 1.0;
   
   const mountTimeRef = useRef<number | null>(null);
 
@@ -433,10 +433,10 @@ function ParticleSwarm() {
       // Microchip: wide, flat (~3u height). Moderate offset
       // Silk Wave: huge, flat. Centered for CTA
       return [
-        new THREE.Vector3(0, vh * 0.08, -1),                    // Hero: Data Core just above center
-        new THREE.Vector3(0, -vh + vh * 0.35, -1),              // Section 2: DNA pushed HIGH
-        new THREE.Vector3(0, -vh * 2 + vh * 0.12, -1),          // Section 3: Jet moderate
-        new THREE.Vector3(0, -vh * 3 + vh * 0.12, -1),          // Section 4: Microchip moderate
+        new THREE.Vector3(0, vh * 0.2, -1),                     // Hero: Data Core in upper quadrant
+        new THREE.Vector3(0, -vh + vh * 0.2, -1),               // Section 2: DNA — slightly above center
+        new THREE.Vector3(0, -vh * 2 + vh * 0.2, -1),           // Section 3: Jet — slightly above center
+        new THREE.Vector3(0, -vh * 3 + vh * 0.1, -1),           // Section 4: Microchip — upper-center
         new THREE.Vector3(0, -vh * 4 - 0.5, -1),                // Section 5: Silk wave CTA
       ];
     }
@@ -444,7 +444,7 @@ function ParticleSwarm() {
       new THREE.Vector3(3.0, 0, 0),             // Hero: Right
       new THREE.Vector3(2.5, -vh - 1.0, 0),     // Section 2: Right
       new THREE.Vector3(-2.5, -vh * 2, 0),      // Section 3: Left
-      new THREE.Vector3(2.5, -vh * 3, 0),       // Section 4: Right
+      new THREE.Vector3(4.5, -vh * 3, 0),       // Section 4: Right — pushed clear of text column
       new THREE.Vector3(0, -vh * 4 - 0.5, 0),   // Section 5: Center
     ];
   }, [viewport.height, isMobile]);
