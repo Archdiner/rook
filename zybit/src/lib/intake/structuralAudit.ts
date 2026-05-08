@@ -66,15 +66,16 @@ function check(data: PageSnapshotData, domain: string): IntakeFinding | null {
 }
 
 export async function runStructuralAudit(url: string): Promise<StructuralAuditResult> {
+  const normalizedUrl = /^https?:\/\//i.test(url) ? url : `https://${url}`;
   let domain: string;
   try {
-    domain = new URL(url).hostname.replace(/^www\./, '');
+    domain = new URL(normalizedUrl).hostname.replace(/^www\./, '');
   } catch {
     return { status: 'error', reason: `Invalid URL: ${url}` };
   }
 
   try {
-    const { data, byteSize } = await runSnapshot(url, { timeoutMs: 12_000 });
+    const { data, byteSize } = await runSnapshot(normalizedUrl, { timeoutMs: 12_000 });
 
     if (isSpa(data, byteSize)) {
       return { status: 'spa' };

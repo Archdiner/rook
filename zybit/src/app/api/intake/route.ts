@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { Resend } from 'resend';
 
 const ANALYTICS_LABELS: Record<string, string> = {
@@ -102,18 +102,21 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fire-and-forget: run structural audit + prospect email. User already got 200.
+    // Schedule structural audit + prospect email after the response is sent.
+    // `after()` keeps the execution context alive on Vercel — safe in serverless.
     const auditSecret = process.env.INTAKE_AUDIT_SECRET;
     if (auditSecret) {
       const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-      fetch(`${baseUrl}/api/intake/audit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-intake-audit-secret': auditSecret,
-        },
-        body: JSON.stringify({ email, url }),
-      }).catch((err) => console.error('Intake audit fire-and-forget failed:', err));
+      after(
+        fetch(`${baseUrl}/api/intake/audit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-intake-audit-secret': auditSecret,
+          },
+          body: JSON.stringify({ email, url }),
+        }).catch((err) => console.error('Intake audit after() failed:', err)),
+      );
     }
 
     return NextResponse.json({ success: true, id: data?.id });

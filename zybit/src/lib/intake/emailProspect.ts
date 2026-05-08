@@ -6,10 +6,13 @@ const FOUNDERS_EMAIL_1 = 'asad@getzybit.com';
 const FOUNDERS_EMAIL_2 = 'jad@getzybit.com';
 const FROM = 'Asad at Zybit <onboarding@resend.dev>';
 
+let _resend: Resend | null = null;
 function getResend(): Resend {
+  if (_resend) return _resend;
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error('RESEND_API_KEY is not set');
-  return new Resend(key);
+  _resend = new Resend(key);
+  return _resend;
 }
 
 function buildProspectText(finding: IntakeFinding, prospectEmail: string): string {
@@ -65,7 +68,7 @@ export async function emailProspect(
 
     if (error) {
       console.error('Resend error (emailProspect):', error);
-      return { success: false, error: String(error) };
+      return { success: false, error: error.message || 'Unknown Resend error' };
     }
 
     return { success: true };

@@ -218,9 +218,19 @@ describe('runStructuralAudit — error handling', () => {
     }
   });
 
-  it('returns error on invalid URL', async () => {
-    const result = await runStructuralAudit('not-a-url');
+  it('returns error on unparseable URL (empty string)', async () => {
+    const result = await runStructuralAudit('');
     expect(result.status).toBe('error');
+  });
+
+  it('accepts protocol-less input by prepending https://', async () => {
+    mockRunSnapshot.mockResolvedValueOnce(makeSnapshotResult());
+    const result = await runStructuralAudit('example.com');
+    expect(result.status).toBe('no_finding');
+    expect(mockRunSnapshot).toHaveBeenCalledWith(
+      'https://example.com',
+      expect.objectContaining({ timeoutMs: 12_000 }),
+    );
   });
 
   it('returns error on unexpected exception', async () => {
