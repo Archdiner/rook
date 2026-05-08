@@ -1,6 +1,13 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 
+const ANALYTICS_LABELS: Record<string, string> = {
+  posthog: 'PostHog',
+  segment: 'Segment',
+  ga4: 'GA4',
+  other: 'Other / none',
+};
+
 function getResendClient() {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
@@ -9,26 +16,44 @@ function getResendClient() {
   return new Resend(key);
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, email, url } = body;
+    const { email, url, analytics } = body ?? {};
 
-    // Validate required fields
-    if (!name || !email || !url) {
+    if (!email || !url || !analytics) {
       return NextResponse.json(
-        { error: 'Name, email, and website URL are required.' },
+        { error: 'Email, domain, and analytics tool are required.' },
         { status: 400 }
       );
     }
 
-    // Basic email format check
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json(
         { error: 'Please provide a valid email address.' },
         { status: 400 }
       );
     }
+
+    if (!ANALYTICS_LABELS[analytics]) {
+      return NextResponse.json(
+        { error: 'Please choose a valid analytics tool.' },
+        { status: 400 }
+      );
+    }
+
+    const safeEmail = escapeHtml(email);
+    const safeUrl = escapeHtml(url);
+    const analyticsLabel = ANALYTICS_LABELS[analytics];
 
     const timestamp = new Date().toLocaleString('en-US', {
       timeZone: 'America/New_York',
@@ -49,16 +74,16 @@ export async function POST(request: Request) {
 
           <table style="width: 100%; border-collapse: collapse; font-size: 16px;">
             <tr style="border-bottom: 1px solid #D9CFB0;">
-              <td style="padding: 12px 0; color: #5A4F3A; width: 120px; vertical-align: top;">Name</td>
-              <td style="padding: 12px 0; font-weight: 400;">${name}</td>
+              <td style="padding: 12px 0; color: #5A4F3A; width: 140px; vertical-align: top;">Email</td>
+              <td style="padding: 12px 0;"><a href="mailto:${safeEmail}" style="color: #7A4A1A;">${safeEmail}</a></td>
             </tr>
             <tr style="border-bottom: 1px solid #D9CFB0;">
-              <td style="padding: 12px 0; color: #5A4F3A; vertical-align: top;">Email</td>
-              <td style="padding: 12px 0;"><a href="mailto:${email}" style="color: #7A4A1A;">${email}</a></td>
+              <td style="padding: 12px 0; color: #5A4F3A; vertical-align: top;">Domain</td>
+              <td style="padding: 12px 0;"><a href="${safeUrl}" style="color: #7A4A1A;">${safeUrl}</a></td>
             </tr>
             <tr>
-              <td style="padding: 12px 0; color: #5A4F3A; vertical-align: top;">Website</td>
-              <td style="padding: 12px 0;"><a href="${url}" style="color: #7A4A1A;">${url}</a></td>
+              <td style="padding: 12px 0; color: #5A4F3A; vertical-align: top;">Analytics</td>
+              <td style="padding: 12px 0;">${escapeHtml(analyticsLabel)}</td>
             </tr>
           </table>
 

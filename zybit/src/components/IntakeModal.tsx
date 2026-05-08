@@ -2,8 +2,21 @@
 
 import React, { useState } from "react";
 
+const FOUNDERS_CALENDLY = "https://calendly.com/asad-getzybit/30min";
+const FOUNDERS_EMAIL = "sar367@cornell.edu";
+
+type AnalyticsTool = '' | 'posthog' | 'segment' | 'ga4' | 'other';
+
+interface IntakeFormData {
+  email: string;
+  url: string;
+  analytics: AnalyticsTool;
+}
+
+const EMPTY_FORM: IntakeFormData = { email: '', url: '', analytics: '' };
+
 export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const [formData, setFormData] = useState({ name: '', email: '', url: '' });
+  const [formData, setFormData] = useState<IntakeFormData>(EMPTY_FORM);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -39,7 +52,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     // Reset after animation
     setTimeout(() => {
       setStatus('idle');
-      setFormData({ name: '', email: '', url: '' });
+      setFormData(EMPTY_FORM);
       setErrorMsg('');
     }, 300);
   };
@@ -128,18 +141,45 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             <div className="sans-text font-bold uppercase tracking-[0.2em]" style={{ fontSize: '48px', marginBottom: '16px' }}>OK</div>
             <h3
               style={{
-                fontSize: '28px',
+                fontSize: '24px',
                 fontWeight: 700,
-                letterSpacing: '-0.03em',
-                margin: '0 0 12px',
+                letterSpacing: '-0.02em',
+                margin: '0 0 16px',
                 color: '#111',
+                lineHeight: 1.25,
               }}
             >
-              Request received.
+              We review every domain personally.
             </h3>
-            <p style={{ fontSize: '16px', color: '#6B6B6B', margin: '0 0 32px', lineHeight: 1.5 }}>
-              We&apos;ll review your domain and be in touch to arrange provisioned access.
+            <p style={{ fontSize: '15px', color: '#6B6B6B', margin: '0 0 28px', lineHeight: 1.55 }}>
+              We&rsquo;ll be in touch within 3 business days with a real finding from your product.
             </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', marginBottom: '28px' }}>
+              <a
+                href={FOUNDERS_CALENDLY}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  fontSize: '14px',
+                  color: '#111',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '4px',
+                }}
+              >
+                Book 15 minutes with the founders
+              </a>
+              <a
+                href={`mailto:${FOUNDERS_EMAIL}`}
+                style={{
+                  fontSize: '13px',
+                  color: '#6B6B6B',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '4px',
+                }}
+              >
+                or email us directly
+              </a>
+            </div>
             <button
               onClick={handleClose}
               className="btn-brutalist"
@@ -168,32 +208,6 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
             </p>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label
-                  htmlFor="intake-name"
-                  style={{
-                    display: 'block',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    color: '#6B6B6B',
-                    marginBottom: '6px',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  Your name
-                </label>
-                <input
-                  id="intake-name"
-                  type="text"
-                  required
-                  placeholder="Jane Doe"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input-field"
-                  style={{ boxSizing: 'border-box', borderRadius: 0, border: '1px solid #111' }}
-                />
-              </div>
-
               <div>
                 <label
                   htmlFor="intake-email"
@@ -244,6 +258,48 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
                   className="input-field"
                   style={{ boxSizing: 'border-box', borderRadius: 0, border: '1px solid #111' }}
                 />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="intake-analytics"
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    color: '#6B6B6B',
+                    marginBottom: '6px',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  What analytics tool are you using?
+                </label>
+                <select
+                  id="intake-analytics"
+                  required
+                  value={formData.analytics}
+                  onChange={(e) => setFormData({ ...formData, analytics: e.target.value as AnalyticsTool })}
+                  className="input-field"
+                  style={{
+                    boxSizing: 'border-box',
+                    borderRadius: 0,
+                    border: '1px solid #111',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    backgroundImage:
+                      "url(\"data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%23111' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E\")",
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 18px center',
+                    backgroundSize: '10px 6px',
+                    paddingRight: '40px',
+                  }}
+                >
+                  <option value="" disabled>Select one</option>
+                  <option value="posthog">PostHog</option>
+                  <option value="segment">Segment</option>
+                  <option value="ga4">GA4</option>
+                  <option value="other">Other / none</option>
+                </select>
               </div>
 
               {status === 'error' && (
