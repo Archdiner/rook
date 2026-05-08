@@ -488,25 +488,25 @@ function ParticleSwarm() {
     }
     const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
     
-    // Non-linear uProgress for 6-section layout (5 shapes, finding card gets no shape).
-    // Transitions are centered on section boundaries so each shape is fully formed
-    // at its section center. During the finding card section (p 0.70–0.80) the formula
-    // holds at uP=3 (Chip), which the Y-offset places ~1 viewport above the screen.
-    const p = progress;
+    // Drive uProgress and Y-sync using scrollInVH (viewport-height units) rather than
+    // normalized progress, so the formula is independent of page height / footer size.
+    // Each section is exactly 1 VH tall; transitions straddle section boundaries.
+    const scrollInVH = scrollY / window.innerHeight;
     let uP: number;
-    if      (p < 0.10) uP = 0;
-    else if (p < 0.30) uP = (p - 0.10) / 0.20;
-    else if (p < 0.50) uP = 1 + (p - 0.30) / 0.20;
-    else if (p < 0.70) uP = 2 + (p - 0.50) / 0.20;
-    else if (p < 0.80) uP = 3;
-    else               uP = 3 + (p - 0.80) / 0.20;
+    if      (scrollInVH < 0.5) uP = 0;
+    else if (scrollInVH < 1.5) uP = scrollInVH - 0.5;
+    else if (scrollInVH < 2.5) uP = 1 + (scrollInVH - 1.5);
+    else if (scrollInVH < 3.5) uP = 2 + (scrollInVH - 2.5);
+    else if (scrollInVH < 4.5) uP = 3;
+    else                        uP = 3 + (scrollInVH - 4.5) * 2;
+    uP = Math.min(4, uP);
 
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = uP;
     shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
 
-    // Sync WebGL swarm vertically with native DOM scroll (6 sections → 5 scrollable units)
-    pointsRef.current.position.y = progress * (viewport.height * 5.0);
+    // Pan swarm so each shape's Y-offset lands at screen center at its section's scrollInVH
+    pointsRef.current.position.y = scrollInVH * viewport.height;
   });
 
   return (
