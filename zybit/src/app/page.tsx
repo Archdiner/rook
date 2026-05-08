@@ -73,60 +73,95 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
         </div>
       </section>
 
-      {/* Section 5: Sample Finding (real receipt format) */}
+      {/* Section 5: Sample Finding — screenshot + receipt card */}
       <section className="min-h-screen w-full flex items-center justify-center px-6 py-24 pointer-events-none">
-        <div className="w-full max-w-[640px]">
-          <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-4 text-center">
+        <div className="w-full max-w-5xl">
+          <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-8 md:mb-10 text-center">
             Sample finding
           </div>
-          <div
-            className="sans-text bg-[#FAFAF8] border-2 border-[#111]"
-            style={{ boxShadow: '8px 8px 0px #111' }}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b-2 border-[#111] text-[10px] font-bold uppercase tracking-[0.18em] text-[#111] gap-4">
-              <span className="truncate">Finding F-0042 · rage-click-target</span>
-              <span className="whitespace-nowrap text-[#6B6B6B]">Severity high · 0.84</span>
+
+          {/* Two-column on desktop, stacked on mobile */}
+          <div className="flex flex-col lg:flex-row items-start gap-8 lg:gap-10">
+
+            {/* Left: product screenshot in browser frame */}
+            <div className="w-full lg:flex-1">
+              <div
+                className="border-2 border-[#111] overflow-hidden"
+                style={{ boxShadow: '8px 8px 0px #111' }}
+              >
+                <div className="bg-[#111] flex items-center gap-1.5 px-4 py-2.5">
+                  <div className="w-2 h-2 rounded-full bg-[#3a3a3a]" />
+                  <div className="w-2 h-2 rounded-full bg-[#4a4a4a]" />
+                  <div className="w-2 h-2 rounded-full bg-[#5a5a5a]" />
+                  <div className="ml-3 flex-1 bg-[#1c1c1c] rounded-sm text-[9px] font-mono text-[#555] px-3 py-1 truncate">
+                    app.getzybit.com · rage-click-target analysis
+                  </div>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/screenshot-analysis.png"
+                  alt="Zybit flagging a rage-click friction point in the product"
+                  className="w-full block"
+                  width={720}
+                  height={450}
+                />
+              </div>
+              <p className="sans-text text-[10px] text-[#6B6B6B] mt-2.5 leading-relaxed">
+                Zybit maps rage-click density to the exact element during analysis — before the receipt is issued.
+              </p>
             </div>
-            <div className="px-5 py-5 border-b border-[#111]/15">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
-                Title
+
+            {/* Right: receipt card */}
+            <div className="w-full lg:w-[360px] flex-shrink-0">
+              <div
+                className="sans-text bg-[#FAFAF8] border-2 border-[#111]"
+                style={{ boxShadow: '8px 8px 0px #111' }}
+              >
+                <div className="flex items-center justify-between px-5 py-3 border-b-2 border-[#111] text-[10px] font-bold uppercase tracking-[0.18em] text-[#111] gap-3">
+                  <span className="truncate">F-0042 · rage-click-target</span>
+                  <span className="whitespace-nowrap text-[#6B6B6B] flex-shrink-0">High · 0.84</span>
+                </div>
+                <div className="px-5 py-5 border-b border-[#111]/15">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
+                    Finding
+                  </div>
+                  <div className="text-base md:text-lg font-bold leading-snug tracking-tight text-[#111]">
+                    Rage-clicks on checkout promo-code field
+                  </div>
+                </div>
+                <div className="px-5 py-4 border-b border-[#111]/15">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
+                    Evidence · PostHog · 7d
+                  </div>
+                  <div className="text-sm text-[#111] leading-relaxed">
+                    847 rage-click events on{' '}
+                    <span className="font-mono text-[0.9em] bg-black/[0.06] px-1 rounded-sm">#promo-code</span>{' '}
+                    over 7 days. Checkout completion 2.1% with field vs 3.4% without.
+                  </div>
+                </div>
+                <div className="px-5 py-4 border-b border-[#111]/15">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
+                    Change
+                  </div>
+                  <div className="text-sm text-[#111] leading-relaxed">
+                    Collapse promo-code behind a &ldquo;Have a code?&rdquo; toggle below the primary CTA.
+                  </div>
+                </div>
+                <div className="px-5 py-3.5 flex items-center justify-between bg-[#111] text-[#FAFAF8]">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-60">
+                    Est. impact
+                  </div>
+                  <div className="text-sm font-bold tracking-tight">
+                    ~$3.2k / month
+                  </div>
+                </div>
               </div>
-              <div className="text-lg md:text-xl font-bold leading-snug tracking-tight text-[#111]">
-                Rage-clicks on checkout promo-code field
-              </div>
+              <p className="sans-text text-[10px] text-[#6B6B6B] mt-2.5 leading-relaxed">
+                Every finding ships with traceable evidence. No invented numbers.
+              </p>
             </div>
-            <div className="px-5 py-5 border-b border-[#111]/15">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
-                Evidence · PostHog · 7-day window
-              </div>
-              <div className="text-sm md:text-base text-[#111] leading-relaxed">
-                847 rage-click events on{' '}
-                <span className="font-mono text-[0.95em]">#promo-code</span> over 7 days.
-                Checkout completion 2.1% on sessions that interacted with the field
-                vs 3.4% on sessions that did not.
-              </div>
-            </div>
-            <div className="px-5 py-5 border-b border-[#111]/15">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
-                Recommended change
-              </div>
-              <div className="text-sm md:text-base text-[#111] leading-relaxed">
-                Move the promo-code field below the primary CTA and collapse it behind a
-                &ldquo;Have a code?&rdquo; toggle.
-              </div>
-            </div>
-            <div className="px-5 py-4 flex items-center justify-between bg-[#111] text-[#FAFAF8]">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-70">
-                Estimated impact
-              </div>
-              <div className="text-sm md:text-base font-bold tracking-tight">
-                ~$3.2k / month
-              </div>
-            </div>
+
           </div>
-          <p className="sans-text text-xs md:text-sm text-[#6B6B6B] mt-4 text-center">
-            Every finding is traceable to specific behavioral evidence. No invented numbers.
-          </p>
         </div>
       </section>
 

@@ -447,7 +447,7 @@ function ParticleSwarm() {
         new THREE.Vector3(0, -vh + vh * 0.2, -1),               // Section 2: DNA — slightly above center
         new THREE.Vector3(0, -vh * 2 + vh * 0.2, -1),           // Section 3: Jet — slightly above center
         new THREE.Vector3(0, -vh * 3 + vh * 0.1, -1),           // Section 4: Microchip — upper-center
-        new THREE.Vector3(0, -vh * 4 - 0.5, -1),                // Section 5: Silk wave CTA
+        new THREE.Vector3(0, -vh * 5 - 0.5, -1),                // Section 6: Silk wave CTA
       ];
     }
     return [
@@ -455,7 +455,7 @@ function ParticleSwarm() {
       new THREE.Vector3(2.5, -vh - 1.0, 0),     // Section 2: Right
       new THREE.Vector3(-2.5, -vh * 2, 0),      // Section 3: Left
       new THREE.Vector3(4.5, -vh * 3, 0),       // Section 4: Right — pushed clear of text column
-      new THREE.Vector3(0, -vh * 4 - 0.5, 0),   // Section 5: Center
+      new THREE.Vector3(0, -vh * 5 - 0.5, 0),   // Section 6: Center
     ];
   }, [viewport.height, isMobile]);
 
@@ -488,12 +488,25 @@ function ParticleSwarm() {
     }
     const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
     
+    // Non-linear uProgress for 6-section layout (5 shapes, finding card gets no shape).
+    // Transitions are centered on section boundaries so each shape is fully formed
+    // at its section center. During the finding card section (p 0.70–0.80) the formula
+    // holds at uP=3 (Chip), which the Y-offset places ~1 viewport above the screen.
+    const p = progress;
+    let uP: number;
+    if      (p < 0.10) uP = 0;
+    else if (p < 0.30) uP = (p - 0.10) / 0.20;
+    else if (p < 0.50) uP = 1 + (p - 0.30) / 0.20;
+    else if (p < 0.70) uP = 2 + (p - 0.50) / 0.20;
+    else if (p < 0.80) uP = 3;
+    else               uP = 3 + (p - 0.80) / 0.20;
+
     shaderRef.current.uniforms.uTime.value = time;
-    shaderRef.current.uniforms.uProgress.value = progress * 4.0;
+    shaderRef.current.uniforms.uProgress.value = uP;
     shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
 
-    // Sync WebGL swarm vertically with native DOM scroll
-    pointsRef.current.position.y = progress * (viewport.height * 4.0);
+    // Sync WebGL swarm vertically with native DOM scroll (6 sections → 5 scrollable units)
+    pointsRef.current.position.y = progress * (viewport.height * 5.0);
   });
 
   return (
