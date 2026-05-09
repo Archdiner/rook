@@ -512,12 +512,18 @@ function ParticleSwarm() {
     const scrollInVH = scrollY / window.innerHeight;
     const uP = Math.min(5, scrollInVH);
 
+    // Scale Y-pan so the swarm reaches exactly 5×vh at page bottom regardless of
+    // actual page height. Desktop pages are ~5.07 VH (barely changes). Mobile pages
+    // are ~5.3 VH — without scaling the wave overshoots into the CTA headline.
+    const maxScrollInVH = Math.max(5.0, (document.documentElement.scrollHeight - window.innerHeight) / window.innerHeight);
+    const panVH = scrollInVH * (5.0 / maxScrollInVH);
+
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = uP;
     shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
 
-    // Raw scroll Y-pan: swarm moves with scroll so each shape parallax-tracks its section
-    pointsRef.current.position.y = scrollInVH * viewport.height;
+    // Scaled Y-pan: swarm tracks scroll but always lands at 5×vh at page end
+    pointsRef.current.position.y = panVH * viewport.height;
   });
 
   return (
