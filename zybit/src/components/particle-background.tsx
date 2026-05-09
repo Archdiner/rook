@@ -245,6 +245,21 @@ function getMicrochipPoints(count: number) {
   return points;
 }
 
+function getDataScatterPoints(count: number) {
+  const points = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    // Particles pushed far back in Z so they appear as 1-2 px ambient dots.
+    // Spread wide in X/Y to create a sparse starfield behind the finding card.
+    const x = (Math.random() - 0.5) * 40;
+    const y = (Math.random() - 0.5) * 28;
+    const z = -10 - Math.random() * 20; // Z: -10 to -30 in shape space
+    points[i*3]   = x;
+    points[i*3+1] = y;
+    points[i*3+2] = z;
+  }
+  return points;
+}
+
 function getSilkWavePoints(count: number) {
   const points = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
@@ -271,6 +286,7 @@ const vertexShader = `
   attribute vec3 position3;
   attribute vec3 position4;
   attribute vec3 position5;
+  attribute vec3 position6;
 
   uniform float uTime;
   uniform float uProgress;
@@ -278,7 +294,7 @@ const vertexShader = `
   uniform float uScale;
   uniform float uCoreScale;
   uniform float uMobile;
-  uniform vec3 uOffsets[5];
+  uniform vec3 uOffsets[6];
 
 // Hash & Noise
 float hash(vec3 p) {
@@ -328,12 +344,14 @@ void main() {
   vec3 p4 = position4 * uScale;
   p4.y += max(0.0, sin(position4.x * 4.0 + position4.z * 4.0 - uTime * 3.0)) * 0.1 * uScale;
 
-  // 5. Silk Wave: Ocean-like undulation.
-  // Frequency uses unscaled position; amplitude is scaled by uScale so the
-  // wave doesn't blow out of proportion when the shape is shrunk on mobile.
+  // 5. Data Scatter: deep-Z ambient field — tiny ambient dots behind the finding card.
   vec3 p5 = position5 * uScale;
+  p5.y += sin(position5.x * 0.4 + uTime * 0.25) * 0.12 * uScale;
+
+  // 6. Silk Wave: ocean-like undulation for the CTA.
+  vec3 p6 = position6 * uScale;
   float waveIntensity = 1.0 - uMobile * 0.4;
-  p5.y += (sin(position5.x * 0.3 + uTime * 0.6) * 1.2 + cos(position5.z * 0.4 + uTime * 0.4) * 0.8) * waveIntensity * uScale;
+  p6.y += (sin(position6.x * 0.3 + uTime * 0.6) * 1.2 + cos(position6.z * 0.4 + uTime * 0.4) * 0.8) * waveIntensity * uScale;
 
   // Apply world offsets
   vec3 w1 = p1 + uOffsets[0];
@@ -341,6 +359,7 @@ void main() {
   vec3 w3 = p3 + uOffsets[2];
   vec3 w4 = p4 + uOffsets[3];
   vec3 w5 = p5 + uOffsets[4];
+  vec3 w6 = p6 + uOffsets[5];
 
   // INTERPOLATION & TRANSITION
   vec3 target;
@@ -359,9 +378,12 @@ void main() {
   } else if (uProgress < 3.0) {
     target = mix(w3, w4, easedT);
     transitionState = easedT;
+  } else if (uProgress < 4.0) {
+    target = mix(w4, w5, easedT);
+    transitionState = easedT;
   } else {
-    float lastT = smoothstep(0.1, 0.9, max(0.0, min(1.0, uProgress - 3.0)));
-    target = mix(w4, w5, lastT);
+    float lastT = smoothstep(0.1, 0.9, max(0.0, min(1.0, uProgress - 4.0)));
+    target = mix(w5, w6, lastT);
     transitionState = lastT;
   }
   
@@ -428,27 +450,33 @@ function ParticleSwarm() {
     pos2: getDNAPoints(PARTICLE_COUNT),
     pos3: getJetPoints(PARTICLE_COUNT),
     pos4: getMicrochipPoints(PARTICLE_COUNT),
-    pos5: getSilkWavePoints(PARTICLE_COUNT),
+    pos5: getDataScatterPoints(PARTICLE_COUNT),
+    pos6: getSilkWavePoints(PARTICLE_COUNT),
   }), [PARTICLE_COUNT]);
 
-  // Define global spatial offsets mapping to DOM — responsive
+  // Define global spatial offsets mapping to DOM — responsive.
+  // With linear uP = scrollInVH (0→5) and swarm.y = scrollInVH * vh,
+  // each shape N must sit at Y = -N * vh so it's centered on screen when
+  // scrollInVH === N and the swarm has panned up by N * vh.
   const offsets = useMemo(() => {
     const vh = viewport.height;
     if (isMobile) {
       return [
-        new THREE.Vector3(0, vh * 0.2, -1),                       // Section 1: DataCore (page-load centered)
-        new THREE.Vector3(0, -vh * 1.5 + vh * 0.2, -1),          // Section 2: DNA
-        new THREE.Vector3(0, -vh * 2.5 + vh * 0.2, -1),          // Section 3: Jet
-        new THREE.Vector3(0, -vh * 3.5 + vh * 0.1, -1),          // Section 4: Chip
-        new THREE.Vector3(0, -vh * 5 - 0.5, -1),                  // Sections 5+6: SilkWave
+        new THREE.Vector3(0, vh * 0.2, -1),            // 0: DataCore
+        new THREE.Vector3(0, -vh + vh * 0.2, -1),      // 1: DNA
+        new THREE.Vector3(0, -vh * 2 + vh * 0.2, -1),  // 2: Jet
+        new THREE.Vector3(0, -vh * 3 + vh * 0.1, -1),  // 3: Chip
+        new THREE.Vector3(0, -vh * 4, -1),              // 4: Scatter (finding card)
+        new THREE.Vector3(0, -vh * 5 - 0.5, -1),       // 5: SilkWave (CTA)
       ];
     }
     return [
-      new THREE.Vector3(3.0, 0, 0),               // Section 1: DataCore right (page-load centered)
-      new THREE.Vector3(2.5, -vh * 1.5 - 1.0, 0), // Section 2: DNA right
-      new THREE.Vector3(-2.5, -vh * 2.5, 0),       // Section 3: Jet left
-      new THREE.Vector3(4.5, -vh * 3.5, 0),        // Section 4: Chip right
-      new THREE.Vector3(0, -vh * 5 - 0.5, 0),     // Sections 5+6: SilkWave center
+      new THREE.Vector3(3.0, 0, 0),            // 0: DataCore right
+      new THREE.Vector3(2.5, -vh - 1.0, 0),    // 1: DNA right
+      new THREE.Vector3(-2.5, -vh * 2, 0),     // 2: Jet left
+      new THREE.Vector3(4.5, -vh * 3, 0),      // 3: Chip right
+      new THREE.Vector3(0, -vh * 4, 0),        // 4: Scatter (finding card) center
+      new THREE.Vector3(0, -vh * 5 - 0.5, 0), // 5: SilkWave (CTA) center
     ];
   }, [viewport.height, isMobile]);
 
@@ -471,8 +499,6 @@ function ParticleSwarm() {
     // Use native scroll for zero-latency syncing
     // Clamp scrollY to prevent negative values (overscroll bounce on Mac/iOS)
     const scrollY = Math.max(0, window.scrollY);
-    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    const progress = scrollY / maxScroll;
     
     // Slower spawn: 3 seconds on desktop, 1.5 seconds on mobile for snappier feel
     const spawnDuration = isMobile ? 1500 : 3000;
@@ -481,20 +507,10 @@ function ParticleSwarm() {
     }
     const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
     
-    // Piecewise uP keyed to scrollInVH (viewport-height units, page-height-independent).
-    // DataCore→Chip each hold for their section; transitions fire at section boundaries.
-    // Chip→SilkWave spans sections 4+5 (finding card + CTA) giving a long, cinematic fade.
+    // Linear uP: each shape N is fully formed at scrollInVH === N.
+    // Keeping uP = scrollInVH perfectly couples morph and Y-pan so scroll feels natural.
     const scrollInVH = scrollY / window.innerHeight;
-    let uP: number;
-    if      (scrollInVH < 0.75) uP = 0;                              // DataCore hold
-    else if (scrollInVH < 1.25) uP = (scrollInVH - 0.75) * 2;       // → DNA (0→1)
-    else if (scrollInVH < 1.75) uP = 1;                              // DNA hold
-    else if (scrollInVH < 2.25) uP = 1 + (scrollInVH - 1.75) * 2;   // → Jet (1→2)
-    else if (scrollInVH < 2.75) uP = 2;                              // Jet hold
-    else if (scrollInVH < 3.25) uP = 2 + (scrollInVH - 2.75) * 2;   // → Chip (2→3)
-    else if (scrollInVH < 4.5)  uP = 3;                              // Chip hold (finding card clear)
-    else                         uP = 3 + (scrollInVH - 4.5) / 0.57;  // → SilkWave as CTA approaches
-    uP = Math.min(4, uP);
+    const uP = Math.min(5, scrollInVH);
 
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = uP;
@@ -514,6 +530,7 @@ function ParticleSwarm() {
         <bufferAttribute attach="attributes-position3" args={[buffers.pos3, 3]} />
         <bufferAttribute attach="attributes-position4" args={[buffers.pos4, 3]} />
         <bufferAttribute attach="attributes-position5" args={[buffers.pos5, 3]} />
+        <bufferAttribute attach="attributes-position6" args={[buffers.pos6, 3]} />
       </bufferGeometry>
       <shaderMaterial
         ref={shaderRef}
