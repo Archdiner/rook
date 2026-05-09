@@ -3,6 +3,9 @@ import { buildInsightInputFromEvents, runInsightInputGate } from '@/lib/phase2';
 import type { Phase2SiteConfig, RollupContext, RunInsightsResponse, TimeWindow } from '@/lib/phase2/types';
 import { runAuditRules } from '@/lib/phase2/rules';
 import type { PageSnapshot } from '@/lib/phase2/snapshots/types';
+import { buildCaptureIndex, isCaptureV2Enabled } from '@/lib/phase2/capture';
+import { createCaptureRepository } from '@/lib/phase2/capture/repository';
+import type { PageCapture } from '@/lib/phase2/capture/types';
 
 export interface RunPhase2InsightsArgs {
   organizationId: string;
@@ -42,10 +45,15 @@ export async function runPhase2InsightsPipeline(
   const { organizationId, siteId, window, maxFindings } = args;
   const repository = createPhase1Repository();
 
-  const [config, events, pageSnapshots] = await Promise.all([
+  const captureEnabled = await isCaptureV2Enabled();
+
+  const [config, events, pageSnapshots, recentCaptures] = await Promise.all([
     repository.getPhase2SiteConfig({ organizationId, siteId }),
     repository.listEventsInWindow({ organizationId, siteId, window }),
     repository.listPageSnapshots({ organizationId, siteId, limit: 200 }),
+    captureEnabled
+      ? createCaptureRepository().listRecentPageCaptures({ organizationId, siteId, sinceHours: 25, limit: 200 })
+      : Promise.resolve([] as PageCapture[]),
   ]);
 
   const resolvedConfig = config ?? emptyConfig(siteId, organizationId);
@@ -68,6 +76,10 @@ export async function runPhase2InsightsPipeline(
   const findings = generateFindings(rollup.insightInput, { maxFindings });
 
   const pageSnapshotsByPath = buildSnapshotIndex(pageSnapshots);
+  const pageCapturesByPath = recentCaptures.length > 0
+    ? buildCaptureIndex(recentCaptures)
+    : undefined;
+
   const auditReport = runAuditRules({
     organizationId,
     siteId,
@@ -77,6 +89,7 @@ export async function runPhase2InsightsPipeline(
     rollup,
     pageSnapshots,
     pageSnapshotsByPath,
+    ...(pageCapturesByPath ? { pageCapturesByPath } : {}),
   });
 
   return {

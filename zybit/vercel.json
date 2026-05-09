@@ -7,6 +7,10 @@
     {
       "path": "/api/health/alert",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/phase2/cron/refresh-captures",
+      "schedule": "0 2 * * *"
     }
   ]
 }

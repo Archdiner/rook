@@ -1,0 +1,71 @@
+{
+  "pathRef": "/",
+  "finalUrl": "https://example.com/",
+  "capturedAt": "2024-01-15T02:00:00.000Z",
+  "breakpoint": "desktop",
+  "cohort": "all",
+  "contentHash": "abc123def456",
+  "costUsd": 0.0035,
+  "viewport": { "w": 1440, "h": 900 },
+  "fold": { "foldY": 900, "scrollY": 0 },
+  "renderedHtml": "<html><body><h1>Example</h1><button class=\"btn-primary\">Get started</button><button class=\"btn-secondary\">Learn more</button></body></html>",
+  "headings": [
+    {
+      "ref": "h1-abc1",
+      "level": 1,
+      "text": "Example",
+      "documentIndex": 0,
+      "foldGuess": "above",
+      "landmark": "main",
+      "bbox": { "x": 100, "y": 200, "width": 800, "height": 60 }
+    }
+  ],
+  "ctas": [
+    {
+      "ref": "cta-abc2",
+      "tag": "button",
+      "text": "Get started",
+      "href": null,
+      "ariaLabel": null,
+      "documentIndex": 0,
+      "classes": ["btn-primary"],
+      "visualWeight": 0.9,
+      "visualWeightSignals": ["btn-primary"],
+      "foldGuess": "above",
+      "landmark": "main",
+      "disabled": false,
+      "bbox": { "x": 100, "y": 400, "width": 160, "height": 44 }
+    },
+    {
+      "ref": "cta-abc3",
+      "tag": "button",
+      "text": "Learn more",
+      "href": null,
+      "ariaLabel": null,
+      "documentIndex": 1,
+      "classes": ["btn-secondary"],
+      "visualWeight": 0.3,
+      "visualWeightSignals": ["btn-secondary"],
+      "foldGuess": "above",
+      "landmark": "main",
+      "disabled": false,
+      "bbox": { "x": 280, "y": 400, "width": 140, "height": 44 }
+    }
+  ],
+  "forms": [],
+  "metrics": {
+    "lcpMs": 820,
+    "inpMs": null,
+    "cls": 0.02,
+    "ttfbMs": 210
+  },
+  "network": {
+    "requestCount": 12,
+    "totalBytes": 245000,
+    "thirdPartyDomains": ["fonts.googleapis.com"],
+    "p95LatencyMs": 180
+  },
+  "jsErrors": [],
+  "consoleMessages": [],
+  "screenshotUrl": null
+}

@@ -9,6 +9,85 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
+// ---------------------------------------------------------------------------
+// Phase 1 (capture): headless page captures + blob assets + run tracking
+// ---------------------------------------------------------------------------
+
+export const phase2PageCaptures = pgTable(
+  'phase2_page_captures',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    runId: text('run_id'),
+    pathRef: text('path_ref').notNull(),
+    finalUrl: text('final_url').notNull(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    breakpoint: text('breakpoint').notNull(),
+    cohort: text('cohort').notNull().default('logged_out'),
+    contentHash: text('content_hash').notNull(),
+    captureData: jsonb('capture_data').$type<Record<string, unknown>>().notNull(),
+    costUsd: real('cost_usd').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    orgIdx: index('phase2_page_captures_org_idx').on(table.organizationId),
+    siteIdx: index('phase2_page_captures_site_idx').on(table.siteId),
+    siteCapturedIdx: index('phase2_page_captures_site_captured_idx').on(
+      table.siteId,
+      table.capturedAt,
+    ),
+    sitePathBpIdx: index('phase2_page_captures_site_path_bp_idx').on(
+      table.siteId,
+      table.pathRef,
+      table.breakpoint,
+    ),
+    runIdx: index('phase2_page_captures_run_idx').on(table.runId),
+  }),
+);
+
+export const phase2CaptureAssets = pgTable(
+  'phase2_capture_assets',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    captureId: text('capture_id').notNull(),
+    assetType: text('asset_type').notNull(), // 'screenshot' | 'har'
+    blobUrl: text('blob_url').notNull(),
+    breakpoint: text('breakpoint'),
+    byteSize: integer('byte_size'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    captureIdx: index('phase2_capture_assets_capture_idx').on(table.captureId),
+    siteIdx: index('phase2_capture_assets_site_idx').on(table.siteId),
+  }),
+);
+
+export const phase2CaptureRuns = pgTable(
+  'phase2_capture_runs',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    status: text('status').notNull().default('pending'), // 'pending'|'running'|'completed'|'failed'
+    totalPaths: integer('total_paths').notNull().default(0),
+    completedPaths: integer('completed_paths').notNull().default(0),
+    failedPaths: integer('failed_paths').notNull().default(0),
+    totalCostUsd: real('total_cost_usd').notNull().default(0),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    siteIdx: index('phase2_capture_runs_site_idx').on(table.siteId),
+    orgIdx: index('phase2_capture_runs_org_idx').on(table.organizationId),
+  }),
+);
+
 export const organizations = pgTable('organizations', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -103,6 +182,8 @@ export const phase2SiteConfigs = pgTable(
     ctas: jsonb('ctas').$type<unknown>().notNull(),
     narratives: jsonb('narratives').$type<unknown>().notNull(),
     conversionEventTypes: jsonb('conversion_event_types').$type<string[] | null>(),
+    /** Per-site daily capture budget in USD. Default $1.00/day. */
+    captureBudgetUsdDay: real('capture_budget_usd_day').notNull().default(1.0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
@@ -297,6 +378,10 @@ export const zybitSiteMeta = pgTable('forge_site_meta', {
   monthlyRevenueCents: integer('monthly_revenue_cents'),
   /** Average order / conversion value in cents. Refines per-finding impact estimates. */
   avgOrderValueCents: integer('avg_order_value_cents'),
+  /** Accumulated capture spend today (UTC). Reset when captureSpendDayDate changes. */
+  captureSpendDayUsd: real('capture_spend_day_usd').notNull().default(0),
+  /** ISO date string (YYYY-MM-DD UTC) for the current spend window. */
+  captureSpendDayDate: text('capture_spend_day_date'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
