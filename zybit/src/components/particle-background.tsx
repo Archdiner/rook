@@ -428,34 +428,27 @@ function ParticleSwarm() {
     pos2: getDNAPoints(PARTICLE_COUNT),
     pos3: getJetPoints(PARTICLE_COUNT),
     pos4: getMicrochipPoints(PARTICLE_COUNT),
-    pos5: getSilkWavePoints(PARTICLE_COUNT) 
-   
+    pos5: getSilkWavePoints(PARTICLE_COUNT),
   }), [PARTICLE_COUNT]);
 
   // Define global spatial offsets mapping to DOM — responsive
   const offsets = useMemo(() => {
     const vh = viewport.height;
     if (isMobile) {
-      // Per-shape offsets tuned to each shape's actual geometry
-      // Data Core: compact (~2.5u radius). Sits just above center
-      // DNA: VERY tall (11u). Must be pushed far up so bottom doesn't cover text
-      // Jet: long but not tall (~2u height). Moderate offset
-      // Microchip: wide, flat (~3u height). Moderate offset
-      // Silk Wave: huge, flat. Centered for CTA
       return [
-        new THREE.Vector3(0, vh * 0.2, -1),                     // Hero: Data Core in upper quadrant
-        new THREE.Vector3(0, -vh + vh * 0.2, -1),               // Section 2: DNA — slightly above center
-        new THREE.Vector3(0, -vh * 2 + vh * 0.2, -1),           // Section 3: Jet — slightly above center
-        new THREE.Vector3(0, -vh * 3 + vh * 0.1, -1),           // Section 4: Microchip — upper-center
-        new THREE.Vector3(0, -vh * 5 - 0.5, -1),                // Section 6: Silk wave CTA
+        new THREE.Vector3(0, vh * 0.2, -1),                       // Section 1: DataCore (page-load centered)
+        new THREE.Vector3(0, -vh * 1.5 + vh * 0.2, -1),          // Section 2: DNA
+        new THREE.Vector3(0, -vh * 2.5 + vh * 0.2, -1),          // Section 3: Jet
+        new THREE.Vector3(0, -vh * 3.5 + vh * 0.1, -1),          // Section 4: Chip
+        new THREE.Vector3(0, -vh * 5 - 0.5, -1),                  // Sections 5+6: SilkWave
       ];
     }
     return [
-      new THREE.Vector3(3.0, 0, 0),             // Hero: Right
-      new THREE.Vector3(2.5, -vh - 1.0, 0),     // Section 2: Right
-      new THREE.Vector3(-2.5, -vh * 2, 0),      // Section 3: Left
-      new THREE.Vector3(4.5, -vh * 3, 0),       // Section 4: Right — pushed clear of text column
-      new THREE.Vector3(0, -vh * 5 - 0.5, 0),   // Section 6: Center
+      new THREE.Vector3(3.0, 0, 0),               // Section 1: DataCore right (page-load centered)
+      new THREE.Vector3(2.5, -vh * 1.5 - 1.0, 0), // Section 2: DNA right
+      new THREE.Vector3(-2.5, -vh * 2.5, 0),       // Section 3: Jet left
+      new THREE.Vector3(4.5, -vh * 3.5, 0),        // Section 4: Chip right
+      new THREE.Vector3(0, -vh * 5 - 0.5, 0),     // Sections 5+6: SilkWave center
     ];
   }, [viewport.height, isMobile]);
 
@@ -488,24 +481,26 @@ function ParticleSwarm() {
     }
     const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
     
-    // Drive uProgress and Y-sync using scrollInVH (viewport-height units) rather than
-    // normalized progress, so the formula is independent of page height / footer size.
-    // Each section is exactly 1 VH tall; transitions straddle section boundaries.
+    // Piecewise uP keyed to scrollInVH (viewport-height units, page-height-independent).
+    // DataCore→Chip each hold for their section; transitions fire at section boundaries.
+    // Chip→SilkWave spans sections 4+5 (finding card + CTA) giving a long, cinematic fade.
     const scrollInVH = scrollY / window.innerHeight;
     let uP: number;
-    if      (scrollInVH < 0.5) uP = 0;
-    else if (scrollInVH < 1.5) uP = scrollInVH - 0.5;
-    else if (scrollInVH < 2.5) uP = 1 + (scrollInVH - 1.5);
-    else if (scrollInVH < 3.5) uP = 2 + (scrollInVH - 2.5);
-    else if (scrollInVH < 4.5) uP = 3;
-    else                        uP = 3 + (scrollInVH - 4.5) * 2;
+    if      (scrollInVH < 0.75) uP = 0;                              // DataCore hold
+    else if (scrollInVH < 1.25) uP = (scrollInVH - 0.75) * 2;       // → DNA (0→1)
+    else if (scrollInVH < 1.75) uP = 1;                              // DNA hold
+    else if (scrollInVH < 2.25) uP = 1 + (scrollInVH - 1.75) * 2;   // → Jet (1→2)
+    else if (scrollInVH < 2.75) uP = 2;                              // Jet hold
+    else if (scrollInVH < 3.25) uP = 2 + (scrollInVH - 2.75) * 2;   // → Chip (2→3)
+    else if (scrollInVH < 4.5)  uP = 3;                              // Chip hold (finding card clear)
+    else                         uP = 3 + (scrollInVH - 4.5) / 0.57;  // → SilkWave as CTA approaches
     uP = Math.min(4, uP);
 
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = uP;
     shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
 
-    // Pan swarm so each shape's Y-offset lands at screen center at its section's scrollInVH
+    // Raw scroll Y-pan: swarm moves with scroll so each shape parallax-tracks its section
     pointsRef.current.position.y = scrollInVH * viewport.height;
   });
 
