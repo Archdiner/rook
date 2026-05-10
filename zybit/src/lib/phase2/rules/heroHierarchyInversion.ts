@@ -297,9 +297,10 @@ function evaluatePageWithCapture(
   const clickedCount = topClickedGroup.count;
   const clickedShare = share(clickedCount, totalClicks) ?? 0;
 
-  // Exclude CTAs with null or zero bbox (hidden elements)
+  // Only consider CTAs with a measured bbox — null means toDocBBox returned
+  // nothing (element has zero dimensions or display:none), so exclude them.
   const visibleCtas = (capture.ctas as CtaCandidateMeasured[]).filter(
-    cta => !cta.disabled && (cta.bbox === null || (cta.bbox.width > 0 && cta.bbox.height > 0)),
+    cta => !cta.disabled && cta.bbox !== null,
   );
   const heavy = pickHeaviest(visibleCtas) as CtaCandidateMeasured | null;
   if (!heavy) return null;

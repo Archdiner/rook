@@ -63,19 +63,12 @@ async function runBatch(
 ): Promise<BatchResult> {
   const captureRepo = createCaptureRepository();
   const batchStartedAt = new Date();
-  let completed = 0;
-  let failed = 0;
-  let totalCost = 0;
 
-  for (const entry of entries) {
-    const budget = await checkBudget(siteId);
-    if (budget.isExceeded) {
-      failed += entries.length - completed - failed;
-      logger.warn('capture.batch.budget_exceeded', { service: 'capture-record', siteId, runId });
-      break;
-    }
-
-    try {
+  // Capture all entries in parallel. The global browser semaphore inside
+  // capturePageAllBreakpoints (16 slots) bounds true concurrency automatically,
+  // so 20 parallel calls queue up safely rather than overwhelming Browserless.
+  const settled = await Promise.allSettled(
+    entries.map(async (entry) => {
       const summary = await capturePageAllBreakpoints({
         siteId,
         organizationId,
@@ -100,38 +93,34 @@ async function runBatch(
         await recordCaptureSpend(siteId, organizationId, summary.totalCostUsd);
       }
 
-      totalCost += summary.totalCostUsd;
-      if (summary.captures.length > 0) {
-        completed++;
-      } else {
-        failed++;
-      }
-    } catch (err) {
-      failed++;
-      logger.warn('capture.batch.path_failed', {
-        service: 'capture-record',
-        siteId,
-        runId,
-        url: entry.url,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+      return summary;
+    }),
+  );
 
-    await captureRepo.upsertCaptureRun({
-      id: runId,
-      organizationId,
-      siteId,
-      status: 'running',
-      totalPaths: entries.length,
-      completedPaths: completed,
-      failedPaths: failed,
-      totalCostUsd: totalCost,
-      startedAt: batchStartedAt,
-    });
+  let completed = 0;
+  let failed = 0;
+  let totalCost = 0;
+
+  for (const outcome of settled) {
+    if (outcome.status === 'fulfilled' && outcome.value.captures.length > 0) {
+      completed++;
+      totalCost += outcome.value.totalCostUsd;
+    } else {
+      failed++;
+      if (outcome.status === 'rejected') {
+        logger.warn('capture.batch.path_failed', {
+          service: 'capture-record',
+          siteId,
+          runId,
+          error: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+        });
+      }
+    }
   }
 
   const finalStatus: 'completed' | 'partial' | 'failed' =
     failed === 0 ? 'completed' : completed === 0 ? 'failed' : 'partial';
+
   await captureRepo.upsertCaptureRun({
     id: runId,
     organizationId,

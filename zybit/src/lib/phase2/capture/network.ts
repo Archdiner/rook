@@ -5,6 +5,10 @@
  * `summarize()` is called after page load to produce the network block
  * in PageCapture. Third-party domains are anything not on the site's
  * own hostname or its subdomains.
+ *
+ * Pending requests are tracked in a Map<url, RequestRecord[]> so each
+ * response match is O(1) rather than O(N) over the full record array.
+ * Multiple in-flight requests to the same URL are queued FIFO.
  */
 
 import type { Page, Request, Response } from 'playwright-core';
@@ -28,23 +32,31 @@ const MAX_THIRD_PARTY = 50;
 
 export function createNetworkLog(page: Page, siteHostname: string) {
   const records: RequestRecord[] = [];
+  // url → FIFO queue of unresolved records for that URL
+  const pending = new Map<string, RequestRecord[]>();
 
   const onRequest = (req: Request) => {
     if (records.length >= MAX_RECORDS) return;
-    records.push({ url: req.url(), startTime: Date.now() });
+    const record: RequestRecord = { url: req.url(), startTime: Date.now() };
+    records.push(record);
+    const queue = pending.get(record.url);
+    if (queue) {
+      queue.push(record);
+    } else {
+      pending.set(record.url, [record]);
+    }
   };
 
   const onResponse = (res: Response) => {
-    // Find the most recent unresolved record matching this URL
-    for (let i = records.length - 1; i >= 0; i--) {
-      const r = records[i];
-      if (r.url === res.url() && r.endTime === undefined) {
-        r.endTime = Date.now();
-        const cl = res.headers()['content-length'];
-        if (cl) r.bytes = parseInt(cl, 10);
-        break;
-      }
-    }
+    const url = res.url();
+    const queue = pending.get(url);
+    if (!queue?.length) return;
+    // Dequeue the oldest pending record for this URL (FIFO)
+    const record = queue.shift()!;
+    if (queue.length === 0) pending.delete(url);
+    record.endTime = Date.now();
+    const cl = res.headers()['content-length'];
+    if (cl) record.bytes = parseInt(cl, 10);
   };
 
   page.on('request', onRequest);
@@ -65,10 +77,7 @@ export function createNetworkLog(page: Page, siteHostname: string) {
       for (const r of records) {
         try {
           const hostname = new URL(r.url).hostname;
-          if (
-            hostname !== siteHostname &&
-            !hostname.endsWith(`.${siteHostname}`)
-          ) {
+          if (hostname !== siteHostname && !hostname.endsWith(`.${siteHostname}`)) {
             thirdPartySet.add(hostname);
           }
         } catch {

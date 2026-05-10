@@ -229,8 +229,9 @@ function pickPrimaryBelowFoldCtaMeasured(
   for (const cta of ctas) {
     if (cta.disabled) continue;
     if (cta.visualWeight < MIN_VISUAL_WEIGHT) continue;
-    // Precise: element is above fold when its top edge is above foldY
-    if (cta.bbox !== null && cta.bbox.y < foldY) continue;
+    // Null bbox → hidden/zero-size element; can't be "seen below the fold"
+    // Non-null bbox with top edge above foldY → element is above the fold
+    if (cta.bbox === null || cta.bbox.y < foldY) continue;
     if (
       best === null ||
       cta.visualWeight > best.visualWeight ||

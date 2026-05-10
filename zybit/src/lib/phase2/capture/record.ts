@@ -274,26 +274,32 @@ export async function capturePageAllBreakpoints(
   try {
     browser = await connectBrowserless();
 
-    const captures: PageCapture[] = [];
     const failedBreakpoints: CaptureBreakpoint[] = [];
 
-    for (const breakpoint of breakpoints) {
-      try {
-        const capture = await captureOnePage(browser, {
-          url: opts.url,
-          pathRef: opts.pathRef,
-          siteId: opts.siteId,
-          breakpoint,
-          cohort,
-          storageState: opts.storageState,
-          runId,
-          pageTimeoutMs: PAGE_TIMEOUT_MS,
-        });
-        captures.push(capture);
-      } catch {
-        failedBreakpoints.push(breakpoint);
-      }
-    }
+    // Capture all breakpoints in parallel — each gets its own browser context
+    // so viewport/UA isolation is preserved. The global semaphore (acquired above)
+    // already bounds total concurrency at the URL level.
+    const results = await Promise.all(
+      breakpoints.map(async (breakpoint) => {
+        try {
+          return await captureOnePage(browser!, {
+            url: opts.url,
+            pathRef: opts.pathRef,
+            siteId: opts.siteId,
+            breakpoint,
+            cohort,
+            storageState: opts.storageState,
+            runId,
+            pageTimeoutMs: PAGE_TIMEOUT_MS,
+          });
+        } catch {
+          failedBreakpoints.push(breakpoint);
+          return null;
+        }
+      }),
+    );
+
+    const captures = results.filter((c): c is PageCapture => c !== null);
 
     if (captures.length === 0) {
       throw new CaptureError(
