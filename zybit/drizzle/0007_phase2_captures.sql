@@ -15,7 +15,7 @@ CREATE TABLE "phase2_page_captures" (
 	"cohort" text NOT NULL DEFAULT 'logged_out',
 	"content_hash" text NOT NULL,
 	"capture_data" jsonb NOT NULL,
-	"cost_usd" real NOT NULL DEFAULT 0,
+	"cost_usd" numeric(12, 4) NOT NULL DEFAULT 0,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -40,7 +40,7 @@ CREATE TABLE "phase2_capture_runs" (
 	"total_paths" integer NOT NULL DEFAULT 0,
 	"completed_paths" integer NOT NULL DEFAULT 0,
 	"failed_paths" integer NOT NULL DEFAULT 0,
-	"total_cost_usd" real NOT NULL DEFAULT 0,
+	"total_cost_usd" numeric(12, 4) NOT NULL DEFAULT 0,
 	"error" text,
 	"started_at" timestamp with time zone NOT NULL,
 	"completed_at" timestamp with time zone,
@@ -56,6 +56,6 @@ CREATE INDEX "phase2_capture_assets_capture_idx" ON "phase2_capture_assets" USIN
 CREATE INDEX "phase2_capture_assets_site_idx" ON "phase2_capture_assets" USING btree ("site_id");--> statement-breakpoint
 CREATE INDEX "phase2_capture_runs_site_idx" ON "phase2_capture_runs" USING btree ("site_id");--> statement-breakpoint
 CREATE INDEX "phase2_capture_runs_org_idx" ON "phase2_capture_runs" USING btree ("organization_id");--> statement-breakpoint
-ALTER TABLE "phase2_site_configs" ADD COLUMN "capture_budget_usd_day" real NOT NULL DEFAULT 1.0;--> statement-breakpoint
-ALTER TABLE "forge_site_meta" ADD COLUMN "capture_spend_day_usd" real NOT NULL DEFAULT 0;--> statement-breakpoint
+ALTER TABLE "phase2_site_configs" ADD COLUMN "capture_budget_usd_day" numeric(12, 4) NOT NULL DEFAULT 1.0;--> statement-breakpoint
+ALTER TABLE "forge_site_meta" ADD COLUMN "capture_spend_day_usd" numeric(12, 4) NOT NULL DEFAULT 0;--> statement-breakpoint
 ALTER TABLE "forge_site_meta" ADD COLUMN "capture_spend_day_date" text;

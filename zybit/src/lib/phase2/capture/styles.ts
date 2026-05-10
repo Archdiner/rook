@@ -116,6 +116,16 @@ export async function extractMeasurements(page: Page): Promise<PageMeasurements>
       }
 
       // ---- Forms (mirrors parser.ts findForms filter) ---------------------
+      // Pre-build a label lookup map once rather than running querySelector
+      // for every individual input (avoids O(inputs) full-document scans).
+      const labelByFor = new Map<string, Element>();
+      for (const lbl of document.querySelectorAll('label[for]')) {
+        const forAttr = lbl.getAttribute('for');
+        if (forAttr && !labelByFor.has(forAttr)) {
+          labelByFor.set(forAttr, lbl);
+        }
+      }
+
       const allFormEls = Array.from(document.querySelectorAll('form'));
       const formMeasurements: FormMeasurement[] = [];
       let fIdx = 0;
@@ -135,7 +145,7 @@ export async function extractMeasurements(page: Page): Promise<PageMeasurements>
 
           const id = (inp as HTMLElement).getAttribute('id');
           if (id) {
-            const lbl = document.querySelector(`label[for="${id}"]`);
+            const lbl = labelByFor.get(id);
             if (lbl) {
               const lblRect = lbl.getBoundingClientRect();
               const inpRect = inp.getBoundingClientRect();

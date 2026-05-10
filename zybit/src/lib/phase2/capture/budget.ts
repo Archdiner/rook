@@ -37,13 +37,15 @@ export async function checkBudget(siteId: string): Promise<BudgetStatus> {
     db.select().from(phase2SiteConfigs).where(eq(phase2SiteConfigs.siteId, siteId)).limit(1),
   ]);
 
-  const budgetUsd =
-    (configRows[0]?.captureBudgetUsdDay as number | undefined) ?? DEFAULT_BUDGET_USD;
+  // decimal columns return strings from Postgres — parse to float for arithmetic
+  const budgetUsd = configRows[0]?.captureBudgetUsdDay != null
+    ? parseFloat(String(configRows[0].captureBudgetUsdDay))
+    : DEFAULT_BUDGET_USD;
 
   const meta = metaRows[0];
   const spentToday =
-    meta?.captureSpendDayDate === today
-      ? ((meta.captureSpendDayUsd as number | undefined) ?? 0)
+    meta?.captureSpendDayDate === today && meta.captureSpendDayUsd != null
+      ? parseFloat(String(meta.captureSpendDayUsd))
       : 0;
 
   const remaining = Math.max(0, budgetUsd - spentToday);
@@ -74,7 +76,7 @@ export async function recordCaptureSpend(
     .values({
       siteId,
       organizationId,
-      captureSpendDayUsd: costUsd,
+      captureSpendDayUsd: String(costUsd),
       captureSpendDayDate: today,
     })
     .onConflictDoUpdate({

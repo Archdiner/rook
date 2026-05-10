@@ -1,12 +1,11 @@
 /**
  * POST /api/phase2/capture/batch
  *
- * Enqueues a background capture run for multiple URLs/paths and returns a
- * runId immediately. Poll `/api/phase2/capture/status/[runId]` for progress.
- *
- * The actual captures run sequentially (respects the global browser semaphore)
- * inside a fire-and-forget async task. The run record in the DB is the source
- * of truth for status.
+ * Captures multiple URLs synchronously and returns results when complete.
+ * The function awaits all captures within the 300s maxDuration window
+ * (≤20 paths × ~15s worst-case = ~300s max). A runId is created upfront
+ * so callers can also look up run status after the fact via
+ * GET /api/phase2/capture/status/[runId].
  *
  * Requires: insights:run scope.
  * Budget cap enforced before each individual capture.
@@ -34,6 +33,12 @@ interface BatchEntry {
   pathRef: string;
 }
 
+interface BatchResult {
+  completed: number;
+  failed: number;
+  totalCostUsd: number;
+}
+
 function parseEntries(raw: unknown): BatchEntry[] | null {
   if (!Array.isArray(raw) || raw.length === 0) return null;
   const entries: BatchEntry[] = [];
@@ -55,7 +60,7 @@ async function runBatch(
   siteId: string,
   entries: BatchEntry[],
   breakpoints: CaptureBreakpoint[] | undefined,
-): Promise<void> {
+): Promise<BatchResult> {
   const captureRepo = createCaptureRepository();
   const batchStartedAt = new Date();
   let completed = 0;
@@ -148,6 +153,8 @@ async function runBatch(
     failed,
     totalCostUsd: totalCost,
   });
+
+  return { completed, failed, totalCostUsd: totalCost };
 }
 
 export async function POST(request: Request) {
@@ -221,10 +228,9 @@ export async function POST(request: Request) {
       paths: entries.length,
     });
 
-    // Fire and forget — client polls /status/[runId]
-    void runBatch(runId, organizationId, siteId, entries, breakpoints);
+    const result = await runBatch(runId, organizationId, siteId, entries, breakpoints);
 
-    return success({ runId, totalPaths: entries.length }, 202);
+    return success({ runId, ...result });
   } catch (error) {
     return mapRouteError(error);
   }

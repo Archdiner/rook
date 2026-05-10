@@ -30,8 +30,10 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — secrets and local overrides are never committed
 .env*
+# exception: example file is documentation, not secrets
+!.env.example
 
 # vercel
 .vercel

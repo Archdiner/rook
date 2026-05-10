@@ -6,6 +6,11 @@
  *   2. Skip paths that have a capture fresher than 23 hours (already warm).
  *   3. Re-capture stale paths up to MAX_PATHS_PER_SITE, respecting budget.
  *
+ * Concurrency model:
+ *   - Sites are resolved in parallel, then processed in batches of CRON_CONCURRENCY.
+ *   - A global cap of MAX_TOTAL_PATHS_PER_RUN prevents timeout on large deployments.
+ *   - Each batch of sites gets an equal share of the remaining path budget.
+ *
  * This keeps the headless artifact corpus fresh so audit rules always have
  * real measurements to work with, without burning budget on pages that were
  * recently captured on-demand.
@@ -25,6 +30,8 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const MAX_PATHS_PER_SITE = 10;
+const MAX_TOTAL_PATHS_PER_RUN = 15; // ~15s per path worst-case = ~225s; fits in 300s
+const CRON_CONCURRENCY = 3;
 const STALE_HOURS = 23;
 const MONITOR_KEY = 'refresh-captures';
 
@@ -42,19 +49,30 @@ function assertCronAuth(request: Request): NextResponse | null {
   return null;
 }
 
+interface SiteResult {
+  siteId: string;
+  captured: number;
+  skipped: number;
+  costUsd: number;
+  error?: string;
+}
+
 async function refreshSite(
   siteId: string,
   organizationId: string,
   siteUrl: string,
-): Promise<{ captured: number; skipped: number; costUsd: number }> {
+  maxPaths: number,
+): Promise<Omit<SiteResult, 'siteId'>> {
   const repository = createPhase1Repository();
   const captureRepo = createCaptureRepository();
 
-  // Determine the set of known paths from page snapshots
-  const snapshots = await repository.listPageSnapshots({ organizationId, siteId, limit: MAX_PATHS_PER_SITE });
+  const snapshots = await repository.listPageSnapshots({
+    organizationId,
+    siteId,
+    limit: MAX_PATHS_PER_SITE,
+  });
   if (snapshots.length === 0) return { captured: 0, skipped: 0, costUsd: 0 };
 
-  // Load recent captures to know what's already warm
   const recentCaptures = await captureRepo.listRecentPageCaptures({
     organizationId,
     siteId,
@@ -65,7 +83,7 @@ async function refreshSite(
 
   const stalePaths = snapshots
     .filter(s => !warmPaths.has(s.pathRef))
-    .slice(0, MAX_PATHS_PER_SITE);
+    .slice(0, maxPaths);
 
   if (stalePaths.length === 0) return { captured: 0, skipped: snapshots.length, costUsd: 0 };
 
@@ -166,59 +184,77 @@ async function runHandler(request: Request) {
       return NextResponse.json({ success: true, data: { skipped: true, reason: 'capture_v2_enabled flag is off' } });
     }
 
-    // Load all sites that have a phase2 config (any site with a config is eligible)
     const db = getDb();
-    const configs = await db.select({
-      siteId: phase2SiteConfigs.siteId,
-      organizationId: phase2SiteConfigs.organizationId,
-    }).from(phase2SiteConfigs);
+    const configs = await db
+      .select({ siteId: phase2SiteConfigs.siteId, organizationId: phase2SiteConfigs.organizationId })
+      .from(phase2SiteConfigs);
 
     if (configs.length === 0) {
       await cronitorPing(MONITOR_KEY, 'complete', 'no sites');
       return NextResponse.json({ success: true, data: { sites: 0 } });
     }
 
-    // Resolve base URL for each site from their integrations
+    // Resolve all site URLs in parallel before capture starts
     const repository = createPhase1Repository();
+    interface SiteWithUrl { siteId: string; organizationId: string; siteUrl: string }
 
-    type SiteResult = {
-      siteId: string;
-      captured: number;
-      skipped: number;
-      costUsd: number;
-      error?: string;
-    };
+    const [sitesWithUrls, noUrlResults] = await (async () => {
+      const withUrl: SiteWithUrl[] = [];
+      const noUrl: SiteResult[] = [];
+      await Promise.all(
+        configs.map(async (cfg) => {
+          const integrations = await repository.listIntegrations({
+            organizationId: cfg.organizationId,
+            siteId: cfg.siteId,
+          });
+          const url =
+            (integrations[0]?.config?.['siteUrl'] as string | undefined) ??
+            process.env.CAPTURE_SITE_URL_OVERRIDE;
+          if (!url) {
+            noUrl.push({ siteId: cfg.siteId, captured: 0, skipped: 0, costUsd: 0, error: 'no_site_url' });
+          } else {
+            withUrl.push({ siteId: cfg.siteId, organizationId: cfg.organizationId, siteUrl: url });
+          }
+        }),
+      );
+      return [withUrl, noUrl] as const;
+    })();
 
-    const results: SiteResult[] = [];
+    const results: SiteResult[] = [...noUrlResults];
+    let globalRemaining = MAX_TOTAL_PATHS_PER_RUN;
 
-    for (const cfg of configs) {
-      // Use the site's PostHog integration to infer the base URL, or fall back
-      // to an env override. Sites without a resolvable URL are skipped.
-      const integrations = await repository.listIntegrations({
-        organizationId: cfg.organizationId,
-        siteId: cfg.siteId,
-      });
+    // Process sites in parallel batches; stop when the global cap is consumed
+    for (let i = 0; i < sitesWithUrls.length && globalRemaining > 0; i += CRON_CONCURRENCY) {
+      const chunk = sitesWithUrls.slice(i, i + CRON_CONCURRENCY);
+      const pathsPerSite = Math.max(1, Math.floor(globalRemaining / chunk.length));
 
-      const siteUrlRaw =
-        (integrations[0]?.config?.['siteUrl'] as string | undefined) ??
-        process.env.CAPTURE_SITE_URL_OVERRIDE;
+      const settled = await Promise.allSettled(
+        chunk.map(async (site) => {
+          const outcome = await refreshSite(
+            site.siteId,
+            site.organizationId,
+            site.siteUrl,
+            pathsPerSite,
+          );
+          return { siteId: site.siteId, ...outcome };
+        }),
+      );
 
-      if (!siteUrlRaw) {
-        results.push({ siteId: cfg.siteId, captured: 0, skipped: 0, costUsd: 0, error: 'no_site_url' });
-        continue;
-      }
-
-      try {
-        const outcome = await refreshSite(cfg.siteId, cfg.organizationId, siteUrlRaw);
-        results.push({ siteId: cfg.siteId, ...outcome });
-      } catch (err) {
-        results.push({
-          siteId: cfg.siteId,
-          captured: 0,
-          skipped: 0,
-          costUsd: 0,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      for (const outcome of settled) {
+        if (outcome.status === 'fulfilled') {
+          results.push(outcome.value);
+          globalRemaining -= outcome.value.captured;
+        } else {
+          // Surface unexpected rejection without aborting the whole run
+          const err = outcome.reason;
+          results.push({
+            siteId: 'unknown',
+            captured: 0,
+            skipped: 0,
+            costUsd: 0,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
 

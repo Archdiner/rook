@@ -1,4 +1,5 @@
 import {
+  decimal,
   index,
   integer,
   jsonb,
@@ -27,7 +28,7 @@ export const phase2PageCaptures = pgTable(
     cohort: text('cohort').notNull().default('logged_out'),
     contentHash: text('content_hash').notNull(),
     captureData: jsonb('capture_data').$type<Record<string, unknown>>().notNull(),
-    costUsd: real('cost_usd').notNull().default(0),
+    costUsd: decimal('cost_usd', { precision: 12, scale: 4 }).notNull().default('0'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -76,7 +77,7 @@ export const phase2CaptureRuns = pgTable(
     totalPaths: integer('total_paths').notNull().default(0),
     completedPaths: integer('completed_paths').notNull().default(0),
     failedPaths: integer('failed_paths').notNull().default(0),
-    totalCostUsd: real('total_cost_usd').notNull().default(0),
+    totalCostUsd: decimal('total_cost_usd', { precision: 12, scale: 4 }).notNull().default('0'),
     error: text('error'),
     startedAt: timestamp('started_at', { withTimezone: true }).notNull(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
@@ -183,7 +184,7 @@ export const phase2SiteConfigs = pgTable(
     narratives: jsonb('narratives').$type<unknown>().notNull(),
     conversionEventTypes: jsonb('conversion_event_types').$type<string[] | null>(),
     /** Per-site daily capture budget in USD. Default $1.00/day. */
-    captureBudgetUsdDay: real('capture_budget_usd_day').notNull().default(1.0),
+    captureBudgetUsdDay: decimal('capture_budget_usd_day', { precision: 12, scale: 4 }).notNull().default('1.0'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
@@ -379,7 +380,7 @@ export const zybitSiteMeta = pgTable('forge_site_meta', {
   /** Average order / conversion value in cents. Refines per-finding impact estimates. */
   avgOrderValueCents: integer('avg_order_value_cents'),
   /** Accumulated capture spend today (UTC). Reset when captureSpendDayDate changes. */
-  captureSpendDayUsd: real('capture_spend_day_usd').notNull().default(0),
+  captureSpendDayUsd: decimal('capture_spend_day_usd', { precision: 12, scale: 4 }).notNull().default('0'),
   /** ISO date string (YYYY-MM-DD UTC) for the current spend window. */
   captureSpendDayDate: text('capture_spend_day_date'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
