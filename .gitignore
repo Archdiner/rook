@@ -16,3 +16,7 @@ pnpm-debug.log*
 # OS Files
 .DS_Store
 Thumbs.db
+
+# Local-only working notes / plans (never push)
+*.local.md
+/local/

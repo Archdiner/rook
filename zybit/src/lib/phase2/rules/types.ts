@@ -20,6 +20,7 @@
 
 import type { CanonicalEvent, Phase2SiteConfig, RollupResult, TimeWindow } from '@/lib/phase2/types';
 import type { PageSnapshot } from '@/lib/phase2/snapshots/types';
+import type { PageCapture } from '@/lib/phase2/capture/types';
 
 export type AuditFindingSeverity = 'info' | 'warn' | 'critical';
 
@@ -174,6 +175,12 @@ export interface AuditRuleContext {
   pageSnapshotsByPath: Map<string, PageSnapshot>;
   /** All snapshots, in case a rule wants to iterate site-wide. */
   pageSnapshots: PageSnapshot[];
+  /**
+   * Headless captures indexed by pathRef → ordered array (multiple breakpoints).
+   * Present only when `capture_v2_enabled` is on and recent captures exist.
+   * Rules check this first; fall back to `pageSnapshotsByPath` when absent.
+   */
+  pageCapturesByPath?: Map<string, PageCapture[]>;
 }
 
 export interface AuditRule {

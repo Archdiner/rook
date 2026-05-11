@@ -13,7 +13,9 @@ export interface LogContext {
     | 'insights-pipeline'
     | 'snapshot-fetcher'
     | 'proxy'
-    | 'health-alert';
+    | 'health-alert'
+    | 'capture-record'
+    | 'capture-cron';
   organizationId?: string;
   siteId?: string;
   [key: string]: unknown;
