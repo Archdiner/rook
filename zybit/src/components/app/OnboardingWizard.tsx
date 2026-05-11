@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Phase1SiteRecord } from "@/lib/phase1";
 import {
   createSiteAction,
-  checkInstallAction,
   createIntegrationAction,
   saveSiteMetaAction,
 } from "@/app/app/onboarding/actions";
+import InstallVerifier from "./InstallVerifier";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -244,8 +244,6 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-type VerifyState = "idle" | "polling" | "success" | "timeout";
-
 function Step2({
   siteId,
   domain,
@@ -258,39 +256,6 @@ function Step2({
   onSkip: () => void;
 }) {
   const snippet = `<script src="https://js.zybit.run/v1.js?siteId=${siteId}" async></script>`;
-  const [verifyState, setVerifyState] = useState<VerifyState>("idle");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const attemptsRef = useRef(0);
-
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
-  function startVerification() {
-    if (verifyState === "polling") return;
-    attemptsRef.current = 0;
-    setVerifyState("polling");
-
-    pollRef.current = setInterval(async () => {
-      attemptsRef.current += 1;
-      const detected = await checkInstallAction(siteId);
-      if (detected) {
-        stopPolling();
-        setVerifyState("success");
-        setTimeout(onComplete, 1200);
-        return;
-      }
-      if (attemptsRef.current >= 20) {
-        stopPolling();
-        setVerifyState("timeout");
-      }
-    }, 3000);
-  }
 
   return (
     <div>
@@ -300,7 +265,7 @@ function Step2({
       </h1>
       <p className="text-[#6B6B6B] text-sm mb-8 leading-relaxed max-w-sm">
         Paste this into the <code className="text-xs font-mono bg-black/[0.05] px-1 py-0.5 rounded">&lt;head&gt;</code> of{" "}
-        <strong>{domain}</strong>. It&rsquo;s one line — takes 30 seconds.
+        <strong>{domain}</strong>. One line, 30 seconds.
       </p>
 
       <div className="max-w-lg mb-6">
@@ -310,46 +275,12 @@ function Step2({
         </div>
       </div>
 
-      <div className="flex items-center gap-4 mb-4">
-        {verifyState === "idle" && (
-          <PrimaryButton onClick={startVerification}>
-            Verify installation
-          </PrimaryButton>
-        )}
-
-        {verifyState === "polling" && (
-          <div className="inline-flex items-center gap-2 text-sm text-[#6B6B6B]">
-            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-            Listening for events&hellip;
-          </div>
-        )}
-
-        {verifyState === "success" && (
-          <div className="inline-flex items-center gap-2 text-sm font-bold text-emerald-600">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
-              <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Script detected — moving on&hellip;
-          </div>
-        )}
-
-        {verifyState === "timeout" && (
-          <PrimaryButton onClick={startVerification}>
-            Check again
-          </PrimaryButton>
-        )}
+      <div className="mb-5">
+        <InstallVerifier
+          siteId={siteId}
+          onDetected={() => setTimeout(onComplete, 1200)}
+        />
       </div>
-
-      {verifyState === "timeout" && (
-        <p className="text-sm text-[#6B6B6B] mb-4 max-w-sm">
-          We&rsquo;re not seeing events yet. Check that the script is in{" "}
-          <code className="text-xs font-mono bg-black/[0.05] px-1 rounded">&lt;head&gt;</code>, not{" "}
-          <code className="text-xs font-mono bg-black/[0.05] px-1 rounded">&lt;body&gt;</code>.
-        </p>
-      )}
 
       <SkipLink onClick={onSkip} />
     </div>
@@ -584,7 +515,7 @@ function Step4({
           >
             Finish setup
           </PrimaryButton>
-          <SkipLink onClick={() => handleFinish(true)} label="Skip" />
+          <SkipLink onClick={() => handleFinish(true)} label="I don't know these yet" />
         </div>
       </div>
     </div>
