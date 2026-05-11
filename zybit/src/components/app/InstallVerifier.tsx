@@ -33,11 +33,9 @@ export default function InstallVerifier({ siteId, autoStart, onDetected }: Insta
     }
   }, []);
 
-  const startPolling = useCallback(() => {
+  const startInterval = useCallback(() => {
     stopPolling();
     attemptsRef.current = 0;
-    setState("polling");
-
     pollRef.current = setInterval(async () => {
       attemptsRef.current += 1;
       const detected = await checkInstallAction(siteId);
@@ -54,10 +52,16 @@ export default function InstallVerifier({ siteId, autoStart, onDetected }: Insta
     }, 3000);
   }, [siteId, stopPolling, onDetected]);
 
+  const startPolling = useCallback(() => {
+    setState("polling");
+    startInterval();
+  }, [startInterval]);
+
   useEffect(() => {
-    if (autoStart) startPolling();
+    // autoStart initializes state to "polling" via useState; only start the interval here
+    if (autoStart) startInterval();
     return stopPolling;
-  }, [autoStart, startPolling, stopPolling]);
+  }, [autoStart, startInterval, stopPolling]);
 
   if (state === "idle") {
     return (
