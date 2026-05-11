@@ -343,8 +343,43 @@ Zybit's visual identity is warm, premium, and editorial — not generic SaaS. Ev
 
 ---
 
+## Known limitations
+
+### CTA pair detection heuristic (fragile)
+
+The locked 2-up comparison block for Finding 3 is triggered in `EvidenceGrid` by:
+
+```ts
+const isCTAPair =
+  evidence.length >= 2 &&
+  evidence[0].label.toLowerCase().includes("cta") &&
+  evidence[1].label.toLowerCase().includes("cta");
+```
+
+**Why this is fragile:**
+- Relies on the engine emitting the pair as the first two items in `evidence[]`
+- Relies on both labels containing the string `"cta"` (case-insensitive)
+- If a future rule uses different label names (`"Primary button"` / `"Secondary button"`) the block won't trigger and the pair will render as separate grid cells, breaking the comparison
+- If the engine reorders evidence items, the detection silently breaks
+
+**Phase 4 fix — `paired: true` engine flag:**
+The engine should tag comparison pairs explicitly rather than the UI inferring from label text. Proposed engine output change:
+
+```json
+[
+  { "label": "Most-clicked CTA", "value": "Start free trial", "context": "...", "paired": true },
+  { "label": "Visually heaviest CTA", "value": "Book a demo", "context": "...", "paired": true },
+  ...
+]
+```
+
+The UI then checks `evidence[0].paired && evidence[1].paired` (or finds the first `paired` run) — no string matching required. This requires a type update to `AuditFindingEvidence` and changes to the `hero-hierarchy-inversion` rule emitter. Tag for Phase 4 cleanup; do not block Phase 3 on it.
+
+---
+
 ## What to leave as stubs for Phase 4+
 
 - Snapshot diagram for `page-structure` type (no rules emit it yet)
 - `refs.snapshotId` deep-link to screenshot artifact
 - `refs.ctaRef` highlighting in a page thumbnail
+- `AuditFindingEvidence.paired` flag for locked comparison blocks (see Known limitations)

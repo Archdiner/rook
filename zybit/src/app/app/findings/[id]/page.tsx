@@ -8,6 +8,7 @@ import { getDb } from "@/lib/db/client";
 import { zybitFindings } from "@/lib/db/schema";
 import EvidencePanel from "@/components/app/EvidencePanel";
 import FindingStatusActions from "@/components/app/FindingStatusActions";
+import ExperimentBriefCard from "@/components/app/ExperimentBriefCard";
 import type {
   AuditFindingEvidence,
   AuditFindingImpactEstimate,
@@ -127,6 +128,43 @@ export default async function FindingDetailPage({
         impactEstimate={finding.impactEstimate as AuditFindingImpactEstimate | null}
         snapshotDiagram={finding.snapshotDiagram as unknown as SnapshotDiagram | null}
       />
+
+      {/* Experiment section */}
+      {finding.prescription && (
+        <div className="mt-6">
+          {finding.experimentBrief ? (
+            <ExperimentBriefCard
+              brief={finding.experimentBrief as {
+                experimentName: string;
+                element: string;
+                changeType: "copy" | "style" | "reorder" | "remove";
+                variantDescription: string;
+                primaryMetric: string;
+                hypothesis: string | null;
+                createdAt: string;
+              }}
+              findingId={finding.id}
+            />
+          ) : (
+            <div className="bg-white border border-black/[0.05] rounded-2xl px-6 py-5 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-1">
+                  Experiment brief
+                </div>
+                <p className="text-sm text-[#6B6B6B]">
+                  Ready to test this finding? Create an experiment brief.
+                </p>
+              </div>
+              <Link
+                href={`/app/findings/${finding.id}/experiment`}
+                className="shrink-0 ml-4 bg-[#111] text-[#FAFAF8] px-5 py-2.5 font-bold text-sm uppercase tracking-[0.08em] hover:opacity-80 transition-opacity"
+              >
+                Create experiment
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

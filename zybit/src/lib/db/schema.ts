@@ -299,6 +299,15 @@ export const zybitFindings = pgTable(
     impactEstimate: jsonb('impact_estimate').$type<{ value: number; unit: string; period: 'monthly'; formatted: string; basis: string } | null>(),
     snapshotDiagram: jsonb('snapshot_diagram').$type<Record<string, unknown> | null>(),
     refs: jsonb('refs').$type<Record<string, string | undefined> | null>(),
+    experimentBrief: jsonb('experiment_brief').$type<{
+      experimentName: string;
+      element: string;
+      changeType: 'copy' | 'style' | 'reorder' | 'remove';
+      variantDescription: string;
+      primaryMetric: string;
+      hypothesis: string | null;
+      createdAt: string;
+    } | null>(),
     // Lifecycle
     status: text('status').notNull().default('open'), // 'open'|'approved'|'dismissed'|'shipped'|'measured'
     previewUrl: text('preview_url'),
