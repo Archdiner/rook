@@ -93,7 +93,7 @@ export async function runPostHogPullSyncJob(args: {
 
   let secret: string;
   try {
-    secret = resolvePostHogSecret(integration.secretRef);
+    secret = resolvePostHogSecret(integration.secretRef, integration.config);
   } catch (error) {
     if (error instanceof PostHogConnectorError) {
       await persistSyncOutcome({

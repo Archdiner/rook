@@ -1,0 +1,156 @@
+"use server";
+
+import { randomUUID } from "crypto";
+import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { getServerAuth } from "@/lib/auth/serverAuth";
+import { createPhase1Repository } from "@/lib/phase1";
+import { encryptSecret } from "@/lib/crypto/secrets";
+import { getDb } from "@/lib/db/client";
+import { zybitSiteMeta } from "@/lib/db/schema";
+import type { Phase1SiteRecord } from "@/lib/phase1";
+import type { ConnectorProvider, IntegrationRecord } from "@/lib/phase2/connectors/types";
+
+// ---------------------------------------------------------------------------
+// Step 1: Create (or return existing) site
+// ---------------------------------------------------------------------------
+
+export async function createSiteAction(
+  domain: string,
+  name: string,
+): Promise<{ ok: true; site: Phase1SiteRecord } | { ok: false; error: string }> {
+  const auth = await getServerAuth();
+  if (!auth.ok) redirect("/sign-in");
+
+  const normalizedDomain = domain
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/$/, "");
+
+  if (!normalizedDomain) return { ok: false, error: "Enter a valid domain." };
+
+  const repository = createPhase1Repository();
+
+  // One org = one site for pilots: return existing if present
+  const existing = await repository.listSites({ organizationId: auth.orgId, limit: 1 });
+  if (existing[0]) return { ok: true, site: existing[0] };
+
+  const site = await repository.createSite({
+    id: randomUUID(),
+    organizationId: auth.orgId,
+    name: name.trim() || normalizedDomain,
+    domain: normalizedDomain,
+    createdAt: new Date().toISOString(),
+  });
+
+  return { ok: true, site };
+}
+
+// ---------------------------------------------------------------------------
+// Step 2: Check if the script tag is firing events
+// ---------------------------------------------------------------------------
+
+export async function checkInstallAction(siteId: string): Promise<boolean> {
+  const auth = await getServerAuth();
+  if (!auth.ok) return false;
+
+  const repository = createPhase1Repository();
+  const events = await repository.listEvents({
+    organizationId: auth.orgId,
+    siteId,
+    limit: 1,
+  });
+
+  return events.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Step 3: Connect analytics integration
+// ---------------------------------------------------------------------------
+
+export interface CreateIntegrationPayload {
+  siteId: string;
+  provider: ConnectorProvider;
+  /** For PostHog: full URL e.g. https://app.posthog.com */
+  host?: string;
+  /** For PostHog: project ID */
+  projectId?: string;
+  /** Plain-text API key — will be encrypted before storage */
+  apiKey: string;
+}
+
+export async function createIntegrationAction(
+  payload: CreateIntegrationPayload,
+): Promise<{ ok: true; integration: IntegrationRecord } | { ok: false; error: string }> {
+  const auth = await getServerAuth();
+  if (!auth.ok) redirect("/sign-in");
+
+  let apiKeyEncrypted: string;
+  try {
+    apiKeyEncrypted = encryptSecret(payload.apiKey);
+  } catch {
+    return {
+      ok: false,
+      error: "Server is not configured for encrypted key storage. Contact support.",
+    };
+  }
+
+  const config: Record<string, unknown> = { apiKeyEncrypted };
+  if (payload.host) config.host = payload.host;
+  if (payload.projectId) config.projectId = payload.projectId;
+
+  const repository = createPhase1Repository();
+
+  // Delete any existing integration for this provider (idempotent re-connect)
+  const existing = await repository.listIntegrations({
+    organizationId: auth.orgId,
+    siteId: payload.siteId,
+    provider: payload.provider,
+  });
+
+  const integration = existing[0]
+    ? existing[0]
+    : await repository.createIntegration({
+        id: randomUUID(),
+        organizationId: auth.orgId,
+        siteId: payload.siteId,
+        provider: payload.provider,
+        config,
+        secretRef: null,
+        createdAt: new Date().toISOString(),
+      });
+
+  return { ok: true, integration };
+}
+
+// ---------------------------------------------------------------------------
+// Step 4: Save revenue context (unlock dollar-impact findings)
+// ---------------------------------------------------------------------------
+
+export async function saveSiteMetaAction(
+  siteId: string,
+  monthlyRevenueCents: number | null,
+  avgOrderValueCents: number | null,
+): Promise<void> {
+  const auth = await getServerAuth();
+  if (!auth.ok) redirect("/sign-in");
+
+  const db = getDb();
+  await db
+    .insert(zybitSiteMeta)
+    .values({
+      siteId,
+      organizationId: auth.orgId,
+      monthlyRevenueCents,
+      avgOrderValueCents,
+    })
+    .onConflictDoUpdate({
+      target: zybitSiteMeta.siteId,
+      set: {
+        monthlyRevenueCents,
+        avgOrderValueCents,
+        updatedAt: new Date(),
+      },
+    });
+}
