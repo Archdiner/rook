@@ -22,29 +22,38 @@ This is **not** an executed code change. It is a **precise human-readable brief*
 
 ---
 
+## Mutation model — decided here
+
+**Client-side script injection is the deployment mechanism.** The script that ships in PR 5 reads an experiment manifest from the edge, buckets the visitor, and applies DOM mutations before meaningful paint. This means the modification builder must only offer mutations that client-side JavaScript can execute:
+
+| Mutation type | What the script does | CSS selector needed? |
+|---|---|---|
+| `copy` | `el.textContent = newValue` | Yes |
+| `style` | `el.classList.add/remove(...)` | Yes |
+| `hide` | `el.style.display = 'none'` | Yes |
+
+**Do not offer mutations the script cannot execute:** server-rendered logic, API-fetched prices, React component state, anything requiring a backend change. If the PM tries to test something outside this set, the right answer is "this needs a code change" — not a broken experiment.
+
 ## The element selector question — decided here
 
-**Background:** `CtaCandidate` and `HeadingItem` in our snapshot/capture schema do not store CSS selectors — only `ref` (stable hash), `text`, `tag`, and class-derived weight signals. We have `bbox` in `CtaCandidateMeasured` but no executable selector path.
+**Background:** The modification builder needs a CSS selector to target the element at runtime. Our snapshot/capture schema (`CtaCandidate`, `HeadingItem`) does not store CSS selectors — only `ref` (stable hash), `text`, `tag`, and class-derived signals. However, the finding's evidence often contains the element's text and class fragment in the `context` field.
 
-**Decision: Text-based confirmation, not an element picker.**
+**Decision: Auto-suggest from snapshot DOM elements, PM confirms or types a custom selector.**
 
-Rationale:
-1. For every finding with a prescription, the engine already named the element in natural language ("Give 'Start free trial' the visual weight..."). The PM doesn't need to pick — they need to confirm.
-2. The output of this form is handed to a human developer, not executed by Zybit. A developer reading "button with text 'Start free trial' in the hero section" can find it — they don't need a CSS selector.
-3. A click-in-iframe picker would require CSP negotiation and is out of scope for Phase 3.
-4. A dropdown of all CTAs from the capture requires the capture to exist and is often overkill — if the finding has a prescription, the element is already identified.
+The flow:
+1. The engine already identifies the target element in every prescription (e.g., "Give 'Start free trial' the visual weight..."). Pre-populate the selector field with a best-guess derived from the finding's evidence (`refs.ctaRef`, evidence `context` fields).
+2. Show a "Suggestions" dropdown built from the most recent page snapshot's `ctas[]` and `headings[]` arrays for the finding's `pathRef`. Each option shows `{tag} "{text}"` — clicking populates the selector field with `{tag}[data-ref="{ref}"]` or a text-content selector.
+3. The PM can always type a raw CSS selector. No validation — the PM or their dev is responsible for correctness.
 
-**What the element field looks like:**
+**Why not an iframe click-picker:** CSP headers on most production sites block cross-origin iframes. The visual editor (like VWO's) is Phase B work. For pilots, text + dropdown covers 95% of real findings.
 
-Pre-filled from the finding's evidence and prescription. A plain text input labeled "Element" with a suggested value derived from the finding:
-- For `hero-hierarchy-inversion`: pre-fill with the value of the "Most-clicked CTA" evidence item (e.g. `"Start free trial"`)
-- For `rage-click-target`: pre-fill with the value of the "Rage target" evidence item (e.g. `"Get started"`)
-- For `form-abandonment`: pre-fill with the form landmark/page ref (e.g. `"Signup form on /signup"`)
-- Fallback: empty, with placeholder `e.g. "Get started" button in hero`
+**Selector derivation from evidence:**
+- `rage-click-target`: use `refs.elementRef` if present, else build `button:has-text("${evidence['Rage target'].value}")`
+- `hero-hierarchy-inversion`: use `refs.ctaRef` if present, else build `[contains text "${evidence['Most-clicked CTA'].value}"]`
+- `form-abandonment`: target the submit button — `form button[type=submit]` or `form button:last-of-type`
+- Fallback: empty field with placeholder `e.g. .hero h1, button.btn-primary`
 
-PM can edit this field. It is free text — no validation. The point is to capture intent precisely enough for a dev to act on.
-
-**Phase 4 enhancement (don't build now):** Add a "Show me on the page" affordance that opens the `screenshotBlobUrl` in a lightbox with CTA bboxes highlighted as click targets. Clicking a CTA populates the element field with `{text} in {landmark}`.
+**Phase B enhancement (don't build now):** Visual click-picker iframe with FOUC suppression, screenshot lightbox with bbox overlays, point-and-click selector generation.
 
 ---
 
@@ -58,25 +67,24 @@ All fields have sensible defaults pre-populated from the finding. PM edits only 
 - Max: 100 chars
 - Label: "Experiment name"
 
-### 2. Element
-- Type: text input  
-- Default: derived from evidence (see above)
-- Placeholder: `e.g. "Get started" button in hero`
-- Label: "Element to change"
-- Help text: `Describe the element precisely enough for a developer to find it`
+### 2. CSS selector
+- Type: text input with "Suggestions" button
+- Default: derived from finding evidence and `refs` (see selector derivation above)
+- Placeholder: `e.g. .hero h1, button.btn-primary`
+- Label: "CSS selector"
+- Help text: `Targets the element the script will modify at runtime`
+- "Suggestions" button opens a dropdown of `ctas[]` and `headings[]` from the most recent page snapshot for this finding's `pathRef`
 
 ### 3. Change type
-- Type: radio group (4 options)
+- Type: radio group (3 options — only what the script can execute)
 - Options:
   - `copy` — "Change text copy" (default for most findings)
-  - `style` — "Swap visual style" (default for `hero-hierarchy-inversion`)
-  - `reorder` — "Move element" (default for fold-related findings)
-  - `remove` — "Remove element"
+  - `style` — "Swap CSS classes" (default for `hero-hierarchy-inversion`)
+  - `hide` — "Hide element"
 - Default: inferred from finding category:
-  - `rage` → `copy` (the element usually needs copy or handler fix)
-  - `abandonment` → `copy` (submit button copy is the usual fix)
+  - `rage` → `copy`
+  - `abandonment` → `copy`
   - `hierarchy` → `style`
-  - `fold` → `reorder`
   - all others → `copy`
 
 ### 4. Variant B description

@@ -6,14 +6,15 @@ import { getServerAuth } from "@/lib/auth/serverAuth";
 import { getDb } from "@/lib/db/client";
 import { zybitFindings } from "@/lib/db/schema";
 
-const VALID_CHANGE_TYPES = ["copy", "style", "reorder", "remove"] as const;
+const VALID_CHANGE_TYPES = ["copy", "style", "hide"] as const;
 type ChangeType = (typeof VALID_CHANGE_TYPES)[number];
 
 interface SaveBriefInput {
   findingId: string;
   experimentName: string;
-  element: string;
+  selector: string;
   changeType: ChangeType;
+  newValue: string;
   variantDescription: string;
   primaryMetric: string;
   hypothesis: string;
@@ -27,8 +28,9 @@ export async function saveExperimentBriefAction(input: SaveBriefInput): Promise<
 
   const experimentBrief = {
     experimentName: input.experimentName.trim().slice(0, 200),
-    element: input.element.trim().slice(0, 500),
+    selector: input.selector.trim().slice(0, 500),
     changeType: input.changeType,
+    newValue: input.newValue.trim(),
     variantDescription: input.variantDescription.trim(),
     primaryMetric: input.primaryMetric.trim().slice(0, 200),
     hypothesis: input.hypothesis.trim() || null,

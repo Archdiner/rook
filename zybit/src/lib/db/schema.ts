@@ -301,8 +301,9 @@ export const zybitFindings = pgTable(
     refs: jsonb('refs').$type<Record<string, string | undefined> | null>(),
     experimentBrief: jsonb('experiment_brief').$type<{
       experimentName: string;
-      element: string;
-      changeType: 'copy' | 'style' | 'reorder' | 'remove';
+      selector: string;
+      changeType: 'copy' | 'style' | 'hide';
+      newValue: string;
       variantDescription: string;
       primaryMetric: string;
       hypothesis: string | null;

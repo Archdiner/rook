@@ -130,14 +130,15 @@ export default async function FindingDetailPage({
       />
 
       {/* Experiment section */}
-      {finding.prescription && (
+      {finding.prescription && finding.status !== "dismissed" && (
         <div className="mt-6">
           {finding.experimentBrief ? (
             <ExperimentBriefCard
               brief={finding.experimentBrief as {
                 experimentName: string;
-                element: string;
-                changeType: "copy" | "style" | "reorder" | "remove";
+                selector: string;
+                changeType: "copy" | "style" | "hide";
+                newValue: string;
                 variantDescription: string;
                 primaryMetric: string;
                 hypothesis: string | null;
