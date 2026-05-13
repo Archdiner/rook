@@ -77,7 +77,6 @@ function defaultNewValue(
   changeType: ChangeType,
   category: string,
   evidence: AuditFindingEvidence[],
-  prescription: AuditFindingPrescription,
 ): string {
   if (changeType === "hide") return "";
   if (changeType === "style") {
@@ -193,7 +192,7 @@ export default async function ExperimentBuilderPage({
     experimentName: `${finding.title} — Variant B`,
     selector: defaultSelector(finding.category, evidence, refs),
     changeType,
-    newValue: defaultNewValue(changeType, finding.category, evidence, prescription),
+    newValue: defaultNewValue(changeType, finding.category, evidence),
     variantDescription: prescription.experimentVariantDescription,
     primaryMetric: defaultPrimaryMetric(finding.category, finding.pathRef),
     hypothesis: "",

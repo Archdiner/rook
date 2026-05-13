@@ -2,7 +2,6 @@
 
 import { randomUUID } from "crypto";
 import { redirect } from "next/navigation";
-import { eq } from "drizzle-orm";
 import { getServerAuth } from "@/lib/auth/serverAuth";
 import { createPhase1Repository } from "@/lib/phase1";
 import { encryptSecret } from "@/lib/crypto/secrets";

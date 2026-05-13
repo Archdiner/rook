@@ -1,12 +1,13 @@
 "use client";
 
-import { SignUp } from '@clerk/nextjs';
+import { ClerkProvider, SignUp } from '@clerk/nextjs';
 import { AuthParticleCanvas } from '@/components/particle-background';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 
 export default function SignUpPage() {
   return (
+    <ClerkProvider>
     <div
       style={{
         position: 'relative',
@@ -105,7 +106,7 @@ export default function SignUpPage() {
                 },
               },
             }}
-            forceRedirectUrl="/dashboard/connect"
+            forceRedirectUrl="/dashboard"
           />
         </div>
       </div>
@@ -118,5 +119,6 @@ export default function SignUpPage() {
         }
       `}} />
     </div>
+    </ClerkProvider>
   );
 }

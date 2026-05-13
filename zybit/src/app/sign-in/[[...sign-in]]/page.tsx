@@ -1,12 +1,13 @@
 "use client";
 
-import { SignIn } from '@clerk/nextjs';
+import { ClerkProvider, SignIn } from '@clerk/nextjs';
 import { AuthParticleCanvas } from '@/components/particle-background';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 
 export default function SignInPage() {
   return (
+    <ClerkProvider>
     <div
       style={{
         position: 'relative',
@@ -128,5 +129,6 @@ export default function SignInPage() {
         }
       `}} />
     </div>
+    </ClerkProvider>
   );
 }

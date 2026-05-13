@@ -1153,7 +1153,7 @@ const DASHBOARD_PARTICLE_MOBILE = 18000;
 
 function DashboardParticleSwarm({ scrollYProgress }: { scrollYProgress: MotionValue<number> }) {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
-  const { viewport, size } = useThree();
+  const { size } = useThree();
   const isMobile = size.width < 768;
   const count = isMobile ? DASHBOARD_PARTICLE_MOBILE : DASHBOARD_PARTICLE_DESKTOP;
   const mountTimeRef = useRef<number | null>(null);

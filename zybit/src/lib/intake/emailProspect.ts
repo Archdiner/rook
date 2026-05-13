@@ -15,7 +15,8 @@ function getResend(): Resend {
   return _resend;
 }
 
-function buildProspectText(finding: IntakeFinding, prospectEmail: string): string {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function buildProspectText(finding: IntakeFinding, _prospectEmail: string): string {
   return [
     `we looked at ${finding.domain}.`,
     '',

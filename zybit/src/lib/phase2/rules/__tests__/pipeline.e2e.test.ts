@@ -8,17 +8,14 @@ import { describe, it, expect } from 'vitest';
 import { runAuditRules } from '@/lib/phase2/rules/index';
 import {
   makeContext,
-  makeEvent,
   makePageView,
   makeRageClick,
   makeErrorEvent,
   makeCtaClick,
-  makeFormSubmit,
-  makeGoalConfig,
-  makeConfig,
   makeSnapshot,
   makeCta,
   makeForm,
+  makeGoalConfig,
 } from './fixtures';
 import type { CanonicalEvent } from '@/lib/phase2/types';
 

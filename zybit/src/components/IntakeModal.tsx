@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 
 const FOUNDERS_CALENDLY = "https://calendly.com/asad-getzybit/30min";
 const FOUNDERS_EMAIL = "sar367@cornell.edu";
@@ -47,7 +47,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     }
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     onClose();
     // Reset after animation
     setTimeout(() => {
@@ -55,7 +55,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
       setFormData(EMPTY_FORM);
       setErrorMsg('');
     }, 300);
-  };
+  }, [onClose]);
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -65,7 +65,7 @@ export function IntakeModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, handleClose]);
 
   if (!isOpen) return null;
 
