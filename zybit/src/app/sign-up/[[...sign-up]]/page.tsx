@@ -106,7 +106,7 @@ export default function SignUpPage() {
                 },
               },
             }}
-            forceRedirectUrl="/dashboard"
+            forceRedirectUrl="/app"
           />
         </div>
       </div>

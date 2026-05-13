@@ -116,7 +116,7 @@ export default function SignInPage() {
                 },
               },
             }}
-            forceRedirectUrl="/dashboard"
+            forceRedirectUrl="/app"
           />
         </div>
       </div>
