@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { launchExperimentAction } from "@/app/app/findings/[id]/experiment/actions";
 
 interface ExperimentBrief {
   experimentName: string;
@@ -57,6 +58,7 @@ export default function ExperimentBriefCard({
   findingId: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const [launching, setLaunching] = useState(false);
 
   function handleCopy() {
     navigator.clipboard.writeText(toBriefText(brief));
@@ -119,6 +121,17 @@ export default function ExperimentBriefCard({
         >
           Edit
         </Link>
+        <button
+          type="button"
+          disabled={launching}
+          onClick={async () => {
+            setLaunching(true);
+            await launchExperimentAction(findingId);
+          }}
+          className="ml-auto bg-[#111] text-[#FAFAF8] px-5 py-2.5 text-sm font-bold uppercase tracking-[0.08em] hover:opacity-80 disabled:opacity-40 transition-opacity"
+        >
+          {launching ? "Launching…" : "Launch experiment"}
+        </button>
       </div>
     </div>
   );
