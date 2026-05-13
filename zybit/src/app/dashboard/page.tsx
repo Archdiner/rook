@@ -10,7 +10,7 @@ import { MockWebsite } from "@/components/MockWebsite";
 
 const FOUNDERS_CALENDLY = "https://calendly.com/asad-getzybit/30min";
 
-function TopNav({ onOpenModal }: { onOpenModal: () => void }) {
+function TopNav() {
   return (
     <header className="fixed top-0 left-0 w-full px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between gap-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
       <Link href="/" className="flex items-center gap-3 no-underline">
@@ -26,12 +26,18 @@ function TopNav({ onOpenModal }: { onOpenModal: () => void }) {
         >
           Talk to founders
         </a>
-        <button
-          onClick={onOpenModal}
-          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] transition-opacity hover:opacity-70 bg-transparent border-none cursor-pointer whitespace-nowrap"
+        <Link
+          href="/sign-in"
+          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
         >
-          Request Access
-        </button>
+          Sign in
+        </Link>
+        <Link
+          href="/sign-up"
+          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
+        >
+          Sign up
+        </Link>
       </nav>
     </header>
   );
@@ -58,7 +64,7 @@ export default function DashboardPage() {
 
   return (
     <div className="bg-[#FAFAF8] font-sans selection:bg-[#111] selection:text-[#FAFAF8] relative">
-      <TopNav onOpenModal={() => setIsModalOpen(true)} />
+      <TopNav />
       
       {/* 500vh container to allow for a long scroll experience */}
       <div ref={containerRef} className="h-[500vh] w-full relative">

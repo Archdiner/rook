@@ -225,12 +225,18 @@ export default function Home() {
           >
             Talk to founders
           </a>
-          <button
-            onClick={openModal}
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] transition-colors hover:text-[#555] bg-transparent border-none cursor-pointer"
+          <Link
+            href="/sign-in"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
-            Request Access
-          </button>
+            Sign in
+          </Link>
+          <Link
+            href="/sign-up"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
+          >
+            Sign up
+          </Link>
         </nav>
       </header>
 

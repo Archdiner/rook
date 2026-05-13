@@ -118,6 +118,12 @@ export default function SignInPage() {
             }}
             forceRedirectUrl="/app"
           />
+          <p style={{ marginTop: '24px', fontSize: '14px', color: '#6B6B6B', textAlign: 'center' }}>
+            Don&apos;t have an account?{' '}
+            <Link href="/sign-up" style={{ color: '#111', fontWeight: 600, textDecoration: 'none' }}>
+              Sign up
+            </Link>
+          </p>
         </div>
       </div>
 
