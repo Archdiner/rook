@@ -202,29 +202,27 @@ export default function Home() {
 
   return (
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
-      <header className="fixed top-0 left-0 w-full px-6 py-6 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
-        <Link href="/" className="flex items-center gap-3 no-underline">
-          <Logo className="w-6 h-6 text-[#111]" />
-          <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Zybit</span>
+      <header className="fixed top-0 left-0 w-full px-6 py-5 flex items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
+        <Link href="/" className="flex items-center gap-2.5 no-underline">
+          <Logo className="w-5 h-5 text-[#111]" />
+          <span className="text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>
         </Link>
         <nav
-          className="flex flex-wrap items-center justify-end gap-6 md:gap-8 sans-text"
+          className="flex items-center gap-3 md:gap-5 sans-text"
           aria-label="Primary"
         >
           <Link
-            href="/dashboard"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+            href="/sign-up"
+            className="btn-brutalist text-[10px] px-4 py-2.5"
           >
-            Interactive Preview
+            Sign up
           </Link>
-          <a
-            href={FOUNDERS_CALENDLY}
-            target="_blank"
-            rel="noreferrer"
-            className="hidden md:inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
+          <button
+            onClick={openModal}
+            className="btn-brutalist text-[10px] px-4 py-2.5"
           >
-            Talk to founders
-          </a>
+            Request Access
+          </button>
           <Link
             href="/sign-in"
             className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
@@ -232,10 +230,10 @@ export default function Home() {
             Sign in
           </Link>
           <Link
-            href="/sign-up"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
+            href="/dashboard"
+            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
-            Sign up
+            Interactive Preview
           </Link>
         </nav>
       </header>

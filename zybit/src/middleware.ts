@@ -15,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/phase1/health',
   '/api/phase2/health',
   '/api/billing/webhook',
+  '/api/loader(.*)',
 ]);
 
 function isSegmentWebhookPath(pathname: string): boolean {
