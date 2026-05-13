@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { ParticleCanvas } from "@/components/particle-background";
-import { useAuth } from "@clerk/nextjs";
 import { Logo } from "@/components/logo";
 
 import { IntakeModal } from "@/components/IntakeModal";

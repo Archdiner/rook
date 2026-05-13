@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { navDispersion } from '@/lib/phase2/rules/navDispersion';
-import { makeContext, makeCtaClick, makeGoalConfig } from './fixtures';
+import { makeContext, makeCtaClick } from './fixtures';
 
 /**
  * navDispersion needs:

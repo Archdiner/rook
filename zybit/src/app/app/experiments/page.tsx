@@ -25,10 +25,6 @@ const STATUS_STYLES: Record<string, string> = {
   stopped: "bg-black/[0.04] text-[#9B9B9B]",
 };
 
-const STATUS_DOT: Record<string, string> = {
-  running: "bg-emerald-400",
-};
-
 export default async function ExperimentsPage() {
   const auth = await getServerAuth();
   if (!auth.ok) redirect("/sign-in");

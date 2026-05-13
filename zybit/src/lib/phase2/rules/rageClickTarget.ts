@@ -7,7 +7,7 @@
  * its page rage-click it, the affordance is misleading — emit a finding.
  */
 
-import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
+import type { CanonicalEvent } from "@/lib/phase2/types";
 
 import {
   clamp,

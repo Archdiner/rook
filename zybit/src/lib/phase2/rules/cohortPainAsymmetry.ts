@@ -241,7 +241,6 @@ function buildFinding(inputs: Inputs): AuditFinding {
   if (deviceMode !== null) evidence.push({ label: "Top device type in cohort", value: deviceMode });
 
   const topRagePath = topRagePaths[0]?.key ?? null;
-  const topErrorPath = topErrorPaths[0]?.key ?? null;
   const prescription = {
     whatToChange:
       `Pull session recordings for ${quote(top.label)} users — filter by rage or error events` +

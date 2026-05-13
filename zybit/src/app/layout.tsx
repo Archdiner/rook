@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 const inter = Inter({
@@ -28,12 +27,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const body = <body suppressHydrationWarning>{children}</body>;
-
   return (
     <html lang="en" className={`${inter.variable} ${newsreader.variable}`} suppressHydrationWarning>
-      {publishableKey ? <ClerkProvider>{body}</ClerkProvider> : body}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

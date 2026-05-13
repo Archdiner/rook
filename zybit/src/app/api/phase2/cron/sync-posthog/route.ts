@@ -142,7 +142,6 @@ async function upsertFindings(
 // ---------------------------------------------------------------------------
 
 async function runHandler(request: Request) {
-  const startMs = Date.now();
   const cronService = 'cron-sync' as const;
   const monitorKey = 'sync-posthog';
 

@@ -13,7 +13,7 @@
 
 import type { CtaCandidate, PageSnapshot } from "@/lib/phase2/snapshots/types";
 import type { CtaCandidateMeasured, PageCapture } from "@/lib/phase2/capture/types";
-import type { CanonicalEvent, GoalConfig, GoalType } from "@/lib/phase2/types";
+import type { CanonicalEvent } from "@/lib/phase2/types";
 
 import {
   clamp,
