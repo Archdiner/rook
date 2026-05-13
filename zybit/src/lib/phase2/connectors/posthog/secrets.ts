@@ -1,32 +1,32 @@
-/**
- * Resolves the PostHog API key from `process.env` using the integration's
- * declared `secretRef`. The resolved value is never logged. Failures throw a
- * typed `PostHogConnectorError` so the route layer can map them to a 401
- * response without leaking the key name into the response body.
- */
-
+import { decryptSecret } from "@/lib/crypto/secrets";
 import { PostHogConnectorError } from "./errors";
 
-export function resolvePostHogSecret(secretRef: string | null): string {
-  if (secretRef === null || secretRef === undefined) {
+export function resolvePostHogSecret(
+  secretRef: string | null,
+  config?: Record<string, unknown>,
+): string {
+  // Self-service path: encrypted API key stored in integration config
+  if (config?.apiKeyEncrypted && typeof config.apiKeyEncrypted === "string") {
+    try {
+      const decrypted = decryptSecret(config.apiKeyEncrypted);
+      if (decrypted.length > 0) return decrypted;
+    } catch {
+      // fall through to env-var path
+    }
+  }
+
+  if (!secretRef || secretRef.trim().length === 0) {
     throw new PostHogConnectorError(
       "POSTHOG_AUTH",
-      "Integration has no secretRef configured.",
+      "Integration has no secretRef or encrypted key configured.",
     );
   }
-  const ref = secretRef.trim();
-  if (ref.length === 0) {
-    throw new PostHogConnectorError(
-      "POSTHOG_AUTH",
-      "Integration has no secretRef configured.",
-    );
-  }
-  const raw = process.env[ref];
+  const raw = process.env[secretRef.trim()];
   const value = typeof raw === "string" ? raw.trim() : "";
   if (value.length === 0) {
     throw new PostHogConnectorError(
       "POSTHOG_AUTH",
-      `Secret env var ${ref} is not set.`,
+      `Secret env var ${secretRef.trim()} is not set.`,
     );
   }
   return value;

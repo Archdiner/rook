@@ -5,6 +5,7 @@ import { isProxyHost } from '@/lib/experiments/proxy/host';
 
 const isPublicRoute = createRouteMatcher([
   '/',
+  '/dashboard(.*)',
   '/docs(.*)',
   '/discovery(.*)',
   '/sign-in(.*)',
@@ -13,6 +14,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/discovery',
   '/api/phase1/health',
   '/api/phase2/health',
+  '/api/billing/webhook',
 ]);
 
 function isSegmentWebhookPath(pathname: string): boolean {

@@ -10,6 +10,7 @@ import {
 import type { ConnectorProvider } from '@/lib/phase2/connectors/types';
 import { assertApiKeyHasAnyScope, assertApiKeyHasScope, resolveZybitActor } from '@/lib/auth/actor';
 import { assertSiteInOrganization } from '@/lib/auth/tenantScope';
+import { encryptSecret } from '@/lib/crypto/secrets';
 import { badConfigRequest } from '../_shared';
 
 const VALID_PROVIDERS: ReadonlySet<ConnectorProvider> = new Set([
@@ -25,6 +26,8 @@ interface ParsedCreateBody {
   provider: ConnectorProvider;
   config: Record<string, unknown>;
   secretRef: string | null;
+  /** Plain-text API key from self-service wizard — will be encrypted before storage. */
+  apiKey: string | null;
 }
 
 function parseCreateBody(
@@ -58,19 +61,22 @@ function parseCreateBody(
     return { ok: false, message: '`secretRef` must be a string env var name when provided.' };
   }
 
+  const apiKeyValue = body.apiKey;
+  let apiKey: string | null = null;
+  if (typeof apiKeyValue === 'string') {
+    const trimmed = apiKeyValue.trim();
+    if (trimmed.length > 0) apiKey = trimmed;
+  }
+
+  const hasSecret = secretRef !== null || apiKey !== null;
+
   if (providerRaw === 'segment') {
-    /**
-     * Segment v1 is **webhook ingest** only (`POST .../segment-webhook`).
-     * `secretRef` must name an env var holding the shared bearer token callers
-     * send as `Authorization: Bearer ...`.
-     */
     const writeKeyHint = typeof config.writeKey_env === 'string' ? config.writeKey_env.trim() : '';
-    if (!writeKeyHint && !secretRef) {
+    if (!writeKeyHint && !hasSecret) {
       return {
         ok: false,
         message:
-          'For segment, set `secretRef` to an env var holding the webhook bearer token ' +
-          '(you may optionally set `config.writeKey_env` to the same name for documentation only).',
+          'For segment, provide `apiKey` (webhook bearer token) or `secretRef` (env var name).',
       };
     }
   }
@@ -89,11 +95,10 @@ function parseCreateBody(
     if (!projectId) {
       return { ok: false, message: '`config.projectId` is required for PostHog.' };
     }
-    if (!secretRef) {
+    if (!hasSecret) {
       return {
         ok: false,
-        message:
-          '`secretRef` is required for PostHog (env var name holding the personal API key).',
+        message: 'Provide `apiKey` or `secretRef` for PostHog.',
       };
     }
   }
@@ -105,6 +110,7 @@ function parseCreateBody(
       provider: providerRaw as ConnectorProvider,
       config,
       secretRef,
+      apiKey,
     },
   };
 }
@@ -139,12 +145,22 @@ export async function POST(request: Request) {
     });
     if (!siteGate.ok) return siteGate.response;
 
+    let integrationConfig = parsedBody.value.config;
+    if (parsedBody.value.apiKey) {
+      try {
+        const apiKeyEncrypted = encryptSecret(parsedBody.value.apiKey);
+        integrationConfig = { ...integrationConfig, apiKeyEncrypted };
+      } catch {
+        return badConfigRequest('Server is not configured for encrypted key storage (ZYBIT_SECRET_KEY missing).');
+      }
+    }
+
     const integration = await repository.createIntegration({
       id: randomUUID(),
       organizationId: actorResult.actor.organizationId,
       siteId: parsedBody.value.siteId,
       provider: parsedBody.value.provider,
-      config: parsedBody.value.config,
+      config: integrationConfig,
       secretRef: parsedBody.value.secretRef,
       createdAt: new Date().toISOString(),
     });

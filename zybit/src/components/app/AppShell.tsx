@@ -1,0 +1,127 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Logo } from "@/components/logo";
+
+interface NavItem {
+  label: string;
+  href: string;
+  icon: React.ReactNode;
+}
+
+interface AppShellProps {
+  domain: string | null;
+  children: React.ReactNode;
+}
+
+function GridIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <rect x="1" y="1" width="6" height="6" rx="1" fill="currentColor" />
+      <rect x="9" y="1" width="6" height="6" rx="1" fill="currentColor" />
+      <rect x="1" y="9" width="6" height="6" rx="1" fill="currentColor" />
+      <rect x="9" y="9" width="6" height="6" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function FindingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M2 4h12M2 8h8M2 12h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ExperimentsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <path d="M6 2v5L2 13h12L10 7V2M6 2h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.93 2.93l1.41 1.41M11.66 11.66l1.41 1.41M2.93 13.07l1.41-1.41M11.66 4.34l1.41-1.41" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { label: "Cockpit", href: "/app", icon: <GridIcon /> },
+  { label: "Findings", href: "/app/findings", icon: <FindingsIcon /> },
+  { label: "Experiments", href: "/app/experiments", icon: <ExperimentsIcon /> },
+];
+
+const BOTTOM_NAV: NavItem[] = [
+  { label: "Settings", href: "/app/settings", icon: <SettingsIcon /> },
+];
+
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+  return (
+    <Link
+      href={item.href}
+      className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+        active
+          ? "bg-white/10 text-white"
+          : "text-white/50 hover:text-white/80 hover:bg-white/[0.05]"
+      }`}
+    >
+      <span className={active ? "text-white" : "text-white/40"}>{item.icon}</span>
+      {item.label}
+    </Link>
+  );
+}
+
+export default function AppShell({ domain, children }: AppShellProps) {
+  const pathname = usePathname();
+
+  function isActive(href: string): boolean {
+    if (href === "/app") return pathname === "/app";
+    return pathname.startsWith(href);
+  }
+
+  return (
+    <div className="flex h-screen bg-[#FAFAF8] sans-text overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-52 shrink-0 flex flex-col bg-[#111] border-r border-white/[0.06]">
+        {/* Logo + site */}
+        <div className="px-4 pt-5 pb-4 border-b border-white/[0.06]">
+          <Link href="/app" className="flex items-center gap-2.5 mb-3">
+            <Logo className="w-5 h-5 text-white" />
+            <span className="text-white font-bold text-base tracking-tight">Zybit</span>
+          </Link>
+          {domain && (
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+              <span className="text-white/40 text-xs truncate">{domain}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Main nav */}
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map((item) => (
+            <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          ))}
+        </nav>
+
+        {/* Bottom nav */}
+        <div className="px-2 pb-4 pt-2 border-t border-white/[0.06] space-y-0.5">
+          {BOTTOM_NAV.map((item) => (
+            <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          ))}
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
+  );
+}

@@ -86,8 +86,8 @@ export async function POST(request: Request, context: RouteCtx) {
       assertSegmentProvider(integration.provider);
 
       let secretFromEnv = '';
-      if (integration.secretRef) {
-        secretFromEnv = resolveSegmentWebhookSecret(integration.secretRef);
+      if (integration.secretRef || integration.config?.apiKeyEncrypted) {
+        secretFromEnv = resolveSegmentWebhookSecret(integration.secretRef, integration.config);
       }
 
       const hdr = parseString(request.headers.get('authorization')) ?? '';

@@ -295,7 +295,20 @@ export const zybitFindings = pgTable(
     summary: text('summary').notNull(),
     recommendation: jsonb('recommendation').$type<string[]>().notNull(),
     evidence: jsonb('evidence').$type<Array<{ label: string; value: string | number; context?: string }>>().notNull(),
+    prescription: jsonb('prescription').$type<{ whatToChange: string; whyItWorks: string; experimentVariantDescription: string } | null>(),
+    impactEstimate: jsonb('impact_estimate').$type<{ value: number; unit: string; period: 'monthly'; formatted: string; basis: string } | null>(),
+    snapshotDiagram: jsonb('snapshot_diagram').$type<Record<string, unknown> | null>(),
     refs: jsonb('refs').$type<Record<string, string | undefined> | null>(),
+    experimentBrief: jsonb('experiment_brief').$type<{
+      experimentName: string;
+      selector: string;
+      changeType: 'copy' | 'style' | 'hide';
+      newValue: string;
+      variantDescription: string;
+      primaryMetric: string;
+      hypothesis: string | null;
+      createdAt: string;
+    } | null>(),
     // Lifecycle
     status: text('status').notNull().default('open'), // 'open'|'approved'|'dismissed'|'shipped'|'measured'
     previewUrl: text('preview_url'),
