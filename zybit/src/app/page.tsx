@@ -7,8 +7,6 @@ import { Logo } from "@/components/logo";
 
 import { IntakeModal } from "@/components/IntakeModal";
 
-const FOUNDERS_CALENDLY = "https://calendly.com/asad-getzybit/30min";
-
 // ---------------------------------------------------------------------------
 // Main Application
 // ---------------------------------------------------------------------------
@@ -202,24 +200,24 @@ export default function Home() {
 
   return (
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
-      <header className="fixed top-0 left-0 w-full px-6 py-5 flex items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
+      <header className="fixed top-0 left-0 w-full px-6 py-5 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
         <Link href="/" className="flex items-center gap-2.5 no-underline">
           <Logo className="w-5 h-5 text-[#111]" />
           <span className="text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>
         </Link>
         <nav
-          className="flex items-center gap-3 md:gap-5 sans-text"
+          className="flex flex-wrap items-center justify-end gap-3 md:gap-5 sans-text"
           aria-label="Primary"
         >
           <Link
             href="/sign-up"
-            className="btn-brutalist text-[10px] px-4 py-2.5"
+            className="btn-brutalist text-[11px] px-4 py-2.5"
           >
             Sign up
           </Link>
           <button
             onClick={openModal}
-            className="btn-brutalist text-[10px] px-4 py-2.5"
+            className="btn-brutalist text-[11px] px-4 py-2.5"
           >
             Request Access
           </button>
