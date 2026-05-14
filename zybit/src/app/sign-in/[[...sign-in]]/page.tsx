@@ -1,104 +1,24 @@
 "use client";
 
-import { ClerkProvider, SignIn } from '@clerk/nextjs';
+import { SignIn } from '@clerk/nextjs';
 import { AuthParticleCanvas } from '@/components/particle-background';
 import Link from 'next/link';
 import { Logo } from '@/components/logo';
 
 export default function SignInPage() {
   return (
-    <ClerkProvider>
-    <div
-      style={{
-        position: 'relative',
-        minHeight: '100vh',
-        background: '#FAFAF8',
-        display: 'flex',
-        fontFamily: 'var(--font-inter), system-ui, sans-serif',
-      }}
-    >
-      {/* Particle canvas fills the full viewport */}
+    <div className="relative min-h-screen bg-[#FAFAF8] flex flex-col">
       <AuthParticleCanvas />
 
-      {/* Minimal header — same as marketing site */}
-      <header
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          padding: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          zIndex: 50,
-          boxSizing: 'border-box',
-        }}
-      >
-        <Link
-          href="/"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            textDecoration: 'none',
-            color: '#111',
-          }}
-        >
-          <Logo style={{ width: 22, height: 22, color: '#111' }} />
-          <span
-            style={{
-              fontSize: 16,
-              fontWeight: 700,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            Zybit
-          </span>
+      <header className="relative z-50 w-full px-6 py-5 flex items-center">
+        <Link href="/" className="flex items-center gap-2.5 no-underline">
+          <Logo className="w-5 h-5 text-[#111]" />
+          <span className="text-lg font-bold tracking-tight text-[#111]">Zybit</span>
         </Link>
       </header>
 
-      {/* 2-Column Layout */}
-      <div
-        style={{
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'row',
-          position: 'relative',
-          zIndex: 10,
-          width: '100%',
-        }}
-      >
-        {/* Left Side: Branding / Copy */}
-        <div
-          style={{
-            flex: 1,
-            display: 'none',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            padding: '80px 10%',
-            maxWidth: '50%',
-          }}
-          className="md-flex-col"
-        >
-          <h1 style={{ fontSize: '3.5rem', fontWeight: 800, lineHeight: 1.1, color: '#111', letterSpacing: '-0.03em', marginBottom: '24px' }}>
-            Welcome Back.
-          </h1>
-          <p style={{ fontSize: '1.25rem', color: '#555', lineHeight: 1.6, maxWidth: '400px' }}>
-            Sign in to access your operations, manage workflows, and track your metrics.
-          </p>
-        </div>
-
-        {/* Right Side: Clerk Auth */}
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '80px 24px 24px',
-            width: '100%',
-          }}
-        >
+      <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-md">
           <SignIn
             appearance={{
               variables: {
@@ -111,30 +31,21 @@ export default function SignInPage() {
               },
               elements: {
                 card: {
-                  boxShadow: '0 32px 64px -16px rgba(0,0,0,0.18)',
-                  border: '1px solid rgba(0,0,0,0.07)',
+                  boxShadow: '8px 8px 0px #111',
+                  border: '2px solid #111',
                 },
               },
             }}
             forceRedirectUrl="/app"
           />
-          <p style={{ marginTop: '24px', fontSize: '14px', color: '#6B6B6B', textAlign: 'center' }}>
+          <p className="mt-6 text-center text-sm text-[#6B6B6B]">
             Don&apos;t have an account?{' '}
-            <Link href="/sign-up" style={{ color: '#111', fontWeight: 600, textDecoration: 'none' }}>
+            <Link href="/sign-up" className="font-semibold text-[#111] no-underline border-b border-[#111] hover:text-[#6B6B6B]">
               Sign up
             </Link>
           </p>
         </div>
       </div>
-
-      <style dangerouslySetInnerHTML={{__html: `
-        @media (min-width: 768px) {
-          .md-flex-col {
-            display: flex !important;
-          }
-        }
-      `}} />
     </div>
-    </ClerkProvider>
   );
 }
