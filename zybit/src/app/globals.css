@@ -26,6 +26,8 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  /* Prevent iOS rubber-band overscroll from sending particles out of bounds */
+  overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

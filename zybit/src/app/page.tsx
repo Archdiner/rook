@@ -200,36 +200,36 @@ export default function Home() {
 
   return (
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
-      <header className="fixed top-0 left-0 w-full px-6 py-5 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
-        <Link href="/" className="flex items-center gap-2.5 no-underline">
+      <header className="fixed top-0 left-0 w-full px-4 sm:px-6 py-3.5 sm:py-5 flex items-center justify-between gap-2 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
+        <Link href="/" className="flex items-center gap-2 no-underline shrink-0">
           <Logo className="w-5 h-5 text-[#111]" />
-          <span className="text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>
+          <span className="text-base sm:text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>
         </Link>
         <nav
-          className="flex flex-wrap items-center justify-end gap-3 md:gap-5 sans-text"
+          className="flex items-center justify-end gap-2 sm:gap-4 md:gap-5 sans-text"
           aria-label="Primary"
         >
           <Link
             href="/sign-up"
-            className="btn-brutalist text-[11px] px-4 py-2.5"
+            className="btn-brutalist text-[10px] sm:text-[11px] px-3 sm:px-4 py-2 sm:py-2.5 whitespace-nowrap"
           >
             Sign up
           </Link>
           <button
             onClick={openModal}
-            className="btn-brutalist text-[11px] px-4 py-2.5"
+            className="btn-brutalist text-[10px] sm:text-[11px] px-3 sm:px-4 py-2 sm:py-2.5 whitespace-nowrap"
           >
             Request Access
           </button>
           <Link
             href="/sign-in"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+            className="hidden sm:block text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
             Sign in
           </Link>
           <Link
             href="/dashboard"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+            className="hidden md:block text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
           >
             Interactive Preview
           </Link>

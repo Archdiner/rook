@@ -387,22 +387,21 @@ void main() {
     transitionState = lastT;
   }
   
-  // Apply cheaper turbulence fluid dynamics only during morphing.
-  // On mobile, reduce intensity significantly for performance
-  float curlScale = 1.2 * (1.0 - uMobile * 0.6);
+  // Turbulence during morphing — on mobile, shapes are at 0.32x scale so world-unit
+  // turbulence is disproportionately large relative to shape size. Keep it very tight.
+  float curlScale = mix(1.2, 0.10, uMobile);
   float noiseIntensity = sin(transitionState * 3.14159) * curlScale;
-  // Drive turbulence partially by scroll progress so it feels physically connected to scrolling
   vec3 curl = cheapTurbulence(target * 0.5 + vec3(0.0, uProgress * 2.0, uTime * 0.2)) * noiseIntensity;
   vec3 finalPos = target + curl;
 
   // SPAWN ANIMATION (Chaotic Coalescence)
-  float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0); 
-  
+  float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0);
+
   // Particles start fully scattered from the dedicated spawnPos buffer
   vec3 chaoticStart = spawnPos;
-  
-  // Add extreme turbulence during the spawn phase so they take curved, flowing paths inward
-  float spawnTurbulence = (1.0 - spawnEase) * 4.0; 
+
+  // Reduce spawn scatter on mobile — 4.0 world-units would dwarf the small shape scale
+  float spawnTurbulence = (1.0 - spawnEase) * mix(4.0, 1.5, uMobile);
   vec3 spawnCurl = cheapTurbulence(chaoticStart * 0.1 + uTime) * spawnTurbulence;
   chaoticStart += spawnCurl;
   
@@ -411,7 +410,9 @@ void main() {
   vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   
-  gl_PointSize = max(1.0, (50.0 - uMobile * 20.0) / -mvPosition.z) * (1.0 + noiseIntensity * 0.3) * spawnEase;
+  // On mobile, suppress the noise-driven size jitter so all particles appear uniform
+  float sizeNoiseMult = mix(1.0 + noiseIntensity * 0.3, 1.0, uMobile);
+  gl_PointSize = max(1.0, (50.0 - uMobile * 20.0) / -mvPosition.z) * sizeNoiseMult * spawnEase;
 }
 `;
 
@@ -433,15 +434,16 @@ function ParticleSwarm() {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
   const pointsRef = useRef<THREE.Points>(null);
   const { viewport, size } = useThree();
-  
+
   const isMobile = size.width < 768;
   const PARTICLE_COUNT = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
   const shapeScale = isMobile ? 0.32 : 1.0;
-  // Data Core gets its own larger scale on mobile so the hero orb has presence
-  // without making DNA/Jet/Microchip/Silk Wave overlap surrounding text.
   const coreScale = isMobile ? 0.65 : 1.0;
-  
+
   const mountTimeRef = useRef<number | null>(null);
+  // Smoothed Y-pan: lerps toward the scroll-driven target each frame on mobile
+  // to eliminate the jitter caused by rapid native-scroll updates during flings.
+  const smoothPanRef = useRef(0);
 
   // Generate centered buffers
   const buffers = useMemo(() => ({
@@ -507,23 +509,25 @@ function ParticleSwarm() {
     }
     const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
     
-    // Linear uP: each shape N is fully formed at scrollInVH === N.
-    // Keeping uP = scrollInVH perfectly couples morph and Y-pan so scroll feels natural.
     const scrollInVH = scrollY / window.innerHeight;
     const uP = Math.min(5, scrollInVH);
 
     // Scale Y-pan so the swarm reaches exactly 5×vh at page bottom regardless of
-    // actual page height. Desktop pages are ~5.07 VH (barely changes). Mobile pages
-    // are ~5.3 VH — without scaling the wave overshoots into the CTA headline.
+    // actual page height, then clamp so iOS overscroll bounce never sends particles
+    // flying past the silk wave at the bottom.
     const maxScrollInVH = Math.max(5.0, (document.documentElement.scrollHeight - window.innerHeight) / window.innerHeight);
-    const panVH = scrollInVH * (5.0 / maxScrollInVH);
+    const targetPanVH = Math.min(5.0, scrollInVH * (5.0 / maxScrollInVH));
+
+    // On mobile, lerp the Y-pan to absorb rapid scroll-position spikes during
+    // momentum flings — keeps particles gliding rather than snapping.
+    const lerpFactor = isMobile ? 0.10 : 1.0;
+    smoothPanRef.current += (targetPanVH - smoothPanRef.current) * lerpFactor;
 
     shaderRef.current.uniforms.uTime.value = time;
     shaderRef.current.uniforms.uProgress.value = uP;
     shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
 
-    // Scaled Y-pan: swarm tracks scroll but always lands at 5×vh at page end
-    pointsRef.current.position.y = panVH * viewport.height;
+    pointsRef.current.position.y = smoothPanRef.current * viewport.height;
   });
 
   return (
@@ -759,9 +763,11 @@ function DocsParticleSwarm() {
 
 /** Majestic, rotating Möbius strip for /docs — symbolizes infinite discovery & optimization. */
 export function DocsParticleCanvas() {
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const dpr: [number, number] = isMobile ? [1, 1] : [1, 1.5];
   return (
     <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
-      <Canvas camera={{ position: [0, 0, 15], fov: 45 }} dpr={[1, 1.5]}>
+      <Canvas camera={{ position: [0, 0, 15], fov: 45 }} dpr={dpr}>
         <ambientLight intensity={1} />
         <DocsParticleSwarm />
       </Canvas>
@@ -890,7 +896,8 @@ void main() {
   vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
   
-  gl_PointSize = max(1.0, (45.0 - uMobile * 18.0) / -mvPosition.z) * spawnEase;
+  // Mobile: slightly larger points (27 vs 27) to compensate for fewer particles
+  gl_PointSize = max(1.0, (45.0 - uMobile * 12.0) / -mvPosition.z) * spawnEase;
 }
 `;
 
@@ -964,9 +971,11 @@ function AuthParticleSwarm() {
 
 /** Distinctive Gateway Portal for Auth flows */
 export function AuthParticleCanvas() {
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const dpr: [number, number] = isMobile ? [1, 1] : [1, 1.5];
   return (
     <div className="fixed inset-0 w-full h-full pointer-events-none z-0">
-      <Canvas camera={{ position: [0, 0, 16], fov: 45 }} dpr={[1, 1.5]}>
+      <Canvas camera={{ position: [0, 0, 16], fov: 45 }} dpr={dpr}>
         <ambientLight intensity={1} />
         <AuthParticleSwarm />
       </Canvas>
@@ -1123,11 +1132,13 @@ void main() {
   // Apply the same offset to all to keep it centered
   target += posOffset;
 
-  float morphChaos = sin(easedT * 3.14159) * 2.0;
+  // Keep morph turbulence gentle on mobile — shapes are small so world-unit chaos looks large
+  float morphChaos = sin(easedT * 3.14159) * mix(2.0, 0.4, uMobile);
   target += cheapTurbulence(target + uTime) * morphChaos;
 
   float spawnEase = 1.0 - pow(1.0 - uSpawnTime, 4.0);
-  vec3 chaotic = spawnPos + cheapTurbulence(spawnPos * 0.1 + uTime) * 10.0 * (1.0 - spawnEase);
+  float dashSpawnChaos = mix(10.0, 3.0, uMobile);
+  vec3 chaotic = spawnPos + cheapTurbulence(spawnPos * 0.1 + uTime) * dashSpawnChaos * (1.0 - spawnEase);
   vec3 finalPos = mix(chaotic, target, spawnEase);
   
   vec4 mvPosition = modelViewMatrix * vec4(finalPos, 1.0);
