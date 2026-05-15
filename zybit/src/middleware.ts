@@ -41,6 +41,17 @@ export default clerkMiddleware(async (auth, req, event) => {
     return NextResponse.next();
   }
 
+  // Redirect already-authenticated users (with an active org) away from auth
+  // pages server-side, before Clerk's client JS can fire its own redirect back
+  // to /app — that client redirect is what causes the login flicker loop.
+  if (pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')) {
+    const { userId, orgId } = await auth();
+    if (userId && orgId) {
+      return NextResponse.redirect(new URL('/app', req.url));
+    }
+    return NextResponse.next();
+  }
+
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
