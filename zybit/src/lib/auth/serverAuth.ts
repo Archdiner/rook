@@ -1,18 +1,17 @@
-import { auth } from '@clerk/nextjs/server';
-import { isClerkEnabled } from './clerkConfig';
+import { cookies } from 'next/headers';
+import { getSessionUser } from './session';
 
-type ServerAuthResult =
-  | { ok: true; orgId: string; userId: string | null }
-  | { ok: false; reason: 'unauthenticated' | 'no_org' };
+export type ServerAuthResult =
+  | { ok: true; orgId: string; userId: string }
+  | { ok: false; reason: 'unauthenticated' };
 
 export async function getServerAuth(): Promise<ServerAuthResult> {
-  if (!isClerkEnabled()) {
-    const orgId = process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? 'org_default';
-    return { ok: true, orgId, userId: null };
-  }
+  const cookieStore = await cookies();
+  const token = cookieStore.get('zb_session')?.value;
+  if (!token) return { ok: false, reason: 'unauthenticated' };
 
-  const { userId, orgId } = await auth();
-  if (!userId) return { ok: false, reason: 'unauthenticated' };
-  if (!orgId) return { ok: false, reason: 'no_org' };
-  return { ok: true, orgId, userId };
+  const user = await getSessionUser(token);
+  if (!user) return { ok: false, reason: 'unauthenticated' };
+
+  return { ok: true, orgId: user.organizationId, userId: user.userId };
 }

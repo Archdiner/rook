@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import {
@@ -9,10 +9,7 @@ import {
 } from '@/app/api/phase1/_shared';
 
 import { validateForgeApiKeyBearer } from './apiKeys';
-
-function isClerkEnforced(): boolean {
-  return process.env.FORGE_CLERK_ENABLED === '1' && Boolean(process.env.CLERK_SECRET_KEY);
-}
+import { getSessionUser } from './session';
 
 function parseBearerForgeKey(request: Request): string | null {
   const raw = request.headers.get('authorization');
@@ -51,6 +48,7 @@ export async function resolveZybitActor(
 ): Promise<
   { ok: true; actor: ZybitActor } | { ok: false; response: NextResponse }
 > {
+  // 1. Zybit API key (Bearer zybit_sk_…)
   const apiToken = parseBearerForgeKey(request);
   if (apiToken) {
     const validated = await validateForgeApiKeyBearer(apiToken);
@@ -73,35 +71,22 @@ export async function resolveZybitActor(
     };
   }
 
-  if (isClerkEnforced()) {
-    const { userId, orgId } = await auth();
-    if (!userId) {
-      return { ok: false, response: unauthorized('Authentication required.', 'UNAUTHORIZED') };
-    }
-    if (!orgId) {
+  // 2. Browser session cookie
+  const cookieStore = await cookies();
+  const sessionToken = cookieStore.get('zb_session')?.value;
+  if (sessionToken) {
+    const user = await getSessionUser(sessionToken);
+    if (user) {
+      const mismatch = rejectForeignOrg(options?.bodyOrganizationId, user.organizationId);
+      if (mismatch) return { ok: false, response: mismatch };
       return {
-        ok: false,
-        response: NextResponse.json(
-          {
-            success: false,
-            error: {
-              code: 'ACTIVE_ORG_REQUIRED',
-              message:
-                'Choose an active organization (Clerk organization switcher) before calling this API.',
-            },
-          },
-          { status: 400 }
-        ),
+        ok: true,
+        actor: { kind: 'session', organizationId: user.organizationId, userId: user.userId },
       };
     }
-    const mismatch = rejectForeignOrg(options?.bodyOrganizationId, orgId);
-    if (mismatch) return { ok: false, response: mismatch };
-    return {
-      ok: true,
-      actor: { kind: 'session', organizationId: orgId, userId },
-    };
   }
 
+  // 3. Dev header (x-org-id) / query fallback
   const orgContext = resolveOrganizationContext(request, {
     bodyOrganizationId: options?.bodyOrganizationId,
     allowQueryFallback: options?.allowQueryFallback ?? true,

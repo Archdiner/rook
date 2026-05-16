@@ -11,6 +11,57 @@ import {
 } from 'drizzle-orm/pg-core';
 
 // ---------------------------------------------------------------------------
+// Auth — users, magic-link tokens, sessions (Clerk-free invite-only auth)
+// ---------------------------------------------------------------------------
+
+export const appUsers = pgTable(
+  'app_users',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    organizationId: text('organization_id').notNull(),
+    role: text('role').notNull().default('member'), // 'member' | 'admin'
+    status: text('status').notNull().default('approved'), // 'approved' | 'revoked'
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    emailIdx: uniqueIndex('app_users_email_idx').on(table.email),
+    orgIdx: index('app_users_org_idx').on(table.organizationId),
+  })
+);
+
+export const authMagicLinks = pgTable(
+  'auth_magic_links',
+  {
+    id: text('id').primaryKey(),
+    email: text('email').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tokenHashIdx: uniqueIndex('auth_magic_links_token_hash_idx').on(table.tokenHash),
+    emailIdx: index('auth_magic_links_email_idx').on(table.email),
+  })
+);
+
+export const authSessions = pgTable(
+  'auth_sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    tokenHashIdx: uniqueIndex('auth_sessions_token_hash_idx').on(table.tokenHash),
+    userIdx: index('auth_sessions_user_idx').on(table.userId),
+  })
+);
+
+// ---------------------------------------------------------------------------
 // Phase 1 (capture): headless page captures + blob assets + run tracking
 // ---------------------------------------------------------------------------
 

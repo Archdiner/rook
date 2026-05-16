@@ -1,64 +1,66 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
-import { NextResponse } from 'next/server';
+import { type NextFetchEvent, type NextRequest, NextResponse } from 'next/server';
 import { handleProxyRequest } from '@/lib/experiments/proxy/handler';
 import { isProxyHost } from '@/lib/experiments/proxy/host';
-import { isClerkEnabled } from '@/lib/auth/clerkConfig';
 
-const isPublicRoute = createRouteMatcher([
-  '/',
-  '/dashboard(.*)',
-  '/docs(.*)',
-  '/discovery(.*)',
-  '/sign-in(.*)',
-  '/sign-up(.*)',
+const PUBLIC_PREFIXES = [
+  '/sign-in',
+  '/api/auth',
+  '/api/admin/login',
+  '/dashboard',
+  '/docs',
+  '/discovery',
   '/api/intake',
   '/api/discovery',
   '/api/phase1/health',
   '/api/phase2/health',
   '/api/billing/webhook',
-  '/api/loader(.*)',
-]);
+  '/api/loader',
+  '/api/proxy',
+];
+
+function isPublicPath(pathname: string): boolean {
+  if (pathname === '/') return true;
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/') || pathname.startsWith(p + '?'));
+}
 
 function isSegmentWebhookPath(pathname: string): boolean {
   return /^\/api\/phase2\/integrations\/[^/]+\/segment-webhook\/?$/.test(pathname);
 }
 
-// Gate route protection on the SAME condition that renders <ClerkProvider>
-// (see lib/auth/clerkConfig). If middleware protected routes while the
-// provider was absent, /app would redirect to a /sign-in page that cannot
-// mount Clerk's <SignIn> — the exact cause of the login flicker loop.
-const clerkProtectionEnabled = isClerkEnabled;
+export default async function middleware(req: NextRequest, event: NextFetchEvent) {
+  const { pathname } = req.nextUrl;
 
-export default clerkMiddleware(async (auth, req, event) => {
-  const pathname = req.nextUrl.pathname;
+  // Experiment proxy — must run before all auth checks
+  if (isProxyHost(req.nextUrl.hostname)) {
+    return handleProxyRequest(req, event);
+  }
 
   if (pathname.startsWith('/api/proxy/')) {
     return NextResponse.next();
   }
 
-  if (isProxyHost(req.nextUrl.hostname)) {
-    return handleProxyRequest(req, event);
-  }
-
-  if (!clerkProtectionEnabled()) {
-    return NextResponse.next();
-  }
-
-  // Redirect already-authenticated users (with an active org) away from auth
-  // pages server-side, before Clerk's client JS can fire its own redirect back
-  // to /app — that client redirect is what causes the login flicker loop.
-  if (pathname.startsWith('/sign-in') || pathname.startsWith('/sign-up')) {
-    const { userId, orgId } = await auth();
-    if (userId && orgId) {
-      return NextResponse.redirect(new URL('/app', req.url));
+  // Admin pages: presence-check on zb_admin cookie (full HMAC verify in server component)
+  if (pathname.startsWith('/admin') && !pathname.startsWith('/admin/login') && !pathname.startsWith('/api/admin/login')) {
+    if (!req.cookies.get('zb_admin')) {
+      return NextResponse.redirect(new URL('/admin/login', req.url));
     }
     return NextResponse.next();
   }
 
-  if (isPublicRoute(req)) {
+  // App pages: presence-check on zb_session cookie (full DB verify in layout)
+  if (pathname.startsWith('/app')) {
+    if (!req.cookies.get('zb_session')) {
+      return NextResponse.redirect(new URL('/sign-in', req.url));
+    }
     return NextResponse.next();
   }
 
+  // Public paths — no auth needed
+  if (isPublicPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  // API routes with their own auth (API keys, segment webhooks, cron)
   if (isSegmentWebhookPath(pathname)) {
     const authz = req.headers.get('authorization');
     const hasBearerCred =
@@ -71,11 +73,10 @@ export default clerkMiddleware(async (auth, req, event) => {
           success: false,
           error: {
             code: 'SEGMENT_WEBHOOK_UNAUTHORIZED',
-            message:
-              'Send Authorization: Bearer <token> matching the env var referenced by integration.secretRef.',
+            message: 'Send Authorization: Bearer <token> matching the env var referenced by integration.secretRef.',
           },
         },
-        { status: 401 },
+        { status: 401 }
       );
     }
     return NextResponse.next();
@@ -90,8 +91,12 @@ export default clerkMiddleware(async (auth, req, event) => {
     return NextResponse.next();
   }
 
-  await auth.protect();
-});
+  // Everything else: require app session
+  if (!req.cookies.get('zb_session')) {
+    return NextResponse.redirect(new URL('/sign-in', req.url));
+  }
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
