@@ -387,9 +387,9 @@ void main() {
     transitionState = lastT;
   }
   
-  // Turbulence during morphing — on mobile, shapes are at 0.32x scale so world-unit
-  // turbulence is disproportionately large relative to shape size. Keep it very tight.
-  float curlScale = mix(1.2, 0.10, uMobile);
+  // Zero turbulence on mobile so each particle follows its exact interpolated path
+  // (preset-path feel). Desktop keeps subtle turbulence for organic interest.
+  float curlScale = mix(1.2, 0.0, uMobile);
   float noiseIntensity = sin(transitionState * 3.14159) * curlScale;
   vec3 curl = cheapTurbulence(target * 0.5 + vec3(0.0, uProgress * 2.0, uTime * 0.2)) * noiseIntensity;
   vec3 finalPos = target + curl;
@@ -400,8 +400,8 @@ void main() {
   // Particles start fully scattered from the dedicated spawnPos buffer
   vec3 chaoticStart = spawnPos;
 
-  // Reduce spawn scatter on mobile — 4.0 world-units would dwarf the small shape scale
-  float spawnTurbulence = (1.0 - spawnEase) * mix(4.0, 1.5, uMobile);
+  // Reduce spawn scatter on mobile — keep entry tight so particles coalesce smoothly
+  float spawnTurbulence = (1.0 - spawnEase) * mix(4.0, 0.5, uMobile);
   vec3 spawnCurl = cheapTurbulence(chaoticStart * 0.1 + uTime) * spawnTurbulence;
   chaoticStart += spawnCurl;
   
@@ -428,7 +428,7 @@ void main() {
 // --- The GPU Particle Swarm ---
 
 const PARTICLE_COUNT_DESKTOP = 50000;
-const PARTICLE_COUNT_MOBILE = 20000;
+const PARTICLE_COUNT_MOBILE = 10000;
 
 function ParticleSwarm() {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);
@@ -441,9 +441,9 @@ function ParticleSwarm() {
   const coreScale = isMobile ? 0.65 : 1.0;
 
   const mountTimeRef = useRef<number | null>(null);
-  // Smoothed Y-pan: lerps toward the scroll-driven target each frame on mobile
-  // to eliminate the jitter caused by rapid native-scroll updates during flings.
+  // Both refs lerp with the same factor so Y-pan and morph progress stay in sync.
   const smoothPanRef = useRef(0);
+  const smoothProgressRef = useRef(0);
 
   // Generate centered buffers
   const buffers = useMemo(() => ({
@@ -467,7 +467,7 @@ function ParticleSwarm() {
         new THREE.Vector3(0, vh * 0.2, -1),            // 0: DataCore
         new THREE.Vector3(0, -vh + vh * 0.2, -1),      // 1: DNA
         new THREE.Vector3(0, -vh * 2 + vh * 0.2, -1),  // 2: Jet
-        new THREE.Vector3(0, -vh * 3 + vh * 0.1, -1),  // 3: Chip
+        new THREE.Vector3(0, -vh * 3 - vh * 0.15, -1), // 3: Chip — pushed below top text
         new THREE.Vector3(0, -vh * 4, -1),              // 4: Scatter (finding card)
         new THREE.Vector3(0, -vh * 5 - 0.5, -1),       // 5: SilkWave (CTA)
       ];
@@ -518,14 +518,15 @@ function ParticleSwarm() {
     const maxScrollInVH = Math.max(5.0, (document.documentElement.scrollHeight - window.innerHeight) / window.innerHeight);
     const targetPanVH = Math.min(5.0, scrollInVH * (5.0 / maxScrollInVH));
 
-    // On mobile, smooth the Y-pan using an exponential decay so the glide speed is
-    // identical at 60 Hz, 90 Hz, and 120 Hz (ProMotion). lambda=6 → ~95% of the
-    // remaining gap is closed in ~0.5 s regardless of frame rate.
-    const lerpFactor = isMobile ? 1 - Math.exp(-6 * delta) : 1.0;
+    // Exponential-decay lerp at lambda=5: smooth on 60/90/120 Hz ProMotion without lag.
+    // Both Y-pan and morph progress use the same factor so they stay perfectly in sync,
+    // giving particles a preset-path feel where movement is fully determined by scroll.
+    const lerpFactor = isMobile ? 1 - Math.exp(-5 * delta) : 1.0;
     smoothPanRef.current += (targetPanVH - smoothPanRef.current) * lerpFactor;
+    smoothProgressRef.current += (uP - smoothProgressRef.current) * lerpFactor;
 
     shaderRef.current.uniforms.uTime.value = time;
-    shaderRef.current.uniforms.uProgress.value = uP;
+    shaderRef.current.uniforms.uProgress.value = isMobile ? smoothProgressRef.current : uP;
     shaderRef.current.uniforms.uSpawnTime.value = Math.min(1.0, elapsedSpawn);
 
     pointsRef.current.position.y = smoothPanRef.current * viewport.height;

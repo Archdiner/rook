@@ -15,7 +15,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
     <div className="w-full text-[#111]">
       {/* Hero: Data Core is compact, text can sit close below */}
       <section className="h-screen w-full flex flex-col justify-end md:justify-center px-6 md:px-24 pb-10 md:pb-0 pointer-events-none">
-        <div className="w-full max-w-[700px]">
+        <div className="w-full max-w-[700px] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
           <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-4 md:mb-6">
             For product managers
           </div>
@@ -36,7 +36,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
 
       {/* Section 2: DNA — on mobile text starts below the helix */}
       <section className="h-screen w-full flex flex-col pt-[65vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="w-full md:max-w-[500px] md:mt-[20vh]">
+        <div className="w-full md:max-w-[500px] md:mt-[20vh] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>If the journey is broken, your analytics already show it: missed clicks, weak conversion, repetitive loops.</p>
@@ -47,7 +47,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
 
       {/* Section 3: Jet — text sits below the jet silhouette */}
       <section className="h-screen w-full flex flex-col pt-[55vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
-        <div className="w-full md:max-w-[500px] md:mt-[20vh]">
+        <div className="w-full md:max-w-[500px] md:mt-[20vh] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>Priorities mirror the friction visible in your data.</p>
@@ -58,7 +58,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
 
       {/* Section 4: Microchip — text near top, chip rendered below */}
       <section className="h-screen w-full flex flex-col pt-[12vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="w-full md:max-w-[500px] md:mt-[15vh]">
+        <div className="w-full md:max-w-[500px] md:mt-[15vh] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
           <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">What Zybit means.</h2>
           <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
             <p>
@@ -70,7 +70,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
       </section>
 
       {/* Section 5: Sample Finding — screenshot + receipt card */}
-      <section className="min-h-screen w-full flex items-center justify-center px-6 py-24 pointer-events-none">
+      <section className="min-h-screen w-full flex items-center justify-center px-6 py-24 pointer-events-none bg-[#FAFAF8]">
         <div className="w-full max-w-5xl">
           <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-8 md:mb-10 text-center">
             Sample finding
@@ -163,10 +163,10 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
 
       {/* Section 6: CTA */}
       <section className="h-screen w-full flex flex-col items-center justify-center text-center px-6">
-        <h2 className="sans-text text-3xl sm:text-5xl md:text-8xl font-bold tracking-tighter mb-4 md:mb-6 pointer-events-none">
+        <h2 className="sans-text text-3xl sm:text-5xl md:text-8xl font-bold tracking-tighter mb-4 md:mb-6 pointer-events-none bg-[#FAFAF8] px-4 py-2">
           See if Zybit fits.
         </h2>
-        <div className="sans-text pointer-events-none mb-8 max-w-md mx-auto space-y-2 text-sm text-[#6B6B6B] md:mb-12 md:text-lg">
+        <div className="sans-text pointer-events-none mb-8 max-w-md mx-auto space-y-2 text-sm text-[#6B6B6B] md:mb-12 md:text-lg bg-[#FAFAF8] px-4 py-3">
           <p>Send your site—we&rsquo;ll review your funnel manually.</p>
           <p>We&rsquo;ll only reach out if there&rsquo;s a real match.</p>
         </div>
