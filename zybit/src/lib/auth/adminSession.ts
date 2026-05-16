@@ -1,10 +1,17 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 export const ADMIN_COOKIE = 'zb_admin';
 const ADMIN_SESSION_HOURS = 24;
 
 function secret(): string {
-  return process.env.ADMIN_PASSWORD ?? 'dev-admin-secret';
+  const pass = process.env.ADMIN_PASSWORD;
+  if (!pass) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('ADMIN_PASSWORD environment variable is required in production');
+    }
+    return 'dev-admin-secret';
+  }
+  return pass;
 }
 
 export function mintAdminCookie(): string {
@@ -20,8 +27,10 @@ export function verifyAdminCookie(value: string | undefined): boolean {
   const expiry = value.slice(0, dot);
   const sig = value.slice(dot + 1);
   if (Number(expiry) < Date.now()) return false;
-  const expected = createHmac('sha256', secret()).update(expiry).digest('hex');
-  return expected === sig;
+  const expected = createHmac('sha256', secret()).update(expiry).digest();
+  const provided = Buffer.from(sig, 'hex');
+  if (provided.length !== expected.length) return false;
+  return timingSafeEqual(expected, provided);
 }
 
 export const adminCookieOptions = {

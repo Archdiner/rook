@@ -65,14 +65,16 @@ export async function POST(request: NextRequest) {
   const orgId = `org_${randomUUID().replace(/-/g, '')}`;
   const userId = randomUUID();
 
-  await db.insert(organizations).values({ id: orgId, name: orgName }).onConflictDoNothing();
-  await db.insert(appUsers).values({
-    id: userId,
-    email,
-    organizationId: orgId,
-    role: 'member',
-    status: 'approved',
-  });
+  await db.batch([
+    db.insert(organizations).values({ id: orgId, name: orgName }).onConflictDoNothing(),
+    db.insert(appUsers).values({
+      id: userId,
+      email,
+      organizationId: orgId,
+      role: 'member',
+      status: 'approved',
+    }),
+  ]);
 
   return NextResponse.json({ userId, orgId, email });
 }

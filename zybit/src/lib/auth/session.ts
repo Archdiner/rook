@@ -49,8 +49,8 @@ export async function consumeMagicLink(token: string): Promise<string | null> {
   const now = new Date();
 
   const [link] = await db
-    .select({ id: authMagicLinks.id, email: authMagicLinks.email })
-    .from(authMagicLinks)
+    .update(authMagicLinks)
+    .set({ consumedAt: now })
     .where(
       and(
         eq(authMagicLinks.tokenHash, tokenHash),
@@ -58,13 +58,8 @@ export async function consumeMagicLink(token: string): Promise<string | null> {
         isNull(authMagicLinks.consumedAt)
       )
     )
-    .limit(1);
+    .returning({ email: authMagicLinks.email });
   if (!link) return null;
-
-  await db
-    .update(authMagicLinks)
-    .set({ consumedAt: now })
-    .where(eq(authMagicLinks.id, link.id));
 
   const [user] = await db
     .select({ id: appUsers.id })
