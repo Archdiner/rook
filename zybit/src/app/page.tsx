@@ -200,40 +200,82 @@ export default function Home() {
 
   return (
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
-      <header className="fixed top-0 left-0 w-full px-6 py-5 flex flex-wrap items-center justify-between gap-y-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
-        <Link href="/" className="flex items-center gap-2.5 no-underline">
-          <Logo className="w-5 h-5 text-[#111]" />
-          <span className="text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>
-        </Link>
-        <nav
-          className="flex flex-wrap items-center justify-end gap-3 md:gap-5 sans-text"
-          aria-label="Primary"
-        >
-          <Link
-            href="/sign-up"
-            className="btn-brutalist text-[11px] px-4 py-2.5"
-          >
-            Sign up
+      <header className="fixed top-0 left-0 w-full z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
+
+        {/* ── Mobile: two intentional rows (< 768px, matching particle background threshold) ── */}
+        <div className="md:hidden">
+          {/* Row 1: brand + secondary nav */}
+          <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5">
+            <Link href="/" className="flex items-center gap-2 no-underline">
+              <Logo className="w-4 h-4 text-[#111]" />
+              <span className="text-[15px] font-bold tracking-tight text-[#111] sans-text">Zybit</span>
+            </Link>
+            <nav className="flex items-center gap-4 sans-text" aria-label="Secondary">
+              <Link
+                href="/sign-in"
+                className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] hover:text-[#111] transition-colors"
+              >
+                Sign in
+              </Link>
+              <Link
+                href="/dashboard"
+                className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] hover:text-[#111] transition-colors"
+              >
+                Preview
+              </Link>
+            </nav>
+          </div>
+          {/* Row 2: primary CTAs */}
+          <div className="grid grid-cols-2 gap-2 px-4 pb-3 sans-text">
+            <Link
+              href="/sign-up"
+              className="btn-brutalist text-[10px] py-2.5 text-center whitespace-nowrap"
+            >
+              Sign up
+            </Link>
+            <button
+              onClick={openModal}
+              className="btn-brutalist text-[10px] py-2.5 w-full whitespace-nowrap"
+            >
+              Request Access
+            </button>
+          </div>
+        </div>
+
+        {/* ── Desktop (md+, 768px+): single row ── */}
+        <div className="hidden md:flex items-center justify-between px-6 py-5">
+          <Link href="/" className="flex items-center gap-2.5 no-underline">
+            <Logo className="w-5 h-5 text-[#111]" />
+            <span className="text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>
           </Link>
-          <button
-            onClick={openModal}
-            className="btn-brutalist text-[11px] px-4 py-2.5"
-          >
-            Request Access
-          </button>
-          <Link
-            href="/sign-in"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/dashboard"
-            className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-          >
-            Interactive Preview
-          </Link>
-        </nav>
+          <nav className="flex items-center gap-5 sans-text" aria-label="Primary">
+            <Link
+              href="/sign-up"
+              className="btn-brutalist text-[11px] px-4 py-2.5"
+            >
+              Sign up
+            </Link>
+            <button
+              onClick={openModal}
+              className="btn-brutalist text-[11px] px-4 py-2.5"
+            >
+              Request Access
+            </button>
+            <Link
+              href="/sign-in"
+              className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+            >
+              Sign in
+            </Link>
+            <Link
+              href="/dashboard"
+              className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
+            >
+              Interactive Preview
+            </Link>
+          </nav>
+        </div>
+
       </header>
 
       <ParticleCanvas />

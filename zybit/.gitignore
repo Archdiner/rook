@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Local-only product narrative (full PRD); keep out of version control
 PRD.full.md
+
+# clerk configuration (can include secrets)
+/.clerk/
