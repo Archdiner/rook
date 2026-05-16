@@ -42,8 +42,6 @@ type DiagnosticsRow = {
 export default function Phase2InsightsPage(): React.ReactElement {
   const defaultOrg = useMemo(() => process.env.NEXT_PUBLIC_DEFAULT_ORG_ID ?? "org_default", []);
 
-  const clerkEnabled = useMemo(() => process.env.NEXT_PUBLIC_FORGE_CLERK_ENABLED === "true", []);
-
   const [organizationId] = useState(defaultOrg);
 
   const apiFetch = useCallback(
@@ -52,9 +50,8 @@ export default function Phase2InsightsPage(): React.ReactElement {
         ...(init?.headers as Record<string, string> | undefined),
       };
       const headers = new Headers(baseHeaders);
-      if (!clerkEnabled) {
-        headers.set("x-org-id", organizationId);
-      }
+      // Always send the org header as a fallback for the dev_header actor path.
+      headers.set("x-org-id", organizationId);
       if (
         !headers.has("Content-Type") &&
         init?.method &&
@@ -68,11 +65,11 @@ export default function Phase2InsightsPage(): React.ReactElement {
       }
       return fetch(input, {
         ...init,
-        credentials: clerkEnabled ? "include" : "same-origin",
+        credentials: "include",
         headers,
       });
     },
-    [clerkEnabled, organizationId],
+    [organizationId],
   );
 
   type SiteMini = { id: string; name: string };

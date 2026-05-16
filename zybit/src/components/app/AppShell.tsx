@@ -115,6 +115,19 @@ export default function AppShell({ domain, children }: AppShellProps) {
           {BOTTOM_NAV.map((item) => (
             <NavLink key={item.href} item={item} active={isActive(item.href)} />
           ))}
+          <form action="/api/auth/sign-out" method="post" className="w-full">
+            <button
+              type="submit"
+              className="flex items-center gap-3 w-full px-3 py-2 rounded-lg text-sm font-medium text-white/50 hover:text-white/80 hover:bg-white/[0.05] transition-colors"
+            >
+              <span className="text-white/40">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+                  <path d="M6 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3M11 11l3-3-3-3M14 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              Sign out
+            </button>
+          </form>
         </div>
       </aside>
 

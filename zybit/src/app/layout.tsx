@@ -1,7 +1,5 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
-import { isClerkEnabled } from "@/lib/auth/clerkConfig";
 import "./globals.css";
 
 const inter = Inter({
@@ -17,7 +15,6 @@ const newsreader = Newsreader({
   style: ["normal", "italic"],
 });
 
-
 export const metadata: Metadata = {
   title: "Zybit — Clarity over intuition",
   description:
@@ -29,16 +26,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const content = isClerkEnabled() ? (
-    <ClerkProvider>{children}</ClerkProvider>
-  ) : (
-    children
-  );
-
   return (
     <html lang="en" className={`${inter.variable} ${newsreader.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
-        {content}
+        {children}
       </body>
     </html>
   );

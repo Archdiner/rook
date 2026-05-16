@@ -7,6 +7,8 @@ import { Logo } from "@/components/logo";
 const FOUNDERS_CALENDLY = "https://calendly.com/asad-getzybit/30min";
 
 const MOBILE_QUERY = "(max-width: 767px)";
+const SCROLL_THRESHOLD = 6;
+const HIDE_NAV_THRESHOLD = 48;
 
 // Shared across the landing page and the interactive demo so the nav never
 // diverges again. Toned-down: thin bordered chips instead of heavy brutalist
@@ -17,25 +19,25 @@ export function SiteNav({ onRequestAccess }: { onRequestAccess: () => void }) {
   const lastY = useRef(0);
 
   useEffect(() => {
+    const mql = window.matchMedia(MOBILE_QUERY);
     lastY.current = window.scrollY;
 
     const handleScroll = () => {
       const y = window.scrollY;
       const delta = y - lastY.current;
-      const isMobile = window.matchMedia(MOBILE_QUERY).matches;
+      const isMobile = mql.matches;
 
-      if (!isMobile || y < 48) {
+      if (!isMobile || y < HIDE_NAV_THRESHOLD) {
         setHidden(false);
-      } else if (delta > 6) {
+      } else if (delta > SCROLL_THRESHOLD) {
         setHidden(true);
-      } else if (delta < -6) {
+      } else if (delta < -SCROLL_THRESHOLD) {
         setHidden(false);
       }
       lastY.current = y;
     };
 
     // Desktop must always show the bar even if it was hidden on a narrow viewport.
-    const mql = window.matchMedia(MOBILE_QUERY);
     const handleViewportChange = () => {
       if (!mql.matches) setHidden(false);
     };
@@ -75,7 +77,7 @@ export function SiteNav({ onRequestAccess }: { onRequestAccess: () => void }) {
             </Link>
           </nav>
         </div>
-        <div className="grid grid-cols-3 gap-2 px-4 pb-2.5 sans-text">
+        <div className="grid grid-cols-2 gap-2 px-4 pb-2.5 sans-text">
           <a
             href={FOUNDERS_CALENDLY}
             target="_blank"
@@ -84,9 +86,6 @@ export function SiteNav({ onRequestAccess }: { onRequestAccess: () => void }) {
           >
             Founders
           </a>
-          <Link href="/sign-up" className={`${chip} py-2 text-center whitespace-nowrap`}>
-            Sign up
-          </Link>
           <button onClick={onRequestAccess} className={`${chip} py-2 w-full whitespace-nowrap`}>
             Access
           </button>
@@ -111,9 +110,6 @@ export function SiteNav({ onRequestAccess }: { onRequestAccess: () => void }) {
           <button onClick={onRequestAccess} className={`${chip} px-3.5 py-1.5`}>
             Request Access
           </button>
-          <Link href="/sign-up" className={subtleLink}>
-            Sign up
-          </Link>
           <Link href="/sign-in" className={subtleLink}>
             Sign in
           </Link>
