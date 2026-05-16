@@ -202,8 +202,8 @@ export default function Home() {
     <main className="relative w-full bg-[#FAFAF8] text-[#111]">
       <header className="fixed top-0 left-0 w-full z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
 
-        {/* ── Mobile: two intentional rows ── */}
-        <div className="sm:hidden">
+        {/* ── Mobile: two intentional rows (< 768px, matching particle background threshold) ── */}
+        <div className="md:hidden">
           {/* Row 1: brand + secondary nav */}
           <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5">
             <Link href="/" className="flex items-center gap-2 no-underline">
@@ -242,8 +242,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── Desktop (sm+): single row ── */}
-        <div className="hidden sm:flex items-center justify-between px-6 py-5">
+        {/* ── Desktop (md+, 768px+): single row ── */}
+        <div className="hidden md:flex items-center justify-between px-6 py-5">
           <Link href="/" className="flex items-center gap-2.5 no-underline">
             <Logo className="w-5 h-5 text-[#111]" />
             <span className="text-lg font-bold tracking-tight text-[#111] sans-text">Zybit</span>

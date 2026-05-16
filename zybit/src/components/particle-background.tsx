@@ -493,11 +493,11 @@ function ParticleSwarm() {
 
   }), [offsets, shapeScale, coreScale, isMobile]);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!shaderRef.current || !pointsRef.current) return;
-    
+
     const time = state.clock.getElapsedTime();
-    
+
     // Use native scroll for zero-latency syncing
     // Clamp scrollY to prevent negative values (overscroll bounce on Mac/iOS)
     const scrollY = Math.max(0, window.scrollY);
@@ -518,9 +518,10 @@ function ParticleSwarm() {
     const maxScrollInVH = Math.max(5.0, (document.documentElement.scrollHeight - window.innerHeight) / window.innerHeight);
     const targetPanVH = Math.min(5.0, scrollInVH * (5.0 / maxScrollInVH));
 
-    // On mobile, lerp the Y-pan to absorb rapid scroll-position spikes during
-    // momentum flings — keeps particles gliding rather than snapping.
-    const lerpFactor = isMobile ? 0.10 : 1.0;
+    // On mobile, smooth the Y-pan using an exponential decay so the glide speed is
+    // identical at 60 Hz, 90 Hz, and 120 Hz (ProMotion). lambda=6 → ~95% of the
+    // remaining gap is closed in ~0.5 s regardless of frame rate.
+    const lerpFactor = isMobile ? 1 - Math.exp(-6 * delta) : 1.0;
     smoothPanRef.current += (targetPanVH - smoothPanRef.current) * lerpFactor;
 
     shaderRef.current.uniforms.uTime.value = time;
