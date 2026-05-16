@@ -1,4 +1,4 @@
-import {ClerkProvider} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
 import "./globals.css";
@@ -23,17 +23,28 @@ export const metadata: Metadata = {
     "Zybit turns real user behavior into ranked product and UX changes aimed at actual pain—stalls, confusion, drop-offs—not generic redesigns. Behavior-first decisions your team can explain.",
 };
 
+function isClerkEnabled() {
+  return (
+    process.env.FORGE_CLERK_ENABLED === '1' &&
+    Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const content = isClerkEnabled() ? (
+    <ClerkProvider>{children}</ClerkProvider>
+  ) : (
+    children
+  );
+
   return (
     <html lang="en" className={`${inter.variable} ${newsreader.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <ClerkProvider>
-          {children}
-        </ClerkProvider>
+        {content}
       </body>
     </html>
   );

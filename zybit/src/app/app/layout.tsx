@@ -14,7 +14,9 @@ export default async function AppLayout({
   const authResult = await getServerAuth();
 
   if (!authResult.ok) {
-    redirect("/sign-in");
+    // unauthenticated → sign-in; no active org → home (not sign-in, which
+    // would loop because Clerk re-redirects authenticated users back to /app).
+    redirect(authResult.reason === 'no_org' ? '/' : '/sign-in');
   }
 
   const { orgId } = authResult;
