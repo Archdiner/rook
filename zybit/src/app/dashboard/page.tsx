@@ -1,47 +1,11 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import Link from "next/link";
 import { motion, useScroll, useTransform } from "framer-motion";
 import { IntakeModal } from "@/components/IntakeModal";
-import { Logo } from "@/components/logo";
 import { DashboardParticleCanvas } from "@/components/particle-background";
 import { MockWebsite } from "@/components/MockWebsite";
-
-const FOUNDERS_CALENDLY = "https://calendly.com/asad-getzybit/30min";
-
-function TopNav() {
-  return (
-    <header className="fixed top-0 left-0 w-full px-4 sm:px-6 py-4 sm:py-6 flex items-center justify-between gap-4 z-50 pointer-events-auto backdrop-blur-md bg-[rgba(250,250,248,0.85)] border-b border-black/[0.04]">
-      <Link href="/" className="flex items-center gap-3 no-underline">
-        <Logo className="w-6 h-6 text-[#111]" />
-        <span className="text-xl font-bold tracking-tight text-[#111] sans-text">Zybit</span>
-      </Link>
-      <nav className="flex items-center gap-6 md:gap-8 sans-text">
-        <a
-          href={FOUNDERS_CALENDLY}
-          target="_blank"
-          rel="noreferrer"
-          className="hidden md:inline-block text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
-        >
-          Talk to founders
-        </a>
-        <Link
-          href="/sign-in"
-          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] transition-colors hover:text-[#111]"
-        >
-          Sign in
-        </Link>
-        <Link
-          href="/sign-up"
-          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#111] border border-[#111] px-4 py-2 transition-colors hover:bg-[#111] hover:text-[#FAFAF8]"
-        >
-          Sign up
-        </Link>
-      </nav>
-    </header>
-  );
-}
+import { SiteNav } from "@/components/SiteNav";
 
 export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,7 +28,7 @@ export default function DashboardPage() {
 
   return (
     <div className="bg-[#FAFAF8] font-sans selection:bg-[#111] selection:text-[#FAFAF8] relative">
-      <TopNav />
+      <SiteNav onRequestAccess={() => setIsModalOpen(true)} />
       
       {/* 500vh container to allow for a long scroll experience */}
       <div ref={containerRef} className="h-[500vh] w-full relative">

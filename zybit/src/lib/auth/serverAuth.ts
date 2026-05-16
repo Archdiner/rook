@@ -1,15 +1,9 @@
 import { auth } from '@clerk/nextjs/server';
+import { isClerkEnabled } from './clerkConfig';
 
 type ServerAuthResult =
   | { ok: true; orgId: string; userId: string | null }
   | { ok: false; reason: 'unauthenticated' | 'no_org' };
-
-function isClerkEnabled(): boolean {
-  return (
-    process.env.FORGE_CLERK_ENABLED === '1' &&
-    Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
-  );
-}
 
 export async function getServerAuth(): Promise<ServerAuthResult> {
   if (!isClerkEnabled()) {
