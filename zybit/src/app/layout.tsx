@@ -1,6 +1,7 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
+import { isClerkEnabled } from "@/lib/auth/clerkConfig";
 import "./globals.css";
 
 const inter = Inter({
@@ -22,13 +23,6 @@ export const metadata: Metadata = {
   description:
     "Zybit turns real user behavior into ranked product and UX changes aimed at actual pain—stalls, confusion, drop-offs—not generic redesigns. Behavior-first decisions your team can explain.",
 };
-
-function isClerkEnabled() {
-  return (
-    process.env.FORGE_CLERK_ENABLED === '1' &&
-    Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)
-  );
-}
 
 export default function RootLayout({
   children,

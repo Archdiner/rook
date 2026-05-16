@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { handleProxyRequest } from '@/lib/experiments/proxy/handler';
 import { isProxyHost } from '@/lib/experiments/proxy/host';
+import { isClerkEnabled } from '@/lib/auth/clerkConfig';
 
 const isPublicRoute = createRouteMatcher([
   '/',
@@ -22,9 +23,11 @@ function isSegmentWebhookPath(pathname: string): boolean {
   return /^\/api\/phase2\/integrations\/[^/]+\/segment-webhook\/?$/.test(pathname);
 }
 
-function clerkProtectionEnabled(): boolean {
-  return process.env.FORGE_CLERK_ENABLED === '1' && Boolean(process.env.CLERK_SECRET_KEY);
-}
+// Gate route protection on the SAME condition that renders <ClerkProvider>
+// (see lib/auth/clerkConfig). If middleware protected routes while the
+// provider was absent, /app would redirect to a /sign-in page that cannot
+// mount Clerk's <SignIn> — the exact cause of the login flicker loop.
+const clerkProtectionEnabled = isClerkEnabled;
 
 export default clerkMiddleware(async (auth, req, event) => {
   const pathname = req.nextUrl.pathname;
