@@ -450,6 +450,44 @@ export const zybitSiteMeta = pgTable('forge_site_meta', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * One row per concluded experiment — the outcome-labeled dataset that powers
+ * per-site rule calibration and (eventually) cross-site priors.
+ *
+ * Written by the compute-outcomes cron when an experiment transitions to
+ * 'completed' or 'stopped'. Never mutated after insert.
+ */
+export const zybitExperimentOutcomes = pgTable(
+  'zybit_experiment_outcomes',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id').notNull(),
+    siteId: text('site_id').notNull(),
+    experimentId: text('experiment_id').notNull(),
+    findingId: text('finding_id'),
+    ruleId: text('rule_id'),
+    pathRef: text('path_ref'),
+    modificationType: text('modification_type'),
+    // 'positive' | 'negative' | 'inconclusive'
+    result: text('result').notNull(),
+    liftPct: real('lift_pct'),
+    confidence: real('confidence'),
+    controlConversions: integer('control_conversions'),
+    controlParticipants: integer('control_participants'),
+    variantConversions: integer('variant_conversions'),
+    variantParticipants: integer('variant_participants'),
+    // null = no breach; metric name = the guardrail event type that tripped
+    guardrailBreached: text('guardrail_breached'),
+    concludedAt: timestamp('concluded_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    experimentIdx: index('zybit_outcomes_experiment_idx').on(table.experimentId),
+    siteIdx: index('zybit_outcomes_site_idx').on(table.siteId),
+    orgIdx: index('zybit_outcomes_org_idx').on(table.organizationId),
+  })
+);
+
 export const phase1ReadinessSnapshots = pgTable(
   'phase1_readiness_snapshots',
   {

@@ -15,7 +15,8 @@ export interface LogContext {
     | 'proxy'
     | 'health-alert'
     | 'capture-record'
-    | 'capture-cron';
+    | 'capture-cron'
+    | 'compute-outcomes';
   organizationId?: string;
   siteId?: string;
   [key: string]: unknown;

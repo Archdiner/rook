@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/phase2/cron/compute-outcomes",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/phase2/cron/sync-posthog",
       "schedule": "*/30 * * * *"
     },

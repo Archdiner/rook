@@ -97,10 +97,21 @@ async function fetchAndMaybeModify(
   bucket: Bucket,
   experiment: ProxyExperiment,
 ): Promise<NextResponse> {
-  const originRes = await fetch(originUrl, {
-    headers: { 'User-Agent': userAgent },
-    redirect: 'follow',
-  });
+  // TODO (FORGE-100): add AbortSignal.timeout(10_000) to origin fetch so a slow
+  // origin doesn't hold the proxy open past Vercel's edge timeout.
+  let originRes: Response;
+  try {
+    originRes = await fetch(originUrl, {
+      headers: { 'User-Agent': userAgent },
+      redirect: 'follow',
+    });
+  } catch (err) {
+    // FORGE-100: Fail-open — if origin is unreachable, serve a 502 rather than
+    // a Zybit error. This keeps the proxy transparent on network failures.
+    // TODO: log to observability
+    void err;
+    return new NextResponse('Origin unreachable', { status: 502 });
+  }
 
   const contentType = originRes.headers.get('content-type') || '';
   const shouldModify =
@@ -115,6 +126,20 @@ async function fetchAndMaybeModify(
     });
   }
 
+  // TODO (FORGE-100): Wrap modification in try/catch — fail-open on any
+  // HTML rewrite error so the user always gets a valid page.
+  //
+  //   try {
+  //     const html = await originRes.text();
+  //     const modified = applyModifications(html, experiment.modifications);
+  //     ... return modified response
+  //   } catch (modErr) {
+  //     logger.warn('proxy modification failed, serving origin', { experimentId: experiment.id, err: modErr });
+  //     // Re-fetch origin to get a fresh unmodified response to serve
+  //     const fallback = await fetch(originUrl, { headers: { 'User-Agent': userAgent }, redirect: 'follow' });
+  //     return new NextResponse(fallback.body, { status: fallback.status, headers: fallback.headers });
+  //   }
+
   const html = await originRes.text();
   const modified = applyModifications(html, experiment.modifications);
 
@@ -124,6 +149,18 @@ async function fetchAndMaybeModify(
   headers.set('content-type', contentType);
   headers.delete('content-encoding');
   headers.delete('content-length');
+
+  // TODO (FORGE-101): Kill switch — if experiment.status is 'stopped' (read
+  // from Edge Config), skip modification and serve origin. The compute-outcomes
+  // cron sets status='stopped' on guardrail breach; Edge Config is updated
+  // within 30s; next proxy request after TTL serves control automatically.
+  // Requires: add `status` field to ProxyExperiment type and config.ts loader.
+
+  // TODO (FORGE-103): SPA proxy handling — if the origin HTML is a SPA shell
+  // (detected by isSpaHtml from browserFetcher.ts), modifications that rely
+  // on post-hydration DOM will not apply. Validate at experiment creation time
+  // that modifications are HTML-injectable at initial render. For now, apply
+  // modifications regardless and log a warning if the body appears to be a SPA.
 
   return new NextResponse(modified, {
     status: originRes.status,
