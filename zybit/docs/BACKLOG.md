@@ -115,7 +115,7 @@ The analysis engine is built. This epic builds the product surface that lets a P
 |----|-------|---------------------|------|
 | **FORGE-060** | Hypothesis linkage — user pins PostHog insight URL or funnel id to a finding. | Exports cite customer-owned dashboard for lift claims. | P1 |
 | **FORGE-061** | Bet status — `planned` / `shipped` / `measured` with owner + date. | CSV export; mirrors lifecycle UI in Epic I. | P2 |
-| **FORGE-062** | GitHub PR draft (optional) — unified diff from snapshot-scoped suggestion; never merge without OAuth approval. | Rate-limited; scoped to repo whitelist. | P3 |
+| ~~**FORGE-062**~~ | ~~GitHub PR draft~~ | Out of scope. See "Out of scope — never build." | — |
 
 ---
 
@@ -130,21 +130,92 @@ The analysis engine is built. This epic builds the product surface that lets a P
 
 ---
 
-## Suggested execution order (first 60 days)
-
-| Week block | Focus |
-|------------|-------|
-| **1–2** | FORGE-001, 002, 003, 070 — auth + API keys + CI |
-| **3–4** | FORGE-020, 010, 041 — ingestion reliability + onboarding + quotas; spike Epic I shells (063, 065, 066, 067, 068) |
-| **5–6** | FORGE-011 cockpit + Epic I hardening + FORGE-040 Stripe + staging (071) |
-| **7–8** | FORGE-032 persisted runs + FORGE-069 visualization + observability (072) |
-
-Epic I must run in parallel with the data plane — not after it.
+<!-- original 60-day order superseded — see updated execution order at the bottom of this file -->
 
 ---
 
-## Out of scope
+---
 
+## Epic J — Measurement Rigor (the keystone)
+
+**This is the critical path. Nothing else in the loop matters until outcomes are computed correctly.**
+
+| ID | Story | Acceptance criteria | Tier |
+|----|-------|---------------------|------|
+| **FORGE-080** | Outcome storage table — `zybit_experiment_outcomes` with `(experimentId, findingId, ruleId, pathRef, modificationType, result, liftPct, confidence, controlConversions, controlParticipants, variantConversions, variantParticipants, guardrailBreached, concludedAt)`. | Migration ships; row inserted when experiment reaches `completed` or `stopped`. | P0 |
+| **FORGE-081** | Conversion join — join `experiment_assignment` canonical events to `primaryMetric` events by `(visitorId, occurredAt > assignedAt, occurredAt <= assignedAt + durationDays)`; compute unique converters per bucket. | Results match manual verification on a synthetic fixture. No double-counting per visitor. | P0 |
+| **FORGE-082** | Chi-squared significance — chi-squared test for proportion comparison (not pooled-variance z-test); Welch's t-test for continuous metrics; output: p-value, confidence. | Pure function with unit tests covering edge cases (zero conversions, very small samples). | P0 |
+| **FORGE-083** | Sequential testing guard — significance cannot be declared unless: `confidence >= 0.95` AND `participants >= minimumSampleSize(baseRate, MDE=5%, power=80%)` AND `elapsedDays >= 7`. Minimum sample calculation is pre-computed when experiment starts. | Fixture: high confidence at day 2 with 30 visitors does not auto-stop. | P0 |
+| **FORGE-084** | Auto-stop on significance — when both conditions met: transition to `completed`, write outcome row, send PM notification via Resend. When `durationDays` elapsed without significance: transition to `completed` as `inconclusive`. | Cron run idempotent: re-running on an already-completed experiment is a no-op. | P0 |
+| **FORGE-085** | Guardrail evaluation — evaluate each guardrail metric on each cron run; if breached with >80% confidence in wrong direction: transition to `stopped`, set `guardrailBreached = true` on outcome row, notify PM with which guardrail and by how much. | Proxy stops variant on next Edge Config sync (within 30s). | P0 |
+| **FORGE-086** | Compute-outcomes cron — `POST /api/phase2/cron/compute-outcomes` runs hourly; processes all `running` experiments; idempotent. | Cronitor dead-man's-switch ping at start and completion. Dashboard shows "last computed at" timestamp. | P0 |
+
+---
+
+## Epic K — Visible Loop View
+
+**The renewal story. The demo that beats "ChatGPT can do this" in 10 seconds.**
+
+| ID | Story | Acceptance criteria | Tier |
+|----|-------|---------------------|------|
+| **FORGE-090** | Loop timeline page — `/app/loop` (or `/app/activity`): top-level page showing full cycle per site. Not buried in finding detail. | Shows entries for: detection, experiment deployed, result, learning (suppressed / boosted). | P0 |
+| **FORGE-091** | Detection entry — "Zybit detected [finding title] on [page] — [one-line evidence summary]" with timestamp. Links to finding detail. | Populated from `zybit_findings.createdAt` + evidence. | P0 |
+| **FORGE-092** | Experiment result entry — "Variant [X]% vs Control [Y]% — +[N]pp ([Z]% relative), [p=confidence]" with stop/completion timestamp. Shows guardrail status if breached. | Populated from `zybit_experiment_outcomes`. Requires Epic J. | P0 |
+| **FORGE-093** | Learning entry — "Signal raised: you tested [rule] on [page], result was [outcome]. Threshold now requires stronger signal." with timestamp. | Populated when rule calibration runs. Requires per-site outcome feedback (after Epic J). | P1 |
+| **FORGE-094** | Experiment lift widget — confidence bar showing current confidence vs 95% threshold; control vs variant rate as live numbers; updated on each cron run. | Visible on experiment detail page. | P1 |
+
+---
+
+## Epic L — Proxy Reliability
+
+**Non-negotiable before any paid pilot routes real production traffic.**
+
+| ID | Story | Acceptance criteria | Tier |
+|----|-------|---------------------|------|
+| **FORGE-100** | Fail-open behavior — if proxy modification fails for any reason (config load failure, HTML rewrite error, network error to origin), the request is served from origin unchanged. No 5xx to end user. | Load test: kill Edge Config; verify 100% of requests get valid origin response. | P0 |
+| **FORGE-101** | Kill switch — PM stops experiment via dashboard; proxy stops applying variant within 30s (Edge Config TTL). No DNS changes, no redeployment. | "Stop experiment" button transitions to `stopped`, Edge Config sync removes from active manifest, next request after TTL serves control. | P0 |
+| **FORGE-102** | SPA detection and Browserless fallback (audit engine) — detect JS-rendered pages (empty body heuristic); re-fetch via Browserless.io; store `snapshotMethod` on snapshot record; surface SPA warning in cockpit when Browserless is unavailable. | Static fixture with `<div id="root"></div>` triggers Browserless path. HTTP fallback when `BROWSERLESS_TOKEN` absent. | P0 |
+| **FORGE-103** | SPA proxy handling — validate at experiment creation time that modifications targeting SPA-routed paths are HTML-injectable (CSS/attribute/text on initial render, not post-hydration). Surface warning if not. | Experiment creation rejects or warns modifications that require post-hydration DOM state. | P1 |
+| **FORGE-104** | Auto-rollback wiring — guardrail breach (Epic J, FORGE-085) automatically removes experiment from Edge Config active manifest; proxy serves control without manual intervention. | End-to-end: guardrail breaches, experiment transitions to `stopped`, next proxied request within 30s is control. | P0 |
+
+---
+
+## Epic M — Activation (first finding in <24h)
+
+**The activation moment that determines whether a trial converts.**
+
+| ID | Story | Acceptance criteria | Tier |
+|----|-------|---------------------|------|
+| **FORGE-110** | GA4 connector — pull-sync via Google Analytics Data API v1beta; service account auth; map GA4 event names to canonical event types; cursor on last-synced date. Same pattern as PostHog connector. | PM connects GA4 in onboarding wizard, events appear in canonical stream within 1 hour. | P0 |
+| **FORGE-111** | Integration health cockpit — show last-sync timestamp, event count, and error state for each connected integration. "Zybit is watching your site" vs "integration degraded" vs "no data yet." | PM answers "is Zybit learning my site?" without reading logs. | P0 |
+| **FORGE-112** | Preview before deploy — `GET /api/preview/[experimentId]`: fetch origin HTML, apply modifications as inline style injections and DOM mutations, return modified HTML for iframe. Dashboard: side-by-side control/variant iframe toggle. | No external dependency. Modifications applied correctly for CSS-inject and text-replace types. | P0 |
+| **FORGE-113** | MRR/AOV capture in connect flow — required step in onboarding wizard (not optional). Unlocks revenue-impact framing on all findings from day one. | Cannot complete onboarding without entering at least one of MRR or AOV. Values stored in `zybit_site_meta`. | P1 |
+
+---
+
+## Suggested execution order (updated)
+
+| Block | Focus | Stories |
+|-------|-------|---------|
+| **Immediate (week 1)** | Measurement rigor — the keystone | FORGE-080 through FORGE-086 (Epic J) |
+| **Immediate (week 1, parallel)** | Preview before deploy | FORGE-112 (Epic M) |
+| **Week 2** | Visible loop view | FORGE-090 through FORGE-092 (Epic K) |
+| **Week 2-3** | Proxy reliability + SPA | FORGE-100 through FORGE-104 (Epic L) |
+| **Week 3** | GA4 connector + integration health | FORGE-110, FORGE-111 (Epic M) |
+| **Week 4** | Per-site outcome feedback into rules | FORGE-060 (Epic G), updated rules in `src/lib/phase2/rules/` |
+| **Week 5-6** | Visible loop enrichment + activation polish | FORGE-093, FORGE-094, FORGE-113 |
+| **Later** | Amplitude / Mixpanel connectors | Same pattern as GA4 — one at a time |
+| **50+ customers** | Cross-site global priors | FORGE from Epic (deferred) |
+
+---
+
+## Out of scope — never build
+
+- Sentiment analysis or voice-of-customer NLP
+- GitHub PR generation or code deployment integration
+- Own event collection SDK / PostHog replacement / behavioral event ingestion layer
+- Elaborate new audit rules (bottleneck is measurement, not rule count)
+- Cross-site global priors before 50+ customers with real outcome data
 - Replacing Shopify / CMS authoring
 - Guaranteed lift refunds without externally auditable KPIs
 - Silent autonomous production merges without PM approval

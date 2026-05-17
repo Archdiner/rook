@@ -61,7 +61,7 @@ Static HTML analysis. Fetches pages via HTTP, parses DOM structure.
 | Visual weight | `visualWeight.ts` | Scores element prominence from Tailwind class tokens (text-2xl, bg-primary, font-bold) |
 | Fold guess | `foldGuess.ts` | Estimates above/below fold from DOM position + landmark proximity |
 
-**Limitation:** No JavaScript execution. SPAs render blank. Visual weight is heuristic (class token matching), not measured pixel positions. This is the right tradeoff for now — headless browser adds cost and complexity. Upgrade path is clear (Browserless/Playwright behind feature flag).
+**Limitation:** No JavaScript execution. SPAs render blank. Visual weight is heuristic (class token matching), not measured pixel positions. **SPA support is a prerequisite for any paid pilot** — the majority of B2B SaaS products are React/Vue/Next.js apps. The Browserless upgrade path is documented in "What Needs to Be Built" below.
 
 ### Watch — Data Collection (`src/lib/phase2/connectors/`)
 
@@ -200,75 +200,215 @@ Zybit creates feature flags in the customer's existing tool (PostHog Feature Fla
 
 ---
 
-### Step 6: Learn — Outcome Feedback Loop
+---
 
-This is the compounding advantage. Without it, Zybit is a one-shot auditor. With it, Zybit gets smarter every cycle.
+## Priority Build Items (ordered)
 
-#### Phase 1: Per-site outcome memory
+The analysis engine is production-ready. The proxy bucketing and HTML modification exist. What follows is what separates Zybit from a finding backlog into a real measurement system. Build these four things. Nothing else until they exist.
 
-When an experiment completes, store the outcome alongside the finding that generated it.
+---
+
+### Priority 1: Measurement Rigor — Compute Outcomes
+
+**What:** Automatically compute conversion rates per bucket, run statistical significance, auto-stop, auto-rollback on guardrail breach.
+
+**Why it's first:** Without this, experiment results are manually entered numbers. Zybit is a calculator, not a measurement system. Everything downstream — renewal story, rule calibration, dataset moat — depends on measurement being correct.
+
+**Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
+
+#### Outcome Storage
+
+New table `zybit_experiment_outcomes`:
+```sql
+CREATE TABLE zybit_experiment_outcomes (
+  id TEXT PRIMARY KEY,
+  organization_id TEXT NOT NULL,
+  site_id TEXT NOT NULL,
+  experiment_id TEXT NOT NULL REFERENCES zybit_experiments(id),
+  finding_id TEXT REFERENCES zybit_findings(id),
+  rule_id TEXT NOT NULL,
+  path_ref TEXT,
+  modification_type TEXT NOT NULL,          -- 'css-inject' | 'text-replace' | etc.
+  result TEXT NOT NULL,                     -- 'positive' | 'negative' | 'inconclusive'
+  lift_pct REAL,                            -- measured lift (negative = variant lost)
+  confidence REAL,                          -- final statistical confidence
+  control_conversions INTEGER,
+  control_participants INTEGER,
+  variant_conversions INTEGER,
+  variant_participants INTEGER,
+  guardrail_breached BOOLEAN DEFAULT FALSE,
+  concluded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+```
+
+Populate when an experiment moves to `completed` or `stopped`.
+
+#### Conversion Rate Computation
+
+Join `experiment_assignment` canonical events to conversion events:
+- Match: `(visitorId, occurredAt > assignedAt, occurredAt <= assignedAt + durationDays)`
+- Count: unique visitors who converted per bucket / unique visitors assigned per bucket
+- Handle: `primaryMetric` event type as the conversion signal
+- Handle: attribution window strictly — conversions outside the window do not count
+- Handle: multiple conversions per visitor count as one (unique converter, not total events)
+
+For binary (converted/not) primary metrics: **chi-squared test for two proportions** — not a z-test with pooled variance, which is incorrect for this case.
+
+For continuous metrics (revenue per session): **Welch's t-test** (unequal variance).
+
+#### Sequential Testing — No Early Stopping on Noise
+
+Do NOT call significance the moment p < 0.05 is first reached. This is the most common A/B testing mistake and produces false positives.
+
+Enforce both conditions before significance is declared:
+1. `confidence >= 0.95` (chi-squared p-value threshold)
+2. `participants >= minimumSampleSize` computed from: base conversion rate, minimum detectable effect (default 5%), power 80%, alpha 5%
+3. `elapsedDays >= 7` (minimum one full business cycle)
+
+Optional (preferred): implement **always-valid p-values** (mSPRT) to allow continuous monitoring without inflating false positive rate. Simpler alternative: **O'Brien-Fleming alpha spending** boundary — significance threshold tightens early and relaxes as the experiment matures.
+
+#### Auto-Stop
+
+When both conditions are met: transition experiment to `completed`, write outcome row, notify PM.
+
+When `durationDays` is reached regardless of significance: transition to `completed` as `inconclusive`.
+
+#### Guardrail Metrics
+
+PM-defined guardrail: e.g., "do not ship if session error rate increases by >10%". 
+
+Implementation:
+- `guardrails` column already exists on `zybit_experiments` (JSONB)
+- On each compute-outcomes run: evaluate each guardrail metric in the same way as primary metric
+- If guardrail is breached with >80% confidence in the wrong direction:
+  1. Transition experiment to `stopped`
+  2. Write outcome row with `guardrail_breached = true`
+  3. Notify PM with specific which guardrail tripped and by how much
+  4. The proxy stops applying the variant on next config reload
+
+**Cron:** `POST /api/phase2/cron/compute-outcomes` — hourly, processes all `running` experiments.
+
+**Timeline:** 4 focused days. Nothing else ships until this is done.
+
+---
+
+### Priority 2: Preview Before Deploy
+
+**What:** PM sees the modified page in an iframe before activating on real traffic.
+
+**Why:** Removes the single biggest trust blocker in every demo. A PM who cannot see the change before it goes live will not approve it.
+
+**Implementation:**
+`GET /api/preview/[experimentId]` — fetch origin HTML, apply `VariantModification[]` as `<style>` injections and DOM mutations, return modified HTML for iframe embed. No external dependency.
+
+Dashboard: side-by-side iframe toggle (control | variant) on experiment detail page.
+
+**Timeline:** 2 days. Can be built in parallel with measurement work (different surface).
+
+---
+
+### Priority 3: The Visible Loop View
+
+**What:** A dedicated timeline view showing the full cycle for a site: detection → experiment deployed → result → what was learned → what changed in next recommendations.
+
+**Why:** This is the renewal story. It answers the "why pay again?" question in 10 seconds. It is also the demo that beats "ChatGPT can do this" in a single screen.
+
+**What it shows (in timeline order):**
+1. `[date]` Zybit detected: **[finding title]** on `[page]` — evidence summary in one line
+2. `[date]` Experiment deployed: **[hypothesis]** — what changed, traffic split
+3. `[date]` Result: variant `X%` vs control `Y%` — `+N pp` (`Z%` relative), `p=[confidence]`
+4. `[date]` (if suppressed) Already tested — prior outcome was `[result]`, raising the signal threshold
+5. Next: Suggested based on outcomes: **[next finding]**
+
+**This view is not buried in finding detail.** It is a top-level page (e.g., `/app/loop` or `/app/activity`). It is the first thing shown in a demo.
+
+**What powers it:** Completed experiment rows + outcome rows + finding lifecycle transitions. All data already (or soon to be) available. It is a view, not new data.
+
+---
+
+### Priority 4: Proxy Reliability + SPA Support
+
+**Must be in place before any paid pilot routes real production traffic.**
+
+#### Fail-Open Behavior
+
+If the Zybit proxy is unavailable or throws an error, the user's request must be served from the customer's origin unchanged. Under no circumstances should a proxy failure produce a 5xx to the end user.
 
 ```typescript
-interface ExperimentOutcome {
-  findingId: string;
-  ruleId: string;           // Which audit rule generated the finding
-  siteId: string;
-  pathRef: string;          // Which page
-  modification: VariantModification[];
-  result: 'positive' | 'negative' | 'inconclusive';
-  lift: number;             // -1..+inf — measured lift
-  confidence: number;       // Statistical confidence
-  primaryMetric: string;
-  completedAt: string;
+// src/lib/experiments/proxy/handler.ts
+try {
+  const modified = await applyModifications(originResponse, modifications);
+  return modified;
+} catch (err) {
+  logger.error('proxy modification failed, serving origin', { experimentId, err });
+  return originResponse; // fail open: serve control unmodified
 }
 ```
 
-**New table:** `zybit_experiment_outcomes` — one row per completed experiment with structured result.
+Proxy config fetch must also fail open: if Edge Config is unavailable, pass through as control.
 
-**Rule integration:** Add `previousOutcomes: ExperimentOutcome[]` to `AuditRuleContext`. Rules can:
-- **Boost confidence** on findings similar to past wins (same rule + same page pattern)
-- **Suppress** findings similar to past losses (same rule fired, experiment showed no lift)
-- **Adjust thresholds** per site (if form-abandonment experiments consistently win on this site at 70% threshold instead of 85%, lower the threshold for this site)
+#### Kill Switch Per Experiment
+
+PM can stop an experiment instantly without DNS changes. When `status` transitions to `stopped`, the next Edge Config update removes the experiment from the active manifest. The proxy reads from Edge Config on every request (cached at edge, TTL 30s). No per-experiment deploy required.
+
+Require: a prominent "Stop experiment" button on the experiment detail page that does not require confirmation dialogs — speed matters when something is wrong.
+
+#### SPA Support (Browserless.io)
+
+The audit engine (snapshot fetcher) and the proxy both have SPA gaps.
+
+**Snapshot fetcher (`src/lib/phase2/snapshots/fetcher.ts`):**
+- Detect SPA: if raw HTML `<body>` has <500 characters or contains `<div id="root"></div>` / `<div id="app"></div>` with no content → SPA detected
+- Re-fetch via Browserless.io: `wss://chrome.browserless.io?token=BROWSERLESS_TOKEN`
+- `page.goto(url, { waitUntil: 'networkidle', timeout: 10_000 })`
+- If Browserless unavailable: return HTTP result with `snapshotMethod: 'http-only'` in the snapshot record, surface a warning in the cockpit
+
+**Proxy (client-side routing):**
+- SPA route changes are client-side (History API pushState) — the proxy only sees the initial page load
+- For experiments targeting a path that SPA-routes to (not a full-page load), the variant must be applied via the injected initial HTML — CSS injection and the initial DOM state are sufficient for most modifications
+- Record which experiments target SPA-only paths; validate that modifications are HTML-injectable at parse time, not dependent on post-hydration DOM
+
+**Add to Vercel env:** `BROWSERLESS_TOKEN` — gate all Browserless calls behind its presence.
+
+#### Auto-Rollback on Guardrail Regression
+
+See Priority 1 (Guardrail Metrics). The proxy side: when `experiment.status = 'stopped'` is set by guardrail breach, the next Edge Config sync removes the experiment from the active manifest automatically. No manual intervention required.
+
+---
+
+### Step 6: Learn — Outcome Feedback Loop (after Priority 1-4)
+
+When an experiment completes, its outcome informs future rule runs for the same site.
+
+**New table:** `zybit_experiment_outcomes` — see Priority 1 schema above.
+
+**Rule integration:** Add `previousOutcomes: ExperimentOutcome[]` to `AuditRuleContext`. Rules:
+- **Boost priority** on findings similar to past wins (same ruleId + same pathRef pattern)
+- **Raise threshold** on findings similar to past nulls (require stronger signal to re-fire)
+- **Surface "already tested"** context in the finding summary if prior outcome exists
 
 **Implementation scope:**
 - `src/lib/phase2/rules/types.ts` — Add `previousOutcomes` to `AuditRuleContext`
 - `src/lib/experiments/outcomes.ts` — Query outcomes for site, pass to rule context
-- Update 3-4 rules to branch on outcomes (start with form-abandonment, bounce-on-key-page, hero-hierarchy-inversion)
-- New migration: `zybit_experiment_outcomes` table
+- Start with 3 rules: `form-abandonment`, `bounce-on-key-page`, `hero-hierarchy-inversion`
+- New migration: outcome table already defined in Priority 1 — same table, same schema
 
-#### Phase 2: Cross-site learning (later)
-
-Aggregate outcomes across all customers (anonymized). Build a global prior: "form-abandonment findings on signup pages have a 73% win rate across all Zybit customers." This prior informs confidence scoring for new customers before they have their own outcome history.
-
-This is the moat. Nobody else has this data.
+**Cross-site learning:** Deferred. Not until 50+ customers have outcome rows. The global prior means nothing at smaller sample sizes. Do not build this early.
 
 ---
 
-### Headless Browser Upgrade (Understand step)
+### GA4 Connector (after Priority 1-4)
 
-Replace HTTP fetch with headless browser for JS-heavy sites.
+GA4 is in the `source` enum. No implementation exists. Required for analytics-agnostic claim to be credible in the field.
 
-**Approach:** Browserless.io (managed Playwright) or self-hosted Playwright behind a feature flag.
+**Pattern:** Same as PostHog pull-sync at `src/lib/phase2/connectors/posthog/`. 
+- GA4 Data API (Google Analytics Data API v1beta)
+- Auth: service account JSON or OAuth
+- Map GA4 `eventName` to canonical event `type`; map `eventCount`, `sessions` to canonical `metrics`
+- Cursor: GA4 date-range pagination, store last-synced date in `phase2_integrations.cursor`
 
-```typescript
-// src/lib/phase2/snapshots/fetcher.ts
-async function fetchPage(url: string, options: FetchOptions): Promise<FetchResult> {
-  if (options.renderJs) {
-    return fetchWithBrowser(url, options);  // Playwright via Browserless
-  }
-  return fetchWithHttp(url, options);       // Current implementation
-}
-```
-
-**What headless adds:**
-- JS-rendered content (React, Vue, Angular SPAs)
-- Actual computed CSS (real colors, font sizes, element positions)
-- Accurate fold position (viewport-based, not heuristic)
-- Screenshot capture for visual diffs
-
-**Cost:** ~$0.01-0.05 per page render. Cap at top 50 paths per site by traffic volume.
-
-**Sequencing:** Not urgent. Static HTML covers most marketing sites. Add when SPA customers appear.
+**Do not build:** Amplitude or Mixpanel connectors until GA4 ships and proves the pattern. Add them one at a time.
 
 ---
 
@@ -350,49 +490,24 @@ Neon serverless scales reads automatically. Write-heavy paths (event ingestion) 
 
 ## Build Sequence
 
-What to build, in what order, to reach a launchable product.
+Four things. In this order. Everything else is a distraction until these exist.
 
-### Phase A: Ship the analysis product (weeks, not months)
+| Priority | What | Why first | Time |
+|----------|------|-----------|------|
+| 1 | Compute-outcomes: outcome storage + chi-squared + sequential testing + guardrails | Converts Zybit from a calculator into a measurement system. Everything downstream depends on measurement being correct. | 4 days |
+| 2 | Preview before deploy | Removes trust blocker on every demo. Different surface — can build in parallel with #1. | 2 days |
+| 3 | Visible loop view | The renewal story and the demo. Needs #1 to populate it. | 3 days |
+| 4 | SPA support + proxy reliability (fail-open, kill switch, auto-rollback) | Non-negotiable before any paid pilot routes real traffic. One outage = dead pilot. | 4 days |
 
-The analysis engine is done. The PM dashboard exists. What's missing is polish and the connection between "finding" and "action."
+**After the four priorities:**
+- GA4 connector (analytics-agnostic claim becomes real)
+- Per-site outcome feedback into rule pipeline (learning loop)
+- Amplitude / Mixpanel connectors (one at a time, same pattern as PostHog)
+- Warehouse-native ingestion path (BigQuery, Snowflake)
+- Cross-site global priors (not before 50+ customers with outcomes)
 
-1. Close stale PRs, merge current branch to main
-2. Billing (Stripe) — gate access behind subscription
-3. Onboarding flow hardening (URL → PostHog connect → first audit)
-4. Finding prescription quality pass (tighten prose, add concrete examples)
-
-This gets Zybit to "paid conversion audit" — customers pay to see what's wrong.
-
-### Phase B: Experiment deployment (the hard part)
-
-Build Option A (proxy-based variant injection).
-
-1. Variant definition format (`VariantModification` schema)
-2. Visitor bucketing (cookie-based, deterministic hash)
-3. HTML response rewriting (CSS injection, text replacement, element visibility)
-4. Vercel Middleware integration for proxied traffic
-5. Dashboard UI for building modifications visually (element picker + action selector)
-6. Experiment lifecycle (start → monitor → stop → record outcome)
-
-This gets Zybit to "one-click A/B testing" — the core product promise.
-
-### Phase C: Learning loop
-
-1. Outcome storage (structured experiment results)
-2. Outcome query in rule pipeline (`previousOutcomes` on context)
-3. Update 3-4 rules to use outcomes (confidence boost, threshold adjustment)
-4. Per-site learning (lower/raise rule thresholds based on this site's history)
-
-This gets Zybit to "gets smarter over time" — the compounding advantage.
-
-### Phase D: Scale and automate
-
-1. Cross-site outcome aggregation (global priors)
-2. Headless browser integration (SPA support)
-3. Auto-suggest next experiment based on outcome patterns
-4. Closed-loop automation (audit → propose → deploy → measure → re-audit without PM intervention)
-
-This gets Zybit to "your site improves while you sleep" — the endgame.
+**Never build:**
+Sentiment analysis, GitHub PR generation, own event collection SDK / PostHog replacement, elaborate new audit rules, cross-site priors before sample size justifies it.
 
 ---
 

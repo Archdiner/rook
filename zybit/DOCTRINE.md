@@ -50,11 +50,13 @@ Test outcomes — what moved the metric, what didn't — feed back into the mode
 
 ## Unique value
 
-**Evidence-first.** Every finding is traceable to specific behavioral data. If we can't cite the evidence, we don't make the suggestion.
+**Analytics-agnostic.** Zybit sits on top of whatever analytics the customer already runs — PostHog, Segment, GA4, Amplitude, Mixpanel. We never ask them to replace it. This is the structural moat that incumbents cannot copy without cannibalizing themselves: PostHog and Mixpanel need you to use them; Zybit works because you already do. This must be present in every sales conversation, every pitch, and every demo.
+
+**Evidence-first.** Every finding is traceable to specific behavioral data. If we can't cite the evidence, we don't make the suggestion. Every recommendation has an inspectable logic chain — rule fired, evidence cited, prescription generated — that a PM can read, defend in a meeting, and trust the deploy button. This is a deliberate choice against LLM black-box suggestions.
 
 **Brand-aware.** Zybit understands your product before it criticizes it. Per-product normalization means we compare you to yourself, not to a generic template. A finding that would harm what makes your product distinctive is a bad finding.
 
-**Closed-loop measurement.** Not just "here's what to change" but "here's what we tested and what we learned." The value compounds as results feed into better future suggestions.
+**Closed-loop measurement.** Not just "here's what to change" but "here's what we tested and what we learned." The value compounds as results feed into better future suggestions. The outcome-labeled dataset from real experiments — which variant won, by how much, on what kind of site — is the durable asset no third-party analytics tool has.
 
 **One ranked backlog.** Instead of scattered analytics tabs, replay sessions, and team gut-feel, PMs get one prioritized, evidence-backed list of improvements — with receipts attached.
 
@@ -62,11 +64,13 @@ Test outcomes — what moved the metric, what didn't — feed back into the mode
 
 ## The long-term vision
 
-**Close the loop entirely.** Today Zybit tells you what to change and runs the test. The next step is learning from every test result automatically, across every customer — so each round of suggestions is measurably better than the last.
+**Close the loop entirely.** Today Zybit tells you what to change and runs the test. The next step is learning from every test result automatically — so each round of suggestions is measurably better than the last. The visible expression of this is a timeline a PM can point to: we detected this, we deployed this variant, it moved the metric by X%, and here is what we learned that changed the next recommendation. That sequence — visible, attributable, compounding — is the product.
 
-**Own the behavioral data pipeline.** PostHog and Segment are starting points, not endpoints. The long-term moat is first-party behavioral data collected directly by Zybit — clickstream events, session signals, interaction patterns — owned entirely by us. Every customer we onboard grows the dataset that makes the model smarter. This is why getting product teams on Zybit early matters beyond revenue: we are buying training data with every pilot.
+**Own the outcome-labeled dataset.** The long-term moat is not raw event collection. It is outcome labels: which variant won, by how much, on what kind of page, for what kind of site. No analytics incumbent has this. Every experiment Zybit runs adds a row to this dataset. As it grows, findings can be weighted by expected win probability across similar sites and patterns — a flywheel that gets more accurate with every customer added and that requires years of real experiments to replicate.
 
-**Simulate before shipping.** Once we have enough data on how humans interact with products at scale, we can simulate A/B test outcomes before running them live. Ship the winning variant on day one, with model-backed confidence. This requires deep behavioral modeling — synthetic user models trained on real interaction data — and represents the most technically ambitious part of the vision. It is also where the moat becomes essentially unassailable, because it requires years of proprietary behavioral data to build.
+**Stay analytics-agnostic, go deeper.** PostHog and Segment are connectors. GA4, Amplitude, and Mixpanel come next. Warehouse-native ingestion (BigQuery, Snowflake) follows. The goal is: whatever analytics a customer already runs, Zybit works. We never ask them to replace it. Expanding connector coverage is a first-class strategic priority, not an integration detail.
+
+**Simulate before shipping.** Once we have enough outcome data at scale, we can predict A/B test outcomes before running them live — ship the winning variant on day one with model-backed confidence. This requires years of proprietary outcome-labeled data to build, which is why every experiment we run today matters. It is also where the moat becomes unassailable: it cannot be replicated without running thousands of real experiments first.
 
 **The endgame: your product improves continuously, without you thinking about it.** Product managers and CPOs would pay significant money for a product that genuinely does this. Nobody has fully built it yet. We are building toward it one loop at a time.
 
@@ -74,59 +78,76 @@ Test outcomes — what moved the metric, what didn't — feed back into the mode
 
 ## Roadmap
 
-### Phase 1 — Foundation (now)
-Ship the core loop. Audit, hypothesize, deploy, measure. Get the PM-facing dashboard live. Onboard 3-5 product teams, get real conversion lift numbers, and document the results. The goal is not revenue — it is proof. One result like "increased activation rate 18% in three weeks" unlocks the enterprise conversation.
+### Phase 1 — Close the loop (now)
+Four things, in order. Nothing else.
 
-### Phase 2 — Own the data (year one)
-Get off PostHog dependency. Build Zybit's own first-party event collection layer so we control the full behavioral data pipeline. This is both a strategic moat and a technical prerequisite for phase three. Every session recording, every interaction pattern, every test result collected here becomes the substrate for simulation later. Treat data infrastructure as seriously as the product surface.
+1. **Measurement rigor.** Compute-outcomes: join assignments to conversions, run chi-squared significance with sequential testing boundaries (no early stopping on noise), auto-stop at 95% confidence, guardrail metrics with auto-rollback. This is the only thing that converts Zybit from a calculator into a measurement system. Four days of focused work. Nothing else matters until this exists.
+
+2. **The visible loop view.** A timeline that shows: we detected this, we deployed this variant, it moved the metric by X%, and here is what we learned that changed the next recommendation. This is what every demo runs on and what every renewal renews on.
+
+3. **Proxy reliability.** SPA support and fail-open behavior before any paid pilot routes real production traffic. One outage equals a dead pilot.
+
+4. **Preview before deploy.** PM sees the modified page in an iframe before activating it on real traffic. Two days. Removes a trust blocker on every demo.
+
+### Phase 2 — Deepen coverage and compound (year one)
+Expand analytics-agnostic ingestion (GA4 first, then Amplitude/Mixpanel, then warehouse-native). Build the per-site outcome feedback loop so rules calibrate on past results. Make the visible loop view richer. Onboard 10-50 product teams to build the outcome-labeled dataset that makes findings progressively more accurate.
 
 ### Phase 3 — Simulate (year two)
-Build synthetic user models trained on real behavioral data. Given enough signal on how humans move through products, we can predict A/B test outcomes before running them live. This is research-grade work requiring reinforcement learning, behavioral embeddings, and potentially multimodal models that understand UI visually. The right technical advisor from an HCI or ML background becomes important here. This is also the layer that makes the product genuinely defensible — it cannot be replicated without years of proprietary data.
+Build outcome-based priors across all customers (anonymized, aggregated). Then: given enough outcome data, predict A/B test results before running them live. Ship the winning variant on day one with model-backed confidence. This requires years of proprietary outcome-labeled data to build — which is exactly what Phase 1 and Phase 2 are collecting.
 
 ---
 
 ## Data strategy
 
-Zybit's long-term moat is behavioral data, not the model or the product surface. Models commoditize. Data does not.
+Zybit's long-term moat is outcome-labeled data, not raw event collection. Models commoditize. Data does not.
 
-**What we collect:** Clickstream events, session signals, A/B test outcomes, conversion deltas. Every interaction a real user has with a real product, mapped to what changed and what the result was.
+**What we collect:** Experiment assignments, conversion outcomes, lift measurements — paired with the finding that generated the experiment and the rule that generated the finding. This is not general behavioral data; it is structured experimental evidence about what changes move what metrics on what kinds of sites.
 
-**What we own:** Starting with PostHog and Segment as connectors. Moving to first-party collection as soon as the core loop is stable. The goal is to never be dependent on a third party for the data that trains our models.
+**What we own:** No third-party analytics tool has outcome labels. PostHog knows that users churned. Zybit knows that changing the CTA copy on the pricing page increased conversion by 12%, and that a similar change on a checkout page with similar traffic patterns won 73% of the time across all customers. That is a structurally different and more valuable dataset.
 
-**Why it matters:** Every customer we onboard is feeding the simulation layer we will build in phase three. The PM who signs a pilot today is contributing behavioral signal that makes every future customer's results better. This is the flywheel. Getting product teams on Zybit early is not just a revenue decision — it is a data strategy decision.
+**The flywheel:** Every experiment Zybit runs adds to the outcome-labeled dataset. As it grows, findings become more accurate for new customers with no history — the prior says "this pattern wins 80% of the time." This is the compounding advantage. It cannot be replicated without running thousands of real experiments across real customers.
 
-**The risk to manage:** PostHog could change their API, price us out, or build what we are building. Segment could do the same. First-party data collection is not optional in the long run — it is the foundation everything else sits on.
+**Why analytics-agnostic is the moat, not the risk:** PostHog and Mixpanel cannot build what we build without cannibalizing themselves. Every dollar they invest in "you should use us for A/B testing too" is a dollar that widens the gap for a provider that sits on top of all of them. We stay on top. We never replace them. That positioning is defensible and is reflected in every sales conversation.
 
 ---
 
 ## What Zybit is not
 
 - A site or product builder
-- A replacement for your analytics stack (PostHog, Segment, GA4)
+- A replacement for your analytics stack — PostHog, Segment, GA4, Amplitude, Mixpanel are connectors, not competitors. We never build this.
 - A "UX best practices" checklist
 - An AI that writes copy or redesigns your pages
 - A tool that invents numbers or generates evidence from thin air
+- A sentiment analyzer, voice-of-customer tool, or NLP pipeline. Not loop-advancing; pulls us into PII and consent complexity. Never build this.
+- A GitHub PR generator or code deployment system. Cool demo; zero deal-closing value for the PM buyer. Never build this.
+- A PostHog ingestion replacement or direct behavioral event SDK. Fights an incumbent on their strongest ground while abandoning our structural moat. Never build this.
+- A system with more audit rules as the answer. The bottleneck is measurement accuracy and loop closure, not rule count. The 12 rules we have are sufficient for now; more rules do not close the measurement gap.
+- A cross-site learning system before 50+ customers with real outcome data. The priors mean nothing without the sample size. Build the single-customer loop first.
 
 ---
 
 ## Where we are today
 
-The analysis engine is complete. Zybit can:
+The analysis engine and PM dashboard are complete. Zybit can:
 
-- Audit any product's visual hierarchy via static page snapshots
-- Ingest behavioral data from PostHog and Segment
+- Audit any product's visual hierarchy via static page snapshots (HTTP fetch + DOM parse; SPA/JS-rendered sites not yet supported)
+- Ingest behavioral data from PostHog (pull-sync) and Segment (webhook)
 - Run 12 deterministic audit rules (5 design + 7 pain) across combined behavioral and design signals
-- Surface specific findings with A/B prescriptions and revenue impact estimates
-- Export audit receipts in JSON (`zybit.receipt.v1`) and Markdown
+- Surface specific findings with A/B prescriptions, evidence arrays, and revenue impact estimates
+- Display findings, experiments, and lifecycle status in a wired PM dashboard
+- Assign visitors to control/variant via deterministic bucketing and apply HTML modifications via the proxy layer
+- Bill customers and enforce plan limits via Stripe
 
-**What's not yet complete:**
+**What is not yet complete (immediate priorities, in order):**
 
-- PM-facing dashboard: findings → approve → deploy as a live A/B test
-- One-click A/B deployment to production
-- Outcome tracking that closes the learning loop
-- Billing and commercial layer
+1. **Measurement rigor** — Experiment results are manually entered. No outcome storage table, no chi-squared computation, no sequential testing, no guardrail metrics. This is the largest gap.
+2. **Visible loop view** — No timeline showing the full detect → deploy → result → learn cycle. The renewal story and the demo depend on this.
+3. **Proxy reliability** — No SPA support (JS-rendered sites serve blank HTML to the audit engine and may break under proxy), no fail-open behavior, no kill switch per experiment.
+4. **Preview before deploy** — No way for a PM to see the modified page before it goes live on real traffic.
+5. **GA4 connector** — GA4 is in the source enum but has no implementation. Required to credibly claim analytics-agnostic.
 
-The engine is ready. The immediate priority is the product surface that makes it usable for a PM without touching the API.
+**What is deliberately not being built:**
+Sentiment analysis, GitHub PR generation, PostHog replacement / direct SDK, more audit rules, cross-site priors (before 50 customers with outcomes). See "What Zybit is not."
 
 ---
 
