@@ -56,16 +56,31 @@ zybit/
 
 | Loop Step | Status | Notes |
 |-----------|--------|-------|
-| **Understand** (snapshot audit) | ✅ Built | HTTP + DOM parse; SPA/JS-rendered support not yet added |
-| **Watch** (PostHog + Segment) | ✅ Built | Pull-sync + webhook; GA4 / direct SDK not built |
-| **Identify** (12 audit rules) | ✅ Built | 5 design + 7 pain rules, 193 passing tests |
-| **Propose** (findings + prescriptions) | ✅ Built | Ranked by priority score + revenue impact |
-| **Test** (variant deployment) | ⚠️ Partial | Bucketing, HTML modifier, proxy routes exist; UI wiring + CNAME provisioning incomplete |
-| **Learn** (outcome feedback loop) | ❌ Not built | No outcome storage, no rule calibration |
+| **Understand** (snapshot audit) | ⚠️ Partial | HTTP + DOM parse works; SPA/JS-rendered pages return blank — prerequisite for paid pilot |
+| **Watch** (PostHog + Segment) | ✅ Built | Pull-sync + webhook; GA4 not built (next connector priority) |
+| **Identify** (12 audit rules) | ✅ Built | 5 design + 7 pain rules, 193 passing tests — sufficient; do not add more rules |
+| **Propose** (findings + prescriptions) | ✅ Built | Ranked by priority score + revenue impact, PM-readable |
+| **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built; no fail-open, no kill switch, no SPA handling |
+| **Measure** (outcome computation) | ❌ Not built | Results are manually entered; no chi-squared, no sequential testing, no guardrails — **highest priority gap** |
+| **Learn** (outcome feedback loop) | ❌ Not built | No outcome storage, no rule calibration — depends on Measure first |
+| **Visible loop view** | ❌ Not built | No timeline of detect → deploy → result → learning — needed for every demo and renewal |
+| **Preview before deploy** | ❌ Not built | PM cannot see variant before it goes live — trust blocker |
+| **GA4 connector** | ❌ Not built | Required for analytics-agnostic claim to be credible |
 | **Billing** (Stripe + plan limits) | ⚠️ Partial | Routes and helpers exist; plan enforcement may be incomplete |
 | **Observability** | ⚠️ Partial | Cronitor, error budget, logger built; Axiom drain not wired |
 
-**For the detailed gap analysis, build plan, and recommended sequencing:** [`../product_gap.md`](../product_gap.md)
+## Immediate build order
+
+1. **Measure — compute-outcomes** (4 days): outcome table + conversion join + chi-squared + sequential testing guard + auto-stop + guardrail evaluation + cron. Nothing else matters until this exists.
+2. **Preview before deploy** (2 days, parallel): `/api/preview/[experimentId]` + iframe in experiment detail.
+3. **Visible loop view** (3 days): `/app/loop` timeline of the full cycle.
+4. **Proxy reliability + SPA** (4 days): fail-open, kill switch, Browserless SPA support, auto-rollback wiring.
+
+**Never build:** sentiment analysis, GitHub PR generation, own event collection SDK / PostHog replacement, more audit rules, cross-site priors before 50+ customers.
+
+**For full specifications:** `docs/ARCHITECTURE.md` — "Priority Build Items" section. `docs/BACKLOG.md` — Epics J, K, L, M.
+
+**For the gap analysis and build plan:** [`../product_gap.md`](../product_gap.md)
 
 ---
 

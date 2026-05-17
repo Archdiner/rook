@@ -195,69 +195,70 @@ Show usage in dashboard settings. Feed into Stripe metered billing line items fo
 
 ---
 
-## Gap 3 — Experiment Result Auto-Collection (P1)
+## Gap 3 — Measurement Rigor: Compute Outcomes (P0, Highest Priority)
 
 ### Problem
-Experiment results are entirely manually entered. The PM visits the experiment detail, types in control and variant conversion rates, and saves. There is no connection between the experiment definition and actual behavioral data flowing through Zybit's canonical event stream.
+Experiment results are entirely manually entered. Zybit's "confidence meter" is based on whatever numbers the PM types — not real data. It is a calculator, not a measurement system.
 
-This means Zybit's "confidence meter" is based on whatever numbers the PM types — not real data. It is a calculator, not a measurement system.
+If lift numbers are wrong, everything downstream is poisoned: the rule calibration, the renewal story, the outcome-labeled dataset that is the long-term moat. This gap must be closed before anything else.
 
 ### Architecture
 
-Every time Zybit's proxy assigns a visitor to a bucket, it logs an `experiment_assignment` event to the canonical stream. Every time that visitor triggers the experiment's `primaryMetric` event, Zybit can attribute it to the experiment and bucket.
-
 ```
-visitor assigned → log experiment_assignment{experimentId, bucket, visitorId}
-visitor converts → canonical event has visitorId
-                → join: experiment_assignment × conversion event
-                → compute conversion rate per bucket
-                → update resultControlRate, resultVariantRate
+visitor assigned → log experiment_assignment{experimentId, bucket, visitorId, assignedAt}
+visitor converts → canonical event has visitorId, occurredAt
+                → join: assignment × conversion by (visitorId, occurredAt in attribution window)
+                → count unique converters per bucket / unique assigned per bucket
+                → chi-squared significance test
+                → if both significance + min sample + min days met → auto-stop
+                → if guardrail breached → auto-rollback + notify
 ```
 
 ### What Needs to Be Built
 
-#### 3a. Assignment Event Schema (1 day)
+#### 3a. Outcome Storage Table (1 day)
 
-Add `experiment_assignment` as a canonical event type:
-```typescript
-{
-  type: 'experiment_assignment',
-  experimentId: string,
-  bucket: 'control' | 'variant',
-  visitorId: string,
-  siteId: string,
-  sessionId: string,
-  timestamp: string,
-}
+New table `zybit_experiment_outcomes`. Full schema in `docs/ARCHITECTURE.md`. Populated when any experiment transitions to `completed` or `stopped`.
+
+Design the schema for future learning loop use from day one: include `ruleId`, `modificationType`, `pathRef` — these are what power per-site calibration later.
+
+#### 3b. Conversion Join and Rate Computation (1 day)
+
+Join `experiment_assignment` canonical events to `primaryMetric` events:
+- Match: `(visitorId, occurredAt > assignedAt, occurredAt <= assignedAt + durationDays)`
+- Count: unique converters per bucket / unique assigned per bucket (unique visitor, not event count)
+- For binary metrics (converted/not): **chi-squared test for two proportions** — not a z-test with pooled variance
+- For continuous metrics (revenue per session): **Welch's t-test** (unequal variance)
+
+#### 3c. Sequential Testing Guard (1 day)
+
+Do NOT call significance at the first p < 0.05. This is the most common A/B testing mistake and produces false positives. Three conditions must ALL be true before significance is declared:
+
+1. `confidence >= 0.95`
+2. `participants >= minimumSampleSize` — pre-computed at experiment start from base conversion rate, MDE=5%, power=80%, alpha=5%
+3. `elapsedDays >= 7` — minimum one full business cycle to wash out day-of-week noise
+
+Implementation note: Minimum sample size formula using normal approximation:
 ```
-
-#### 3b. Outcome Computation Job (2 days)
-
-Cron job (hourly): `POST /api/phase2/cron/compute-outcomes`
-
-For each running experiment:
-1. Count unique visitors assigned to control and variant in window
-2. Count those who then triggered `primaryMetric` event (within `durationDays`)
-3. Compute conversion rate per bucket
-4. Compute statistical significance (Welch's t-test or Chi-squared for conversion rates)
-5. PATCH experiment record with fresh `resultControlRate`, `resultVariantRate`, `resultConfidence`, `resultParticipants`
-
-Statistical significance formula:
-```typescript
-// Chi-squared test for two proportions
-function computeSignificance(
-  controlConversions: number, controlTotal: number,
-  variantConversions: number, variantTotal: number
-): number { ... }
+n = (z_alpha + z_beta)^2 * (p1*(1-p1) + p2*(1-p2)) / (p1-p2)^2
 ```
+Where `p1` = base rate, `p2` = base rate * (1 + MDE), `z_alpha` = 1.96, `z_beta` = 0.84.
 
-#### 3c. Auto-Stop on Significance (1 day)
+No external stats library needed — pure math.
 
-When `resultConfidence >= 0.95` and `resultParticipants >= minimumSampleSize` (computed from MDE and base rate), automatically transition experiment to `completed`. Notify PM via Resend email.
+#### 3d. Auto-Stop and Auto-Rollback (0.5 days)
 
-**Third party to use:** None needed — chi-squared computation is trivial pure math. No external stats library required.
+- **Significance reached:** transition to `completed`, write outcome row, Resend email to PM
+- **Duration elapsed without significance:** transition to `completed` as `inconclusive`, write outcome row
+- **Guardrail breached** (>80% confidence in wrong direction on any guardrail metric): transition to `stopped`, write outcome row with `guardrailBreached = true`, notify PM with specific guardrail name and observed vs threshold values
 
-### Timeline: 4 production days
+The proxy stops applying the variant on next Edge Config sync (within 30s). No manual intervention required.
+
+#### 3e. Hourly Compute-Outcomes Cron (0.5 days)
+
+`POST /api/phase2/cron/compute-outcomes` — processes all `running` experiments. Idempotent: re-running on a completed experiment is a no-op. Cronitor heartbeat ping at start and completion.
+
+### Timeline: 4 production days. Nothing else ships first.
 
 ---
 
@@ -630,37 +631,58 @@ Each rule's `priorityScore` gets a prior boost when `globalPrior.winRate > 0.7` 
 
 ---
 
-## Build Sequence
+## Build Sequence (updated)
 
-The gaps above are ordered by priority. The critical path to a **paid pilot** is Gaps 1 + 2 + 6. The critical path to a **true product loop** is Gaps 1 + 2 + 3 + 4.
+Four things. In this order. Everything else is a distraction until they exist.
 
 ```
-PHASE A — Paid Pilot Ready (6–7 weeks)
+IMMEDIATE — Week 1 (parallel tracks)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 1   Gap 2 — Billing (Stripe + plan limits)
-Week 2   Gap 6 — Onboarding completeness
-Week 3-4 Gap 1a-1c — Variant schema + builder UI + bucketing
-Week 5-6 Gap 1d-1e — Edge proxy + custom subdomain setup
-Week 7   Gap 8 — Observability (Axiom + Cronitor)
+Track A  Gap 3 — Measurement rigor (4 days)
+         Outcome table + conversion join + chi-squared + sequential testing
+         + auto-stop + guardrail evaluation + hourly cron
 
-Deliverable: A PM can sign up, pay, connect PostHog, receive
-             findings, define a variant, and launch it on production traffic.
+Track B  Gap 7 — Preview before deploy (2 days, different surface)
+         /api/preview/[experimentId] endpoint + iframe in experiment detail
 
-PHASE B — True Loop (4 weeks)
+Deliverable: Experiment results are real numbers, not manual inputs.
+             PM sees the change before it goes live on real traffic.
+
+WEEK 2 — Visible loop view
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 8   Gap 3 — Auto result collection (assignment events + compute job)
-Week 9   Gap 4 — Outcome feedback + rule calibration
-Week 10  Gap 5 — SPA support via Browserless
-Week 11  Gap 7 — Preview rendering (v1, CSS-only)
+         /app/loop (or /app/activity): timeline of detection → deploy → result → learning
+         Needs Gap 3 data to populate. This is the demo and the renewal story.
 
-Deliverable: Results auto-populate. Findings suppress already-tested patterns.
-             SPAs are auditable. PMs can preview variants before activating.
-
-PHASE C — Scale (ongoing)
+WEEKS 2-3 — Proxy reliability + SPA support
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Week 12  Gap 9 — Staging env + E2E harness
-Week 16+ Gap 10 — Cross-site priors (after 50+ customers with outcomes)
-         Gap 7v2 — GitHub PR generation + Vercel preview URLs
+Gap 5    SPA support via Browserless (snapshot fetcher + proxy SPA handling)
+Gap 1 (remainder) Fail-open, kill switch, auto-rollback wiring
+         Non-negotiable before any paid pilot.
+
+WEEK 3 — GA4 connector
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         Google Analytics Data API pull-sync; same pattern as PostHog.
+         Required for analytics-agnostic claim to be credible.
+
+WEEK 4 — Per-site outcome feedback into rules
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Gap 4    previousOutcomes in AuditRuleContext; 3 rules updated
+         (form-abandonment, bounce-on-key-page, hero-hierarchy-inversion)
+
+ONGOING — Scale and coverage
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         Amplitude, Mixpanel connectors (one at a time)
+         Gap 9 — Staging env + E2E harness
+         Gap 2 — Billing hardening
+         Gap 10 — Cross-site priors (not before 50+ customers with outcome rows)
+
+NEVER BUILD
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+         Sentiment analysis / NLP / voice-of-customer
+         GitHub PR generation or code deployment
+         Own event collection SDK / PostHog replacement
+         More audit rules (12 is sufficient; bottleneck is measurement)
+         Gap 7v2 (GitHub PR + Vercel preview URLs) — out of scope
 ```
 
 ---
