@@ -61,7 +61,7 @@ zybit/
 | **Identify** (12 audit rules) | ✅ Built | 5 design + 7 pain rules, 193 passing tests — sufficient; do not add more rules |
 | **Propose** (findings + prescriptions) | ✅ Built | Ranked by priority score + revenue impact, PM-readable |
 | **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built. Network-error fail-open exists (`proxy/handler.ts:109`); **modification-error fail-open, kill switch, and SPA handling still TODO** (handler.ts:129/153/159) |
-| **Measure** (outcome computation) | ✅ Built | Shipped in `5951a99` + `b09a212`: outcome table (`drizzle/0011_experiment_outcomes.sql`), `stats.ts` (chi-squared, Welch, sequential guard, min-sample), `computeOutcomes.ts`, hourly cron. **Caveats:** no `stats.ts` unit tests yet; PostHog visitor-ID bridge not yet in place (PostHog-sourced conversions undercounted) |
+| **Measure** (outcome computation) | ✅ Built | Shipped in `5951a99` + `b09a212`: outcome table (`drizzle/0011_experiment_outcomes.sql`), `stats.ts` (chi-squared, Welch, sequential guard, min-sample), `computeOutcomes.ts`, hourly cron. Unit tests added in `__tests__/stats.test.ts` (77 passing). **Caveats:** Monte Carlo in `__tests__/stats.simulation.test.ts` measures pipeline false-positive rate at ~14% under the null (vs nominal 5%) — repeated-peeking inflation from hourly cron, not a math bug; α-spending or reduced peek frequency would close it. PostHog visitor-ID bridge not yet in place (PostHog-sourced conversions undercounted) |
 | **Learn** (outcome feedback loop) | ❌ Not built | Outcome rows are persisted, but no rule calibration consumes them yet |
 | **Visible loop view** | ❌ Not built | No timeline of detect → deploy → result → learning — needed for every demo and renewal |
 | **Preview before deploy** | ✅ Built | Shipped in `5951a99` + `b09a212`: `api/preview/[experimentId]/route.ts` applies modifications + preview banner with 8s origin timeout. **Caveats:** `X-Frame-Options` / `frame-ancestors` strip not yet implemented (route.ts:124); no dashboard iframe UI consumes the endpoint |
@@ -73,7 +73,7 @@ zybit/
 
 > **Status (2026-05-18):** Measure and Preview both shipped in `5951a99` + `b09a212`. The real critical path now starts at the loop view + proxy hardening.
 
-1. **Close shipped-but-incomplete acceptance criteria** (~1 day): `stats.ts` unit tests; `X-Frame-Options` strip + dashboard iframe UI for preview; "last computed at" surface for the cron; Resend notification on auto-stop.
+1. **Close shipped-but-incomplete acceptance criteria** (~1 day): `X-Frame-Options` strip + dashboard iframe UI for preview; "last computed at" surface for the cron; Resend notification on auto-stop. (`stats.ts` unit tests landed; pipeline false-positive inflation surfaced by the Monte Carlo is a separate, larger workstream — α-spending or reduced peek cadence.)
 2. **Visible loop view** (3 days): `/app/loop` timeline of the full cycle — page is a TODO scaffold today.
 3. **Proxy reliability + SPA** (4 days): modification-error fail-open, kill switch, Browserless SPA support, auto-rollback wiring into Edge Config.
 4. **GA4 connector + integration health** (3 days): pull-sync via Google Analytics Data API v1beta; "Zybit is watching your site" cockpit panel.

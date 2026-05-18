@@ -147,7 +147,7 @@ The analysis engine and PM dashboard are complete. Zybit can:
 1. **Visible loop view** — No timeline showing the full detect → deploy → result → learn cycle. The renewal story and the demo depend on this. `/app/loop/page.tsx` is a TODO scaffold today.
 2. **Proxy reliability** — Modification-error fail-open, kill switch, and SPA handling are all still TODOs in `src/lib/experiments/proxy/handler.ts`. Auto-rollback on guardrail breach is not wired into Edge Config.
 3. **GA4 connector** — GA4 is in the source enum but has no implementation. Required to credibly claim analytics-agnostic.
-4. **Measurement follow-ups** — `stats.ts` unit tests, PostHog visitor-ID bridge (so PostHog-sourced conversions are correctly matched), `X-Frame-Options` strip on the preview endpoint, dashboard iframe UI for preview, and "last computed at" surface for the outcomes cron.
+4. **Measurement follow-ups** — Pipeline false-positive inflation (~14% measured vs nominal 5% — repeated-peeking from hourly cron; α-spending or reduced cadence would close it), PostHog visitor-ID bridge (so PostHog-sourced conversions are correctly matched), `X-Frame-Options` strip on the preview endpoint, dashboard iframe UI for preview, and "last computed at" surface for the outcomes cron.
 5. **Learn — rule calibration** — Outcome rows are persisted but no rule weighting yet consumes them.
 
 **What is deliberately not being built:**

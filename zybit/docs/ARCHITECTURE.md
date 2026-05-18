@@ -138,7 +138,7 @@ Hourly cron computes experiment outcomes and auto-stops on significance or guard
 | Cron route | `src/app/api/phase2/cron/compute-outcomes/route.ts` | Hourly trigger (`0 * * * *` in `vercel.json`), Cronitor heartbeat at run/success/fail |
 | Outcomes table | `drizzle/0011_experiment_outcomes.sql`, `schema.ts` `zybitExperimentOutcomes` | `(experimentId, findingId, ruleId, pathRef, modificationType, result, liftPct, confidence, control*, variant*, guardrailBreached, concludedAt)` |
 
-**Known gap:** PostHog-sourced conversions undercount until the visitor-ID bridge script lands (PostHog uses its own session IDs, not the Zybit cookie). See `computeOutcomes.ts:13` for the documented limitation and `computeOutcomes.ts:19` for the planned fix. **No `stats.ts` unit tests yet** — only `bucketing.test.ts` and `htmlModifier.test.ts` exist in `__tests__/`.
+**Known gap:** PostHog-sourced conversions undercount until the visitor-ID bridge script lands (PostHog uses its own session IDs, not the Zybit cookie). See `computeOutcomes.ts:13` for the documented limitation and `computeOutcomes.ts:19` for the planned fix. Unit tests for `stats.ts` are in `__tests__/stats.test.ts` (77 passing). **Pipeline false-positive inflation:** Monte Carlo in `__tests__/stats.simulation.test.ts` measures the auto-stop pipeline's empirical false-positive rate at ~14% under the null hypothesis (vs nominal 5%) — caused by hourly repeated peeking on the cumulative chi-squared statistic, not a math bug in `stats.ts`. Fix requires α-spending (Pocock/OBF) or reduced peek frequency; not yet shipped. The simulation test fails by design to keep this visible.
 
 ### Preview Before Deploy (`src/app/api/preview/[experimentId]/route.ts`)
 
@@ -279,7 +279,7 @@ The analysis engine is production-ready. The proxy bucketing and HTML modificati
 
 **Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
 
-> **Status:** Priority 1 was shipped in `5951a99` + `b09a212` and is now described in the "Measure — Outcome Computation" subsection under "What Exists." Outstanding follow-ups: `stats.ts` unit tests, PostHog visitor-ID bridge for accurate matching of PostHog-sourced conversions, Resend notification on auto-stop, "last computed at" surface in the dashboard. The original specification is retained below for reference.
+> **Status:** Priority 1 was shipped in `5951a99` + `b09a212` and is now described in the "Measure — Outcome Computation" subsection under "What Exists." `stats.ts` unit tests landed (`__tests__/stats.test.ts`, 77 passing) and a Monte Carlo pipeline simulation (`__tests__/stats.simulation.test.ts`) surfaced an empirical ~14% false-positive rate (vs nominal 5%) caused by repeated peeking — fix requires α-spending or reduced peek cadence and is a larger workstream than the original priority assumed. Other outstanding follow-ups: PostHog visitor-ID bridge for accurate matching of PostHog-sourced conversions, Resend notification on auto-stop, "last computed at" surface in the dashboard. The original specification is retained below for reference.
 
 #### Outcome Storage
 
