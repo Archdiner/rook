@@ -92,7 +92,7 @@ async function queryBucketCounts(
     conversions: string;
   }>(sql`
     WITH assignments AS (
-      SELECT
+      SELECT DISTINCT ON (session_id)
         session_id                         AS visitor_id,
         (properties->>'bucket')            AS bucket,
         occurred_at                        AS assigned_at
@@ -102,6 +102,7 @@ async function queryBucketCounts(
         AND (properties->>'experimentId') = ${experimentId}
         AND occurred_at >= ${startedAt}
         AND occurred_at <= ${endAt}
+      ORDER BY session_id, occurred_at ASC
     ),
     converters AS (
       SELECT DISTINCT e.session_id
@@ -332,12 +333,12 @@ export async function processExperiment(
     };
   }
 
-  // Step 5: Sequential testing guard — only stop if all three conditions pass
+  // Step 5: Sequential testing guard — check per-arm minimums to handle unbalanced traffic
   const readyToStop = isReadyToStop({
     confidence,
-    participants: totalParticipants,
+    participants: Math.min(counts.control.participants, counts.variant.participants),
     elapsedDays,
-    minimumParticipants: minTotal,
+    minimumParticipants: minPerArm,
   });
 
   if (readyToStop || durationExpired) {
