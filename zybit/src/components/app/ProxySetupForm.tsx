@@ -129,7 +129,7 @@ export default function ProxySetupForm({
           </h1>
         </>
       )}
-      <p className="text-[#6B6B6B] text-sm mb-6 leading-relaxed max-w-lg">
+      <p className="text-[#6B6B6B] text-sm mb-10 leading-relaxed max-w-lg">
         Zybit deploys experiments through a reverse proxy at{" "}
         <code className="font-mono text-xs bg-black/[0.05] px-1.5 py-0.5 rounded">
           {slug || "<slug>"}.zybit.run
@@ -137,7 +137,7 @@ export default function ProxySetupForm({
         . Point a CNAME from your domain so visitors hit Zybit transparently — no code change to your site.
       </p>
 
-      <div className="space-y-4 max-w-lg">
+      <div className="space-y-8 max-w-lg">
         {/* Slug field */}
         <div>
           <FieldLabel label="Proxy slug" />
@@ -181,7 +181,7 @@ export default function ProxySetupForm({
             onChange={setCustomerSubdomain}
             placeholder={`experiments.${domain}`}
           />
-          <p className="text-xs text-[#9B9B9B] mt-1">
+          <p className="text-xs text-[#9B9B9B] mt-2">
             Recommended: <code className="font-mono">experiments.{domain}</code>. Pick anything you can configure DNS for.
           </p>
         </div>
@@ -191,30 +191,30 @@ export default function ProxySetupForm({
           <FieldLabel label="DNS record to add at your registrar" />
 
           {/* Field-by-field record display, easier to map onto any registrar's DNS form */}
-          <div className="relative bg-[#F5F5F3] border border-black/[0.08] rounded-xl overflow-hidden">
-            <div className="absolute top-2 right-2 z-10">
+          <div className="bg-[#F5F5F3] border border-black/[0.08] rounded-xl overflow-hidden">
+            <div className="flex justify-end px-3 pt-3">
               <CopyButton text={cnameSnippet} />
             </div>
             <div className="grid grid-cols-3 divide-x divide-black/[0.06]">
-              <div className="p-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B9B9B] mb-1">Type</div>
+              <div className="px-5 pt-3 pb-5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B9B9B] mb-2">Type</div>
                 <div className="font-mono text-sm text-[#111]">CNAME</div>
               </div>
-              <div className="p-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B9B9B] mb-1">Host / Name</div>
+              <div className="px-5 pt-3 pb-5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B9B9B] mb-2">Host / Name</div>
                 <div className="font-mono text-sm text-[#111] break-all">{cnameHost}</div>
               </div>
-              <div className="p-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B9B9B] mb-1">Value / Target</div>
+              <div className="px-5 pt-3 pb-5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#9B9B9B] mb-2">Value / Target</div>
                 <div className="font-mono text-sm text-[#111] break-all">{cnameValue}</div>
               </div>
             </div>
           </div>
 
           {/* Numbered steps — generic, applies to any registrar */}
-          <div className="mt-4 text-sm text-[#444] leading-relaxed">
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-2">How to add this</p>
-            <ol className="list-decimal list-inside space-y-1.5 text-[#444]">
+          <div className="mt-8 text-sm text-[#444] leading-relaxed">
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-3">How to add this</p>
+            <ol className="list-decimal list-inside space-y-3 text-[#444]">
               <li>Open your domain registrar (where you bought {domain}).</li>
               <li>
                 Find the DNS / DNS Records / DNS Management page for{" "}
@@ -231,16 +231,16 @@ export default function ProxySetupForm({
           </div>
 
           {/* Registrar quick-links */}
-          <div className="mt-4">
-            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-2">Open your registrar&rsquo;s DNS panel</p>
-            <div className="flex flex-wrap gap-2">
+          <div className="mt-8">
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-3">Open your registrar&rsquo;s DNS panel</p>
+            <div className="flex flex-wrap gap-3">
               {REGISTRAR_LINKS.map((r) => (
                 <a
                   key={r.name}
                   href={r.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 bg-white border border-black/[0.1] rounded-lg px-3 py-1.5 text-xs font-medium text-[#111] hover:bg-black/[0.02] hover:border-black/[0.2] transition-colors"
+                  className="inline-flex items-center gap-1.5 bg-white border border-black/[0.1] rounded-lg px-3.5 py-2 text-xs font-medium text-[#111] hover:bg-black/[0.02] hover:border-black/[0.2] transition-colors"
                 >
                   {r.name}
                   <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
@@ -249,18 +249,18 @@ export default function ProxySetupForm({
                 </a>
               ))}
             </div>
-            <p className="text-xs text-[#9B9B9B] mt-2">
+            <p className="text-xs text-[#9B9B9B] mt-3">
               Not sure who hosts your DNS? Try <a href="https://www.whois.com/whois/" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#111]">whois.com</a> — the &ldquo;Registrar&rdquo; field tells you.
             </p>
           </div>
 
-          <p className="text-xs text-[#9B9B9B] mt-4">
+          <p className="text-xs text-[#9B9B9B] mt-8">
             DNS changes can take a few minutes to propagate. We&rsquo;ll issue a TLS cert for your subdomain once the CNAME resolves.
           </p>
         </div>
 
         {/* Primary actions */}
-        <div className="flex items-center gap-4 pt-2">
+        <div className="flex items-center gap-4 pt-4">
           {phase === "edit" && (
             <>
               <PrimaryButton
