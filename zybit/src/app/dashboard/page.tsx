@@ -128,7 +128,8 @@ export default function DashboardPage() {
               </motion.div>
               <motion.div className="absolute inset-0 grid place-items-center text-center pointer-events-auto" style={{ opacity: phase4Opacity }}>
                 <div>
-                  <div className="sans-text text-[10px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-3">Phase 04 — +14.2% Lift</div>
+                  <div className="sans-text text-[9px] font-bold text-[#6B6B6B] uppercase tracking-widest mb-1">Phase 04</div>
+                  <div className="sans-text text-4xl font-black tracking-tighter text-[#111] leading-none mb-3">+14.2%</div>
                   <button
                     onClick={() => setIsModalOpen(true)}
                     className="sans-text text-sm uppercase tracking-widest font-bold px-6 py-3 border border-[#111] bg-[#111] text-[#FAFAF8] hover:bg-transparent hover:text-[#111] transition-colors cursor-pointer"

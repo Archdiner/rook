@@ -35,52 +35,69 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
       </section>
 
       {/* Section 2: DNA — on mobile text starts below the helix */}
-      <section className="h-screen w-full flex flex-col pt-[65vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="w-full md:max-w-[500px] md:mt-[20vh] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
-          <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
-            <p>If the journey is broken, your analytics already show it: missed clicks, weak conversion, repetitive loops.</p>
-            <p className="text-[#111]">We ground recommendations in that behavior so you solve real friction, not placeholder roadmap items.</p>
+      <section className="h-screen w-full flex flex-col pt-[40vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
+        <div className="relative w-full md:max-w-[500px] md:mt-[20vh]">
+          {/* Gradient fade — softens the hard bg edge against the particle field on mobile */}
+          <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-[#FAFAF8] md:hidden" aria-hidden="true" />
+          <div className="bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
+            <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Pain shows up in behavior.</h2>
+            <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+              <p>If the journey is broken, your analytics already show it: missed clicks, weak conversion, repetitive loops.</p>
+              <p className="text-[#111]">We ground recommendations in that behavior so you solve real friction, not placeholder roadmap items.</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Section 3: Jet — text sits below the jet silhouette */}
-      <section className="h-screen w-full flex flex-col pt-[55vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
-        <div className="w-full md:max-w-[500px] md:mt-[20vh] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
-          <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
-            <p>Priorities mirror the friction visible in your data.</p>
-            <p className="text-[#111]">You ship changes you can justify with evidence, not scattershot UX tweaks.</p>
+      <section className="h-screen w-full flex flex-col pt-[40vh] md:pt-0 md:justify-start md:items-end px-6 md:px-24 md:text-right pointer-events-none">
+        <div className="relative w-full md:max-w-[500px] md:mt-[20vh]">
+          <div className="absolute -top-12 left-0 right-0 h-12 bg-gradient-to-b from-transparent to-[#FAFAF8] md:hidden" aria-hidden="true" />
+          <div className="bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
+            <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">Fix what hurts users first.</h2>
+            <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+              <p>Priorities mirror the friction visible in your data.</p>
+              <p className="text-[#111]">You ship changes you can justify with evidence, not scattershot UX tweaks.</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Section 4: Microchip — text near top, chip rendered below */}
       <section className="h-screen w-full flex flex-col pt-[12vh] md:pt-0 md:justify-start md:items-start px-6 md:px-24 pointer-events-none">
-        <div className="w-full md:max-w-[500px] md:mt-[15vh] bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
-          <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">What Zybit means.</h2>
-          <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
-            <p>
-              <span className="text-[#111]">Behavior-first:</span> product usage in; ranked, explainable priorities out.
-            </p>
-            <p className="text-[#111]">Signal from your data, not gut feel, decides what ships.</p>
+        <div className="relative w-full md:max-w-[500px] md:mt-[15vh]">
+          <div className="absolute -top-8 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[#FAFAF8] md:hidden" aria-hidden="true" />
+          <div className="bg-[#FAFAF8] p-4 md:bg-transparent md:p-0">
+            <h2 className="sans-text text-3xl sm:text-5xl md:text-7xl font-bold tracking-tight mb-3 md:mb-6">What Zybit means.</h2>
+            <div className="sans-text text-sm sm:text-xl md:text-2xl text-[#6B6B6B] leading-relaxed md:leading-snug space-y-3 md:space-y-4">
+              <p>
+                <span className="text-[#111]">Behavior-first:</span> product usage in; ranked, explainable priorities out.
+              </p>
+              <p className="text-[#111]">Signal from your data, not gut feel, decides what ships.</p>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Section 5: Sample Finding — screenshot + receipt card */}
-      <section className="min-h-screen w-full flex items-center justify-center px-6 py-24 pointer-events-none bg-[#FAFAF8]">
+      <section className="min-h-screen w-full flex items-center justify-center px-6 py-16 pointer-events-none bg-[#FAFAF8]">
         <div className="w-full max-w-5xl">
           <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-8 md:mb-10 text-center">
             Sample finding
           </div>
 
-          {/* Two-column on desktop, stacked on mobile */}
+          {/* Mobile hero — shows the headline stat before the card */}
+          <div className="lg:hidden text-center mb-10">
+            <div className="sans-text text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6B6B] mb-3">Estimated monthly impact</div>
+            <div className="sans-text text-7xl font-black tracking-tighter text-[#111] leading-none">$3.2k</div>
+            <div className="sans-text text-sm text-[#6B6B6B] mt-2">found from a single friction point</div>
+          </div>
+
+          {/* Two-column on desktop, card-only on mobile */}
           <div className="flex flex-col lg:flex-row items-start gap-8 lg:gap-10">
 
-            {/* Left: product screenshot in browser frame */}
-            <div className="w-full lg:flex-1">
+            {/* Left: product screenshot in browser frame — desktop only */}
+            <div className="hidden lg:block w-full lg:flex-1">
               <div
                 className="border-2 border-[#111] overflow-hidden"
                 style={{ boxShadow: '8px 8px 0px #111' }}
@@ -107,13 +124,13 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
               </p>
             </div>
 
-            {/* Right: receipt card */}
+            {/* Right: receipt card — full width on mobile */}
             <div className="w-full lg:w-[360px] flex-shrink-0">
               <div
                 className="sans-text bg-[#FAFAF8] border-2 border-[#111]"
                 style={{ boxShadow: '8px 8px 0px #111' }}
               >
-                <div className="flex items-center justify-between px-5 py-3 border-b-2 border-[#111] text-[10px] font-bold uppercase tracking-[0.18em] text-[#111] gap-3">
+                <div className="flex items-center justify-between px-5 py-3.5 border-b-2 border-[#111] text-[10px] font-bold uppercase tracking-[0.18em] text-[#111] gap-3">
                   <span className="truncate">F-0042 · rage-click-target</span>
                   <span className="whitespace-nowrap text-[#6B6B6B] flex-shrink-0">High · 0.84</span>
                 </div>
@@ -121,7 +138,7 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
                     Finding
                   </div>
-                  <div className="text-base md:text-lg font-bold leading-snug tracking-tight text-[#111]">
+                  <div className="text-lg md:text-lg font-bold leading-snug tracking-tight text-[#111]">
                     Rage-clicks on checkout promo-code field
                   </div>
                 </div>
@@ -129,9 +146,9 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
                     Evidence · PostHog · 7d
                   </div>
-                  <div className="text-sm text-[#111] leading-relaxed">
-                    847 rage-click events on{' '}
-                    <span className="font-mono text-[0.9em] bg-black/[0.06] px-1 rounded-sm">#promo-code</span>{' '}
+                  <div className="text-base text-[#111] leading-relaxed">
+                    <span className="font-bold text-[#111]">847</span> rage-click events on{' '}
+                    <span className="font-mono text-[0.85em] bg-black/[0.06] px-1 rounded-sm">#promo-code</span>{' '}
                     over 7 days. Checkout completion 2.1% with field vs 3.4% without.
                   </div>
                 </div>
@@ -139,15 +156,15 @@ function MinimalDOM({ openModal }: { openModal: () => void }) {
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6B6B] mb-2">
                     Change
                   </div>
-                  <div className="text-sm text-[#111] leading-relaxed">
+                  <div className="text-base text-[#111] leading-relaxed">
                     Collapse promo-code behind a &ldquo;Have a code?&rdquo; toggle below the primary CTA.
                   </div>
                 </div>
-                <div className="px-5 py-3.5 flex items-center justify-between bg-[#111] text-[#FAFAF8]">
+                <div className="px-5 py-5 flex items-center justify-between bg-[#111] text-[#FAFAF8]">
                   <div className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-60">
                     Est. impact
                   </div>
-                  <div className="text-sm font-bold tracking-tight">
+                  <div className="text-2xl lg:text-xl font-black tracking-tight">
                     ~$3.2k / month
                   </div>
                 </div>
