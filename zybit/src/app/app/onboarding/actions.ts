@@ -47,22 +47,8 @@ export async function createSiteAction(
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Check if the script tag is firing events
+// Step 2 (proxy slug + DNS) lives in proxyActions.ts
 // ---------------------------------------------------------------------------
-
-export async function checkInstallAction(siteId: string): Promise<boolean> {
-  const auth = await getServerAuth();
-  if (!auth.ok) return false;
-
-  const repository = createPhase1Repository();
-  const events = await repository.listEvents({
-    organizationId: auth.orgId,
-    siteId,
-    limit: 1,
-  });
-
-  return events.length > 0;
-}
 
 // ---------------------------------------------------------------------------
 // Step 3: Connect analytics integration

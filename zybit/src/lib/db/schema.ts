@@ -178,6 +178,8 @@ export const phase1Sites = pgTable(
     domain: text('domain').notNull(),
     analyticsProvider: text('analytics_provider'),
     proxySlug: text('proxy_slug'),
+    /** Customer-side subdomain they CNAME at <proxy_slug>.zybit.run, e.g. "experiments.acme.com". */
+    customerSubdomain: text('customer_subdomain'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
