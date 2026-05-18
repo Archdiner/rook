@@ -14,7 +14,7 @@ Zybit is a single Next.js application deployed on Vercel. All domain logic runs 
 │                                                         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
 │  │ Dashboard │  │ API      │  │ Cron     │  │ Auth   │  │
-│  │ (React)  │  │ Routes   │  │ Jobs     │  │ (Clerk)│  │
+│  │ (React)  │  │ Routes   │  │ Jobs     │  │(Magic) │  │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┘  │
 │       │              │              │                    │
 │  ┌────┴──────────────┴──────────────┴──────────────┐    │
@@ -29,8 +29,8 @@ Zybit is a single Next.js application deployed on Vercel. All domain logic runs 
 │  │  ┌───────────┐  ┌────────────┐  ┌────────────┐  │    │
 │  │  │ Variant   │  │ Experiment │  │ Outcome    │  │    │
 │  │  │ Engine    │  │ Deployer   │  │ Tracker    │  │    │
-│  │  │ (Propose) │  │ (Test)     │  │ (Learn)    │  │    │
-│  │  │ NOT BUILT │  │ NOT BUILT  │  │ NOT BUILT  │  │    │
+│  │  │ (Propose) │  │ (Test)     │  │ (Measure)  │  │    │
+│  │  │   BUILT   │  │  PARTIAL   │  │   BUILT    │  │    │
 │  │  └───────────┘  └────────────┘  └────────────┘  │    │
 │  └──────────────────────────────────────────────────┘    │
 │                          │                               │
@@ -115,9 +115,72 @@ Single Postgres database (Neon serverless) via Drizzle ORM.
 | `zybit_site_meta` | Site operational metadata (MRR, AOV, session counts) |
 | `zybit_api_keys` | M2M API keys (hashed) |
 
-### Auth
+### Test — Variant Delivery (`src/lib/experiments/`)
 
-Clerk for user auth. M2M API keys for programmatic access. Tenant scoping on `(organizationId, siteId)`.
+Edge proxy that assigns visitors and applies modifications inline.
+
+| Component | File | What it does |
+|-----------|------|--------------|
+| Bucketing | `bucketing.ts` | Deterministic cookie-hash assignment to control/variant per experiment |
+| HTML modifier | `htmlModifier.ts` | Applies `VariantModification[]` (css-inject, text-replace, attribute-set, element-hide/show) to raw HTML |
+| Proxy handler | `proxy/handler.ts` | Fetches origin, assigns bucket, mutates HTML, logs the `experiment_assignment` canonical event |
+
+**Limitations (still TODO):** modification-error fail-open (handler.ts:129), per-experiment kill switch (handler.ts:153), SPA proxy handling (handler.ts:159), auto-rollback wiring on guardrail breach. Network-error fail-open is in place (handler.ts:109).
+
+### Measure — Outcome Computation (`src/lib/experiments/`)
+
+Hourly cron computes experiment outcomes and auto-stops on significance or guardrail breach. Shipped in `5951a99` + `b09a212`.
+
+| Component | File | What it does |
+|-----------|------|--------------|
+| Pure stats | `stats.ts` | `chiSquaredTwoProportions`, `guardrailOneSidedPValue`, Welch's t-test via erfc, `minimumSampleSizePerArm`, `isReadyToStop` (confidence + per-arm min sample + min days), `classifyResult` |
+| Compute job | `computeOutcomes.ts` | SQL CTE join of `experiment_assignment` × conversion events by visitor ID with `DISTINCT ON` dedup; per-bucket rate; guardrail eval; auto-stop with outcome row insert |
+| Cron route | `src/app/api/phase2/cron/compute-outcomes/route.ts` | Hourly trigger (`0 * * * *` in `vercel.json`), Cronitor heartbeat at run/success/fail |
+| Outcomes table | `drizzle/0011_experiment_outcomes.sql`, `schema.ts` `zybitExperimentOutcomes` | `(experimentId, findingId, ruleId, pathRef, modificationType, result, liftPct, confidence, control*, variant*, guardrailBreached, concludedAt)` |
+
+**Known gap:** PostHog-sourced conversions undercount until the visitor-ID bridge script lands (PostHog uses its own session IDs, not the Zybit cookie). See `computeOutcomes.ts:13` for the documented limitation and `computeOutcomes.ts:19` for the planned fix. **No `stats.ts` unit tests yet** — only `bucketing.test.ts` and `htmlModifier.test.ts` exist in `__tests__/`.
+
+### Preview Before Deploy (`src/app/api/preview/[experimentId]/route.ts`)
+
+Server-side preview endpoint. Fetches origin HTML (8s timeout), applies `VariantModification[]` for the requested bucket, injects a preview banner, returns HTML for iframe rendering. Authenticated; ownership-checked against `auth.orgId`.
+
+**Outstanding:** strips no security headers — `X-Frame-Options` and `Content-Security-Policy: frame-ancestors` from the origin will block iframe rendering in the dashboard (route.ts:124 TODO). No dashboard component consumes the endpoint yet.
+
+### Billing (`src/lib/billing/`, `src/app/api/billing/`)
+
+Stripe integration.
+
+| Component | File | What it does |
+|-----------|------|--------------|
+| Stripe client | `stripe.ts` | Server-side Stripe SDK wrapper |
+| Plans | `plans.ts` | Plan tier definitions (Free / Pilot / Growth) and feature limits |
+| Plan-limit checks | `checkPlanLimit.ts` | Enforcement helper for site count, insight run rate, retention |
+| Usage metering | `usage.ts` | Monthly run/snapshot/event counts for invoice line items |
+| API routes | `src/app/api/billing/{checkout,portal,usage,webhook}/` | Stripe checkout/portal session, usage endpoint, webhook receiver |
+
+**Enforcement coverage is unverified** — plan-limit calls are scattered and not yet audited end-to-end against every mutation path.
+
+### Observability (`src/lib/observability/`)
+
+| Component | File | What it does |
+|-----------|------|--------------|
+| Logger | `logger.ts` | Structured logger with service union; emits JSON for downstream ingest |
+| Cronitor | `cronitor.ts` | `cronitorPing(monitor, 'run' \| 'complete' \| 'fail')` heartbeats; wired into cron routes |
+| Error budget | `errorBudget.ts` | Rolling error-rate tracker per service |
+
+**Outstanding:** Axiom (or alternative) log drain is not yet connected — logger output goes only to Vercel's default stream.
+
+### Auth (`src/lib/auth/`)
+
+Invite-only magic-link sessions. Clerk was removed in `a786d37`.
+
+| Component | File | What it does |
+|-----------|------|--------------|
+| Session | `session.ts` | `zb_session` cookie, `createMagicLink`, timing-safe `hashToken` |
+| Server auth | `serverAuth.ts` | `getServerAuth()` resolves `{ userId, orgId, ok }` from the session cookie for server components and API routes |
+| M2M API keys | `apiKeys.ts` | `Bearer zybit_sk_***` hashed in DB; scopes; last-used timestamps |
+| Tenant scoping | `tenantScope.ts` | `(organizationId, siteId)` filter helper for queries |
+| Magic-link routes | `src/app/api/auth/{request-link,callback,sign-out}/` | Issue magic link, complete sign-in, log out |
 
 ---
 
@@ -216,6 +279,8 @@ The analysis engine is production-ready. The proxy bucketing and HTML modificati
 
 **Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
 
+> **Status:** Priority 1 was shipped in `5951a99` + `b09a212` and is now described in the "Measure — Outcome Computation" subsection under "What Exists." Outstanding follow-ups: `stats.ts` unit tests, PostHog visitor-ID bridge for accurate matching of PostHog-sourced conversions, Resend notification on auto-stop, "last computed at" surface in the dashboard. The original specification is retained below for reference.
+
 #### Outcome Storage
 
 New table `zybit_experiment_outcomes`:
@@ -295,6 +360,8 @@ Implementation:
 
 ### Priority 2: Preview Before Deploy
 
+> **Status:** The server endpoint was shipped in `5951a99` + `b09a212` and is now described in the "Preview Before Deploy" subsection under "What Exists." Outstanding: strip `X-Frame-Options` / `frame-ancestors` from the response so iframes render in the dashboard (`route.ts:124` TODO), and build the side-by-side iframe UI on the experiment detail page. Original specification retained below.
+
 **What:** PM sees the modified page in an iframe before activating on real traffic.
 
 **Why:** Removes the single biggest trust blocker in every demo. A PM who cannot see the change before it goes live will not approve it.
@@ -303,8 +370,6 @@ Implementation:
 `GET /api/preview/[experimentId]` — fetch origin HTML, apply `VariantModification[]` as `<style>` injections and DOM mutations, return modified HTML for iframe embed. No external dependency.
 
 Dashboard: side-by-side iframe toggle (control | variant) on experiment detail page.
-
-**Timeline:** 2 days. Can be built in parallel with measurement work (different surface).
 
 ---
 
