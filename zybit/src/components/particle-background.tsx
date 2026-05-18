@@ -510,19 +510,19 @@ function ParticleSwarm() {
     const elapsedSpawn = (Date.now() - mountTimeRef.current) / spawnDuration;
     
     const scrollInVH = scrollY / window.innerHeight;
-    const uP = Math.min(5, scrollInVH);
 
-    // Scale Y-pan so the swarm reaches exactly 5×vh at page bottom regardless of
-    // actual page height, then clamp so iOS overscroll bounce never sends particles
-    // flying past the silk wave at the bottom.
+    // Normalize progress against the actual page height so morph state and Y-pan
+    // always use the same scale. When page height != exactly 5×vh (e.g. min-h-screen
+    // section 5 is taller on mobile), keeping them in sync prevents shapes from
+    // appearing at the wrong scroll positions.
     const maxScrollInVH = Math.max(5.0, (document.documentElement.scrollHeight - window.innerHeight) / window.innerHeight);
-    const targetPanVH = Math.min(5.0, scrollInVH * (5.0 / maxScrollInVH));
+    const uP = Math.min(5.0, scrollInVH * (5.0 / maxScrollInVH));
 
     // Exponential-decay lerp at lambda=5: smooth on 60/90/120 Hz ProMotion without lag.
-    // Both Y-pan and morph progress use the same factor so they stay perfectly in sync,
+    // Both Y-pan and morph progress target the same uP so they stay perfectly in sync,
     // giving particles a preset-path feel where movement is fully determined by scroll.
     const lerpFactor = isMobile ? 1 - Math.exp(-5 * delta) : 1.0;
-    smoothPanRef.current += (targetPanVH - smoothPanRef.current) * lerpFactor;
+    smoothPanRef.current += (uP - smoothPanRef.current) * lerpFactor;
     smoothProgressRef.current += (uP - smoothProgressRef.current) * lerpFactor;
 
     shaderRef.current.uniforms.uTime.value = time;
