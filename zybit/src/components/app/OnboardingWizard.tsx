@@ -529,15 +529,21 @@ function Step4({
 export default function OnboardingWizard({
   existingSite,
   hasIntegration,
+  initialStep = null,
 }: {
   existingSite: Phase1SiteRecord | null;
   hasIntegration: boolean;
+  initialStep?: Step | null;
 }) {
-  const startStep: Step = existingSite
+  // Default step inferred from current state; explicit ?step= overrides it when
+  // the prerequisites are satisfied (e.g. can't deep-link to step 2/3/4 without a site).
+  const inferredStep: Step = existingSite
     ? hasIntegration
       ? 4
       : 2
     : 1;
+  const startStep: Step =
+    initialStep && (initialStep === 1 || existingSite) ? initialStep : inferredStep;
 
   const [state, setState] = useState<WizardState>({
     step: startStep,
