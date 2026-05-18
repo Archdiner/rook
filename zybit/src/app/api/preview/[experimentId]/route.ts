@@ -119,8 +119,6 @@ export async function GET(
     </div>
     <div style="height:36px"></div>
   `;
-  outputHtml = outputHtml.replace('<body', `<body>${banner}<body`.replace('<body>', ''));
-  // Simpler: inject after <body>
   outputHtml = outputHtml.replace(/(<body[^>]*>)/i, `$1${banner}`);
 
   // TODO: strip X-Frame-Options so the iframe can render inside the dashboard

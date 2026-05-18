@@ -141,15 +141,13 @@ export function minimumSampleSizePerArm(
   if (p2 >= 1) return 100;
 
   // z_alpha/2 for two-sided test; z_beta for power
-  const zAlpha = 1.96; // alpha = 0.05
+  const zAlpha = alpha === 0.01 ? 2.576 : alpha === 0.10 ? 1.645 : 1.96; // two-sided
   const zBeta = power === 0.9 ? 1.282 : power === 0.95 ? 1.645 : 0.842; // default power=0.8
 
   const numerator = (zAlpha + zBeta) ** 2 * (p1 * (1 - p1) + p2 * (1 - p2));
   const denominator = (p2 - p1) ** 2;
 
   return Math.ceil(numerator / denominator);
-
-  void alpha; // alpha is encoded in zAlpha above
 }
 
 // ---------------------------------------------------------------------------
