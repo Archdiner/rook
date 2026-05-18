@@ -21,7 +21,7 @@ Zybit is a conversion intelligence platform for product managers. It runs a six-
 - **Deterministic over generative.** Audit rules are pure functions — same input, same output. No LLM-generated numbers or invented evidence.
 - **PM-first at every layer.** Every output (finding title, evidence summary, UI label) is for a product manager, not an engineer.
 - **Every file has a purpose.** No scaffolding, no placeholders, no "we might need this later."
-- **Third-party where it's better.** Auth = Clerk. Email = Resend. Billing = Stripe. Headless browser = Browserless.io. Cron monitoring = Cronitor. Observability = Axiom. Do not rebuild what third parties do well.
+- **Third-party where it's better.** Auth = invite-only magic-link sessions in `src/lib/auth/` (Clerk was removed in `a786d37`). Email = Resend. Billing = Stripe. Headless browser = Browserless.io. Cron monitoring = Cronitor. Observability = Axiom. Do not rebuild what third parties do well.
 - **`npm run verify` must pass** before any commit: lint + TypeScript + build.
 
 ---
@@ -35,7 +35,7 @@ zybit/
   src/lib/phase2/snapshots/   — Static HTML parse + visual-weight analysis
   src/lib/phase2/rollups/     — Event → InsightInput aggregation pipeline
   src/lib/phase1/             — Readiness scoring + legacy insights engine
-  src/lib/auth/               — Clerk auth + M2M API keys
+  src/lib/auth/               — Magic-link sessions + M2M API keys
   src/lib/billing/            — Stripe integration (plans, limits, usage metering)
   src/lib/experiments/        — Bucketing, HTML modifier, edge proxy (partial)
   src/lib/observability/      — Cronitor, error budget, structured logger
@@ -60,21 +60,24 @@ zybit/
 | **Watch** (PostHog + Segment) | ✅ Built | Pull-sync + webhook; GA4 not built (next connector priority) |
 | **Identify** (12 audit rules) | ✅ Built | 5 design + 7 pain rules, 193 passing tests — sufficient; do not add more rules |
 | **Propose** (findings + prescriptions) | ✅ Built | Ranked by priority score + revenue impact, PM-readable |
-| **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built; no fail-open, no kill switch, no SPA handling |
-| **Measure** (outcome computation) | ❌ Not built | Results are manually entered; no chi-squared, no sequential testing, no guardrails — **highest priority gap** |
-| **Learn** (outcome feedback loop) | ❌ Not built | No outcome storage, no rule calibration — depends on Measure first |
+| **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built. Network-error fail-open exists (`proxy/handler.ts:109`); **modification-error fail-open, kill switch, and SPA handling still TODO** (handler.ts:129/153/159) |
+| **Measure** (outcome computation) | ✅ Built | Shipped in `5951a99` + `b09a212`: outcome table (`drizzle/0011_experiment_outcomes.sql`), `stats.ts` (chi-squared, Welch, sequential guard, min-sample), `computeOutcomes.ts`, hourly cron. **Caveats:** no `stats.ts` unit tests yet; PostHog visitor-ID bridge not yet in place (PostHog-sourced conversions undercounted) |
+| **Learn** (outcome feedback loop) | ❌ Not built | Outcome rows are persisted, but no rule calibration consumes them yet |
 | **Visible loop view** | ❌ Not built | No timeline of detect → deploy → result → learning — needed for every demo and renewal |
-| **Preview before deploy** | ❌ Not built | PM cannot see variant before it goes live — trust blocker |
+| **Preview before deploy** | ✅ Built | Shipped in `5951a99` + `b09a212`: `api/preview/[experimentId]/route.ts` applies modifications + preview banner with 8s origin timeout. **Caveats:** `X-Frame-Options` / `frame-ancestors` strip not yet implemented (route.ts:124); no dashboard iframe UI consumes the endpoint |
 | **GA4 connector** | ❌ Not built | Required for analytics-agnostic claim to be credible |
-| **Billing** (Stripe + plan limits) | ⚠️ Partial | Routes and helpers exist; plan enforcement may be incomplete |
-| **Observability** | ⚠️ Partial | Cronitor, error budget, logger built; Axiom drain not wired |
+| **Billing** (Stripe + plan limits) | ⚠️ Partial | Routes and helpers exist (`src/lib/billing/`, `src/app/api/billing/`); plan enforcement coverage unverified |
+| **Observability** | ⚠️ Partial | Cronitor + error budget + structured logger built and wired into crons; Axiom drain not yet connected |
 
 ## Immediate build order
 
-1. **Measure — compute-outcomes** (4 days): outcome table + conversion join + chi-squared + sequential testing guard + auto-stop + guardrail evaluation + cron. Nothing else matters until this exists.
-2. **Preview before deploy** (2 days, parallel): `/api/preview/[experimentId]` + iframe in experiment detail.
-3. **Visible loop view** (3 days): `/app/loop` timeline of the full cycle.
-4. **Proxy reliability + SPA** (4 days): fail-open, kill switch, Browserless SPA support, auto-rollback wiring.
+> **Status (2026-05-18):** Measure and Preview both shipped in `5951a99` + `b09a212`. The real critical path now starts at the loop view + proxy hardening.
+
+1. **Close shipped-but-incomplete acceptance criteria** (~1 day): `stats.ts` unit tests; `X-Frame-Options` strip + dashboard iframe UI for preview; "last computed at" surface for the cron; Resend notification on auto-stop.
+2. **Visible loop view** (3 days): `/app/loop` timeline of the full cycle — page is a TODO scaffold today.
+3. **Proxy reliability + SPA** (4 days): modification-error fail-open, kill switch, Browserless SPA support, auto-rollback wiring into Edge Config.
+4. **GA4 connector + integration health** (3 days): pull-sync via Google Analytics Data API v1beta; "Zybit is watching your site" cockpit panel.
+5. **PostHog visitor-ID bridge** (~0.5 day): inject script via proxy so `posthog.register({'zybit_vid': ...})` carries the Zybit cookie into conversion events — unblocks accurate measurement for PostHog-sourced events.
 
 **Never build:** sentiment analysis, GitHub PR generation, own event collection SDK / PostHog replacement, more audit rules, cross-site priors before 50+ customers.
 
