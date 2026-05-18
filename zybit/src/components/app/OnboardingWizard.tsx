@@ -8,8 +8,6 @@ import {
   createIntegrationAction,
   saveSiteMetaAction,
 } from "@/app/app/onboarding/actions";
-import InstallVerifier from "./InstallVerifier";
-
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -20,6 +18,7 @@ interface WizardState {
   step: Step;
   siteId: string | null;
   siteDomain: string | null;
+  proxySlug: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +147,7 @@ function Step1({
   onComplete,
 }: {
   initialDomain?: string;
-  onComplete: (siteId: string, domain: string) => void;
+  onComplete: (siteId: string, domain: string, proxySlug: string | null) => void;
 }) {
   const [domain, setDomain] = useState(initialDomain ?? "");
   const [name, setName] = useState("");
@@ -163,7 +162,7 @@ function Step1({
       if (!result.ok) {
         setError(result.error);
       } else {
-        onComplete(result.site.id, result.site.domain);
+        onComplete(result.site.id, result.site.domain, result.site.proxySlug ?? null);
       }
     } catch {
       setError("Something went wrong. Try again.");
@@ -221,16 +220,28 @@ function Step1({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Script install + verification
+// Step 2: Proxy DNS setup
 // ---------------------------------------------------------------------------
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, inline = false }: { text: string; inline?: boolean }) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  if (inline) {
+    return (
+      <button
+        type="button"
+        onClick={copy}
+        className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B] hover:text-[#111] transition-colors px-2 py-1 rounded border border-black/[0.08] bg-white shrink-0"
+      >
+        {copied ? "Copied!" : "Copy"}
+      </button>
+    );
   }
 
   return (
@@ -245,44 +256,75 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function Step2({
-  siteId,
+  proxySlug,
   domain,
   onComplete,
   onSkip,
 }: {
-  siteId: string;
+  proxySlug: string | null;
   domain: string;
   onComplete: () => void;
   onSkip: () => void;
 }) {
-  const snippet = `<script src="https://js.zybit.run/v1.js?siteId=${siteId}" async></script>`;
+  const proxyHost = proxySlug ? `${proxySlug}.zybit.run` : null;
 
   return (
     <div>
       <StepLabel>Step 2 of 4</StepLabel>
       <h1 className="text-4xl font-bold tracking-tighter text-[#111] mb-2 leading-[0.95]">
-        Add the<br />script tag.
+        Set up your<br />proxy domain.
       </h1>
       <p className="text-[#6B6B6B] text-sm mb-8 leading-relaxed max-w-sm">
-        Paste this into the <code className="text-xs font-mono bg-black/[0.05] px-1 py-0.5 rounded">&lt;head&gt;</code> of{" "}
-        <strong>{domain}</strong>. One line, 30 seconds.
+        Zybit deploys variants by proxying traffic to <strong>{domain}</strong>.
+        Add one CNAME record to your DNS — 30 seconds.
       </p>
 
-      <div className="max-w-lg mb-6">
-        <div className="relative bg-[#F5F5F3] border border-black/[0.08] rounded-xl p-4 font-mono text-xs text-[#333] leading-relaxed overflow-x-auto">
-          <CopyButton text={snippet} />
-          <pre className="whitespace-pre-wrap break-all pr-16">{snippet}</pre>
+      {proxyHost ? (
+        <div className="max-w-lg mb-6 space-y-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-2">
+              Your Zybit proxy address
+            </p>
+            <div className="flex items-center gap-2 bg-[#F5F5F3] border border-black/[0.08] rounded-xl px-4 py-3 font-mono text-sm text-[#333]">
+              <span className="flex-1">{proxyHost}</span>
+              <CopyButton text={proxyHost} inline />
+            </div>
+          </div>
+
+          <div className="bg-[#F5F5F3] border border-black/[0.08] rounded-xl p-4 text-sm space-y-2">
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-3">
+              Add this record in your DNS provider
+            </p>
+            <div className="grid grid-cols-[80px_1fr] gap-x-4 gap-y-1.5 font-mono text-xs text-[#333]">
+              <span className="text-[#6B6B6B] font-sans font-semibold">Type</span>
+              <span>CNAME</span>
+              <span className="text-[#6B6B6B] font-sans font-semibold">Name</span>
+              <span>ab <span className="text-[#9B9B9B] font-sans">(or any subdomain you choose)</span></span>
+              <span className="text-[#6B6B6B] font-sans font-semibold">Value</span>
+              <span>{proxyHost}</span>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#9B9B9B] leading-relaxed">
+            Your test URL will be something like <span className="font-mono">ab.{domain}</span>.
+            Zybit sits transparently between your visitors and your origin.
+          </p>
         </div>
-      </div>
+      ) : (
+        <div className="max-w-lg mb-6 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-800">
+          Proxy address unavailable — contact support.
+        </div>
+      )}
 
-      <div className="mb-5">
-        <InstallVerifier
-          siteId={siteId}
-          onDetected={() => setTimeout(onComplete, 1200)}
-        />
+      <div className="flex items-center gap-4">
+        <PrimaryButton onClick={onComplete}>
+          Continue
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </PrimaryButton>
+        <SkipLink onClick={onSkip} />
       </div>
-
-      <SkipLink onClick={onSkip} />
     </div>
   );
 }
@@ -543,6 +585,7 @@ export default function OnboardingWizard({
     step: startStep,
     siteId: existingSite?.id ?? null,
     siteDomain: existingSite?.domain ?? null,
+    proxySlug: existingSite?.proxySlug ?? null,
   });
 
   function advance(to: Step, patch?: Partial<WizardState>) {
@@ -557,15 +600,15 @@ export default function OnboardingWizard({
         {state.step === 1 && (
           <Step1
             initialDomain={state.siteDomain ?? ""}
-            onComplete={(siteId, domain) =>
-              advance(2, { siteId, siteDomain: domain })
+            onComplete={(siteId, domain, proxySlug) =>
+              advance(2, { siteId, siteDomain: domain, proxySlug })
             }
           />
         )}
 
-        {state.step === 2 && state.siteId && state.siteDomain && (
+        {state.step === 2 && state.siteDomain && (
           <Step2
-            siteId={state.siteId}
+            proxySlug={state.proxySlug}
             domain={state.siteDomain}
             onComplete={() => advance(3)}
             onSkip={() => advance(3)}

@@ -175,6 +175,7 @@ export function createPostgresPhase1Repository(): Phase1Repository {
           name: input.name,
           domain: input.domain,
           analyticsProvider: input.analyticsProvider ?? null,
+          proxySlug: input.proxySlug ?? null,
           createdAt: new Date(input.createdAt),
         })
         .returning();
@@ -186,6 +187,7 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         domain: created.domain,
         createdAt: created.createdAt.toISOString(),
         ...(created.analyticsProvider ? { analyticsProvider: created.analyticsProvider } : {}),
+        ...(created.proxySlug ? { proxySlug: created.proxySlug } : {}),
       };
     },
     async listSites(input: ListPhase1SitesInput): Promise<Phase1SiteRecord[]> {
@@ -204,6 +206,7 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         domain: site.domain,
         createdAt: site.createdAt.toISOString(),
         ...(site.analyticsProvider ? { analyticsProvider: site.analyticsProvider } : {}),
+        ...(site.proxySlug ? { proxySlug: site.proxySlug } : {}),
       }));
     },
     async getSite(input: GetPhase1SiteInput): Promise<Phase1SiteRecord | null> {
@@ -223,6 +226,7 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         domain: site.domain,
         createdAt: site.createdAt.toISOString(),
         ...(site.analyticsProvider ? { analyticsProvider: site.analyticsProvider } : {}),
+        ...(site.proxySlug ? { proxySlug: site.proxySlug } : {}),
       };
     },
     async createEvent(input: CreatePhase1EventInput): Promise<Phase1EventRecord> {

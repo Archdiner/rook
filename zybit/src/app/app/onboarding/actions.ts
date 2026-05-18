@@ -1,14 +1,35 @@
 "use server";
 
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
 import { getServerAuth } from "@/lib/auth/serverAuth";
 import { createPhase1Repository } from "@/lib/phase1";
 import { encryptSecret } from "@/lib/crypto/secrets";
 import { getDb } from "@/lib/db/client";
-import { zybitSiteMeta } from "@/lib/db/schema";
+import { phase1Sites, zybitSiteMeta } from "@/lib/db/schema";
 import type { Phase1SiteRecord } from "@/lib/phase1";
 import type { ConnectorProvider, IntegrationRecord } from "@/lib/phase2/connectors/types";
+
+function domainToSlug(domain: string): string {
+  return domain
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+async function generateUniqueSlug(domain: string): Promise<string> {
+  const base = domainToSlug(domain);
+  const db = getDb();
+  const existing = await db
+    .select({ id: phase1Sites.id })
+    .from(phase1Sites)
+    .where(eq(phase1Sites.proxySlug, base))
+    .limit(1);
+  if (existing.length === 0) return base;
+  return `${base}-${randomBytes(2).toString('hex')}`;
+}
 
 // ---------------------------------------------------------------------------
 // Step 1: Create (or return existing) site
@@ -35,33 +56,18 @@ export async function createSiteAction(
   const existing = await repository.listSites({ organizationId: auth.orgId, limit: 1 });
   if (existing[0]) return { ok: true, site: existing[0] };
 
+  const proxySlug = await generateUniqueSlug(normalizedDomain);
+
   const site = await repository.createSite({
     id: randomUUID(),
     organizationId: auth.orgId,
     name: name.trim() || normalizedDomain,
     domain: normalizedDomain,
+    proxySlug,
     createdAt: new Date().toISOString(),
   });
 
   return { ok: true, site };
-}
-
-// ---------------------------------------------------------------------------
-// Step 2: Check if the script tag is firing events
-// ---------------------------------------------------------------------------
-
-export async function checkInstallAction(siteId: string): Promise<boolean> {
-  const auth = await getServerAuth();
-  if (!auth.ok) return false;
-
-  const repository = createPhase1Repository();
-  const events = await repository.listEvents({
-    organizationId: auth.orgId,
-    siteId,
-    limit: 1,
-  });
-
-  return events.length > 0;
 }
 
 // ---------------------------------------------------------------------------

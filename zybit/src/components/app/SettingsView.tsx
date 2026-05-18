@@ -6,8 +6,6 @@ import Link from "next/link";
 import type { Phase1SiteRecord } from "@/lib/phase1";
 import type { IntegrationRecord } from "@/lib/phase2/connectors/types";
 import { saveSiteMetaAction } from "@/app/app/onboarding/actions";
-import InstallVerifier from "./InstallVerifier";
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -39,7 +37,7 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 }
 
 // ---------------------------------------------------------------------------
-// Script tag section
+// Proxy setup section
 // ---------------------------------------------------------------------------
 
 function CopyButton({ text }: { text: string }) {
@@ -55,29 +53,65 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={copy}
-      className="absolute top-3 right-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B] hover:text-[#111] transition-colors px-2 py-1 rounded bg-white border border-black/[0.08]"
+      className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B] hover:text-[#111] transition-colors px-2 py-1 rounded border border-black/[0.08] bg-white shrink-0"
     >
       {copied ? "Copied!" : "Copy"}
     </button>
   );
 }
 
-function ScriptTagSection({ siteId }: { siteId: string }) {
-  const snippet = `<script src="https://js.zybit.run/v1.js?siteId=${siteId}" async></script>`;
+function ProxySetupSection({ proxySlug, domain }: { proxySlug?: string; domain: string }) {
+  const proxyHost = proxySlug ? `${proxySlug}.zybit.run` : null;
 
   return (
     <Card>
-      <SectionHeading>Script installation</SectionHeading>
-      <p className="text-sm text-[#6B6B6B] mb-4 max-w-lg leading-relaxed">
-        Paste this into the{" "}
-        <code className="text-xs font-mono bg-black/[0.04] px-1 py-0.5 rounded">&lt;head&gt;</code>{" "}
-        of every page you want to track. Zybit begins collecting data immediately.
+      <SectionHeading>Proxy setup</SectionHeading>
+      <p className="text-sm text-[#6B6B6B] mb-5 max-w-lg leading-relaxed">
+        Zybit deploys A/B variants by proxying traffic to <strong>{domain}</strong>.
+        Add one CNAME record in your DNS provider to activate experiment deployment.
       </p>
-      <div className="relative bg-[#F5F5F3] border border-black/[0.08] rounded-xl p-4 font-mono text-xs text-[#333] overflow-x-auto mb-5">
-        <CopyButton text={snippet} />
-        <pre className="whitespace-pre-wrap break-all pr-16">{snippet}</pre>
-      </div>
-      <InstallVerifier siteId={siteId} />
+
+      {proxyHost ? (
+        <div className="space-y-4">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-2">
+              Your Zybit proxy address
+            </p>
+            <div className="flex items-center gap-2 bg-[#F5F5F3] border border-black/[0.08] rounded-xl px-4 py-3 font-mono text-sm text-[#333]">
+              <span className="flex-1">{proxyHost}</span>
+              <CopyButton text={proxyHost} />
+            </div>
+          </div>
+
+          <div className="bg-[#F5F5F3] border border-black/[0.08] rounded-xl p-4">
+            <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-3">
+              DNS record to add
+            </p>
+            <div className="grid grid-cols-[80px_1fr] gap-x-4 gap-y-1.5 font-mono text-xs text-[#333]">
+              <span className="text-[#6B6B6B] font-sans font-semibold">Type</span>
+              <span>CNAME</span>
+              <span className="text-[#6B6B6B] font-sans font-semibold">Name</span>
+              <span>ab <span className="text-[#9B9B9B] font-sans">(or any subdomain you choose)</span></span>
+              <span className="text-[#6B6B6B] font-sans font-semibold">Value</span>
+              <span>{proxyHost}</span>
+            </div>
+          </div>
+
+          <p className="text-xs text-[#9B9B9B] leading-relaxed">
+            Once set, your test URL will be something like{" "}
+            <span className="font-mono">ab.{domain}</span>.
+            Zybit sits transparently between visitors and your origin — no code changes required.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-[#9B9B9B]">
+          Proxy address not yet assigned.{" "}
+          <a href="/app/onboarding" className="text-[#111] underline underline-offset-2">
+            Complete onboarding
+          </a>{" "}
+          to get your proxy address.
+        </p>
+      )}
     </Card>
   );
 }
@@ -247,8 +281,8 @@ export default function SettingsView({
         <p className="text-xs text-[#9B9B9B] mt-1 font-mono">site ID: {site.id}</p>
       </div>
 
-      {/* Script installation + verify */}
-      <ScriptTagSection siteId={site.id} />
+      {/* Proxy DNS setup */}
+      <ProxySetupSection proxySlug={site.proxySlug} domain={site.domain} />
 
       {/* Integrations */}
       <Card>

@@ -48,6 +48,7 @@ export interface Phase1SiteRecord {
   name: string;
   domain: string;
   analyticsProvider?: string;
+  proxySlug?: string;
   createdAt: string;
 }
 
@@ -57,6 +58,7 @@ export interface CreatePhase1SiteInput {
   name: string;
   domain: string;
   analyticsProvider?: string;
+  proxySlug?: string;
   createdAt: string;
 }
 
