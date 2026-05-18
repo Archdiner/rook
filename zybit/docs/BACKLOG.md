@@ -32,7 +32,7 @@ Prioritized epics and stories toward commercial launch. See [DOCTRINE.md](../DOC
 | ID | Story | Acceptance criteria | Tier |
 |----|-------|---------------------|------|
 | **FORGE-001** | Organizations as first-class — users belong to orgs; `siteId`/`organizationId` always resolved from auth. | DB or IdP linkage `(user_id → org_id)`; Phase 2 routes reject mismatched `(body.siteId × org)`. | P0 |
-| **FORGE-002** | Auth provider — Clerk middleware protects `/api/phase*` and operator UIs. | Session JWT; `@` routes server-only; webhook for user/org sync. | P0 |
+| **FORGE-002** | Auth provider — Clerk middleware protects `/api/phase*` and operator UIs. | Session JWT; `@` routes server-only; webhook for user/org sync. **Superseded — Clerk was removed in `a786d37` ("feat: replace Clerk with invite-only magic-link auth"). Current auth lives in `src/lib/auth/` (`session.ts`, `serverAuth.ts`, `apiKeys.ts`, `tenantScope.ts`). This row needs to be rewritten against the new auth or split into "magic-link sessions" + "org/user sync" sub-stories.** | P0 |
 | **FORGE-003** | Machine-to-machine API keys — `Bearer zybit_sk_***` hashed in DB, scopes: `insights:run`, `events:write`, `integrations:manage`. | Rotate, revoke, last-used timestamps; plaintext never stored. | P0 |
 | **FORGE-004** | Role-based access — `viewer` / `builder` / `admin`. | Viewer cannot mutate site config or secrets. | P1 |
 | **FORGE-005** | Audit log — who ran insights, changed config, exported receipt; append-only. | 90-day retention; CSV export. | P1 |
@@ -142,13 +142,13 @@ The analysis engine is built. This epic builds the product surface that lets a P
 
 | ID | Story | Acceptance criteria | Tier |
 |----|-------|---------------------|------|
-| **FORGE-080** | Outcome storage table — `zybit_experiment_outcomes` with `(experimentId, findingId, ruleId, pathRef, modificationType, result, liftPct, confidence, controlConversions, controlParticipants, variantConversions, variantParticipants, guardrailBreached, concludedAt)`. | Migration ships; row inserted when experiment reaches `completed` or `stopped`. | P0 |
-| **FORGE-081** | Conversion join — join `experiment_assignment` canonical events to `primaryMetric` events by `(visitorId, occurredAt > assignedAt, occurredAt <= assignedAt + durationDays)`; compute unique converters per bucket. | Results match manual verification on a synthetic fixture. No double-counting per visitor. | P0 |
-| **FORGE-082** | Chi-squared significance — chi-squared test for proportion comparison (not pooled-variance z-test); Welch's t-test for continuous metrics; output: p-value, confidence. | Pure function with unit tests covering edge cases (zero conversions, very small samples). | P0 |
-| **FORGE-083** | Sequential testing guard — significance cannot be declared unless: `confidence >= 0.95` AND `participants >= minimumSampleSize(baseRate, MDE=5%, power=80%)` AND `elapsedDays >= 7`. Minimum sample calculation is pre-computed when experiment starts. | Fixture: high confidence at day 2 with 30 visitors does not auto-stop. | P0 |
-| **FORGE-084** | Auto-stop on significance — when both conditions met: transition to `completed`, write outcome row, send PM notification via Resend. When `durationDays` elapsed without significance: transition to `completed` as `inconclusive`. | Cron run idempotent: re-running on an already-completed experiment is a no-op. | P0 |
-| **FORGE-085** | Guardrail evaluation — evaluate each guardrail metric on each cron run; if breached with >80% confidence in wrong direction: transition to `stopped`, set `guardrailBreached = true` on outcome row, notify PM with which guardrail and by how much. | Proxy stops variant on next Edge Config sync (within 30s). | P0 |
-| **FORGE-086** | Compute-outcomes cron — `POST /api/phase2/cron/compute-outcomes` runs hourly; processes all `running` experiments; idempotent. | Cronitor dead-man's-switch ping at start and completion. Dashboard shows "last computed at" timestamp. | P0 |
+| **FORGE-080** | Outcome storage table — `zybit_experiment_outcomes` with `(experimentId, findingId, ruleId, pathRef, modificationType, result, liftPct, confidence, controlConversions, controlParticipants, variantConversions, variantParticipants, guardrailBreached, concludedAt)`. | Migration ships; row inserted when experiment reaches `completed` or `stopped`. **Shipped — `5951a99` (`drizzle/0011_experiment_outcomes.sql`, `schema.ts:460`).** | P0 |
+| **FORGE-081** | Conversion join — join `experiment_assignment` canonical events to `primaryMetric` events by `(visitorId, occurredAt > assignedAt, occurredAt <= assignedAt + durationDays)`; compute unique converters per bucket. | Results match manual verification on a synthetic fixture. No double-counting per visitor. **Shipped — `5951a99`, hardened by `b09a212` (`DISTINCT ON session_id` in assignments CTE). Known gap: PostHog-sourced conversions are undercounted until the visitor-ID bridge lands (see `computeOutcomes.ts:13`).** | P0 |
+| **FORGE-082** | Chi-squared significance — chi-squared test for proportion comparison (not pooled-variance z-test); Welch's t-test for continuous metrics; output: p-value, confidence. | Pure function with unit tests covering edge cases (zero conversions, very small samples). **Math shipped — `5951a99` (`stats.ts`), alpha param fix in `b09a212`. Unit tests for `stats.ts` not yet written — only `bucketing.test.ts` and `htmlModifier.test.ts` exist in `__tests__/`. AC not fully satisfied.** | P0 |
+| **FORGE-083** | Sequential testing guard — significance cannot be declared unless: `confidence >= 0.95` AND `participants >= minimumSampleSize(baseRate, MDE=5%, power=80%)` AND `elapsedDays >= 7`. Minimum sample calculation is pre-computed when experiment starts. | Fixture: high confidence at day 2 with 30 visitors does not auto-stop. **Shipped — `5951a99` (`isReadyToStop` + `minimumSampleSizePerArm` in `stats.ts`), per-arm guard fix in `b09a212`.** | P0 |
+| **FORGE-084** | Auto-stop on significance — when both conditions met: transition to `completed`, write outcome row, send PM notification via Resend. When `durationDays` elapsed without significance: transition to `completed` as `inconclusive`. | Cron run idempotent: re-running on an already-completed experiment is a no-op. **Shipped — `5951a99` (`computeOutcomes.ts` status transition + `classifyResult`). Resend PM-notification path not yet wired.** | P0 |
+| **FORGE-085** | Guardrail evaluation — evaluate each guardrail metric on each cron run; if breached with >80% confidence in wrong direction: transition to `stopped`, set `guardrailBreached = true` on outcome row, notify PM with which guardrail and by how much. | Proxy stops variant on next Edge Config sync (within 30s). **Shipped — `5951a99` (`guardrailOneSidedPValue` + evaluator in `computeOutcomes.ts`). Auto-rollback wiring to proxy depends on FORGE-104.** | P0 |
+| **FORGE-086** | Compute-outcomes cron — `POST /api/phase2/cron/compute-outcomes` runs hourly; processes all `running` experiments; idempotent. | Cronitor dead-man's-switch ping at start and completion. Dashboard shows "last computed at" timestamp. **Shipped — `5951a99` (`api/phase2/cron/compute-outcomes/route.ts`, scheduled `0 * * * *` in `vercel.json`, `cronitorPing` at start/success/fail). "Last computed at" dashboard surface not yet built.** | P0 |
 
 ---
 
@@ -188,7 +188,7 @@ The analysis engine is built. This epic builds the product surface that lets a P
 |----|-------|---------------------|------|
 | **FORGE-110** | GA4 connector — pull-sync via Google Analytics Data API v1beta; service account auth; map GA4 event names to canonical event types; cursor on last-synced date. Same pattern as PostHog connector. | PM connects GA4 in onboarding wizard, events appear in canonical stream within 1 hour. | P0 |
 | **FORGE-111** | Integration health cockpit — show last-sync timestamp, event count, and error state for each connected integration. "Zybit is watching your site" vs "integration degraded" vs "no data yet." | PM answers "is Zybit learning my site?" without reading logs. | P0 |
-| **FORGE-112** | Preview before deploy — `GET /api/preview/[experimentId]`: fetch origin HTML, apply modifications as inline style injections and DOM mutations, return modified HTML for iframe. Dashboard: side-by-side control/variant iframe toggle. | No external dependency. Modifications applied correctly for CSS-inject and text-replace types. | P0 |
+| **FORGE-112** | Preview before deploy — `GET /api/preview/[experimentId]`: fetch origin HTML, apply modifications as inline style injections and DOM mutations, return modified HTML for iframe. Dashboard: side-by-side control/variant iframe toggle. | No external dependency. Modifications applied correctly for CSS-inject and text-replace types. **Shipped — `5951a99` (`api/preview/[experimentId]/route.ts`: auth, ownership check, 8s origin timeout, modification apply, preview banner), HTML injection fix in `b09a212`. Outstanding: (1) strip `X-Frame-Options` / `Content-Security-Policy: frame-ancestors` from the response so iframes render in the dashboard (`route.ts:124` TODO); (2) dashboard side-by-side iframe UI on the experiment detail page.** | P0 |
 | **FORGE-113** | MRR/AOV capture in connect flow — required step in onboarding wizard (not optional). Unlocks revenue-impact framing on all findings from day one. | Cannot complete onboarding without entering at least one of MRR or AOV. Values stored in `zybit_site_meta`. | P1 |
 | **FORGE-114** | Auto-populate MRR/AOV from customer billing — if the PM connects Stripe (or future: Chargebee, Paddle, Recurly) in onboarding step 4, pull live MRR + AOV from their billing API instead of asking them to type numbers. Manual input remains as fallback. Reduces friction at the activation moment and keeps revenue framing accurate as their business grows. | When Stripe is connected, MRR/AOV fields auto-fill with the last 30 days of revenue ÷ 1 month and average successful charge amount. PM can override. Values refresh on a daily cron. Stored in `zybit_site_meta` with a `source` column (`'manual'` vs `'stripe'`). | P2 |
 
@@ -196,15 +196,16 @@ The analysis engine is built. This epic builds the product surface that lets a P
 
 ## Suggested execution order (updated)
 
+> **Status note (2026-05-18):** Epic J (measurement rigor) and FORGE-112 (preview) are largely shipped — see commits `5951a99` and `b09a212`. The remaining week-1 tail is small (stats unit tests, X-Frame-Options strip, dashboard surfaces). Real critical path now starts at Epic K + Epic L.
+
 | Block | Focus | Stories |
 |-------|-------|---------|
-| **Immediate (week 1)** | Measurement rigor — the keystone | FORGE-080 through FORGE-086 (Epic J) |
-| **Immediate (week 1, parallel)** | Preview before deploy | FORGE-112 (Epic M) |
-| **Week 2** | Visible loop view | FORGE-090 through FORGE-092 (Epic K) |
-| **Week 2-3** | Proxy reliability + SPA | FORGE-100 through FORGE-104 (Epic L) |
-| **Week 3** | GA4 connector + integration health | FORGE-110, FORGE-111 (Epic M) |
-| **Week 4** | Per-site outcome feedback into rules | FORGE-060 (Epic G), updated rules in `src/lib/phase2/rules/` |
-| **Week 5-6** | Visible loop enrichment + activation polish | FORGE-093, FORGE-094, FORGE-113 |
+| **Week-1 tail (small)** | Close shipped-but-incomplete acceptance criteria | `stats.ts` unit tests (FORGE-082), `X-Frame-Options` strip + side-by-side iframe UI (FORGE-112), "last computed at" surface (FORGE-086), Resend notification on auto-stop (FORGE-084) |
+| **Now** | Visible loop view | FORGE-090 through FORGE-092 (Epic K) — `/app/loop/page.tsx` is a TODO scaffold today |
+| **Next** | Proxy reliability + SPA | FORGE-100 through FORGE-104 (Epic L) — `proxy/handler.ts` TODOs at lines 100/129/153/159; `browserFetcher.ts` is unimplemented |
+| **Then** | GA4 connector + integration health | FORGE-110, FORGE-111 (Epic M) |
+| **Then** | Per-site outcome feedback into rules | FORGE-060 (Epic G), updated rules in `src/lib/phase2/rules/` |
+| **Polish** | Visible loop enrichment + activation polish | FORGE-093, FORGE-094, FORGE-113 |
 | **Later** | Amplitude / Mixpanel connectors | Same pattern as GA4 — one at a time |
 | **50+ customers** | Cross-site global priors | FORGE from Epic (deferred) |
 
