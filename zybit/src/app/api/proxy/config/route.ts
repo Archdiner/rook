@@ -45,6 +45,7 @@ export async function GET(request: Request) {
       modifications: zybitExperiments.modifications,
       controlPct: zybitExperiments.audienceControlPct,
       durationDays: zybitExperiments.durationDays,
+      status: zybitExperiments.status,
     })
     .from(zybitExperiments)
     .where(
@@ -65,6 +66,7 @@ export async function GET(request: Request) {
           modifications: (e.modifications ?? []) as VariantModification[],
           controlPct: e.controlPct,
           durationDays: e.durationDays,
+          status: e.status,
         })),
       },
     },

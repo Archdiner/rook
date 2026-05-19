@@ -333,12 +333,13 @@ export async function processExperiment(
     };
   }
 
-  // Step 5: Sequential testing guard — check per-arm minimums to handle unbalanced traffic
+  // Step 5: Sequential testing guard — OBF boundary keyed to elapsed day / total duration.
   const readyToStop = isReadyToStop({
     confidence,
     participants: Math.min(counts.control.participants, counts.variant.participants),
     elapsedDays,
     minimumParticipants: minPerArm,
+    durationDays: experiment.durationDays ?? 14,
   });
 
   if (readyToStop || durationExpired) {

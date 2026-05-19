@@ -39,7 +39,7 @@ import Link from 'next/link';
 import { eq, and, desc } from 'drizzle-orm';
 import { getServerAuth } from '@/lib/auth/serverAuth';
 import { getDb } from '@/lib/db/client';
-import { zybitFindings, zybitExperiments, zybitExperimentOutcomes } from '@/lib/db/schema';
+import { phase1Sites, zybitFindings, zybitExperiments, zybitExperimentOutcomes } from '@/lib/db/schema';
 
 // ---------------------------------------------------------------------------
 // TODO: Timeline entry types
@@ -89,31 +89,112 @@ async function loadTimeline(
   orgId: string,
   siteId: string,
 ): Promise<TimelineEntry[]> {
-  // TODO: implement this function
-  //
-  // Step 1: Load all findings for the site
-  //   const findings = await db.select().from(zybitFindings)
-  //     .where(and(eq(zybitFindings.siteId, siteId), eq(zybitFindings.organizationId, orgId)))
-  //     .orderBy(desc(zybitFindings.createdAt));
-  //
-  // Step 2: Load all experiments linked to those findings + outcomes
-  //   const experiments = await db.select().from(zybitExperiments)
-  //     .where(and(eq(zybitExperiments.siteId, siteId), eq(zybitExperiments.organizationId, orgId)))
-  //     .orderBy(desc(zybitExperiments.createdAt));
-  //
-  //   const outcomes = await db.select().from(zybitExperimentOutcomes)
-  //     .where(eq(zybitExperimentOutcomes.siteId, siteId));
-  //
-  // Step 3: Build timeline entries
-  //   - One DetectionEntry per finding (use finding.createdAt as date)
-  //   - One DeploymentEntry per experiment where status != 'draft'
-  //     (use experiment.startedAt as date)
-  //   - One ResultEntry per outcome (use outcome.concludedAt as date)
-  //
-  // Step 4: Sort all entries by date ascending, return
+  const [findings, experiments, outcomes] = await Promise.all([
+    db
+      .select({
+        id: zybitFindings.id,
+        title: zybitFindings.title,
+        pathRef: zybitFindings.pathRef,
+        severity: zybitFindings.severity,
+        summary: zybitFindings.summary,
+        evidence: zybitFindings.evidence,
+        createdAt: zybitFindings.createdAt,
+      })
+      .from(zybitFindings)
+      .where(and(eq(zybitFindings.siteId, siteId), eq(zybitFindings.organizationId, orgId)))
+      .orderBy(desc(zybitFindings.createdAt)),
 
-  void db; void orgId; void siteId;
-  return []; // TODO: replace with real implementation
+    db
+      .select({
+        id: zybitExperiments.id,
+        findingId: zybitExperiments.findingId,
+        hypothesis: zybitExperiments.hypothesis,
+        audienceControlPct: zybitExperiments.audienceControlPct,
+        audienceVariantPct: zybitExperiments.audienceVariantPct,
+        status: zybitExperiments.status,
+        startedAt: zybitExperiments.startedAt,
+        createdAt: zybitExperiments.createdAt,
+      })
+      .from(zybitExperiments)
+      .where(and(eq(zybitExperiments.siteId, siteId), eq(zybitExperiments.organizationId, orgId)))
+      .orderBy(desc(zybitExperiments.createdAt)),
+
+    db
+      .select({
+        experimentId: zybitExperimentOutcomes.experimentId,
+        result: zybitExperimentOutcomes.result,
+        liftPct: zybitExperimentOutcomes.liftPct,
+        confidence: zybitExperimentOutcomes.confidence,
+        controlParticipants: zybitExperimentOutcomes.controlParticipants,
+        variantParticipants: zybitExperimentOutcomes.variantParticipants,
+        controlConversions: zybitExperimentOutcomes.controlConversions,
+        variantConversions: zybitExperimentOutcomes.variantConversions,
+        guardrailBreached: zybitExperimentOutcomes.guardrailBreached,
+        concludedAt: zybitExperimentOutcomes.concludedAt,
+      })
+      .from(zybitExperimentOutcomes)
+      .where(eq(zybitExperimentOutcomes.siteId, siteId)),
+  ]);
+
+  const outcomeByExperiment = new Map(outcomes.map((o) => [o.experimentId, o]));
+  const entries: TimelineEntry[] = [];
+
+  for (const f of findings) {
+    const topEvidence = f.evidence[0];
+    const evidenceSummary = topEvidence
+      ? `${topEvidence.label}: ${topEvidence.value}`
+      : f.summary.slice(0, 80);
+    entries.push({
+      kind: 'detection',
+      date: f.createdAt,
+      findingId: f.id,
+      title: f.title,
+      pathRef: f.pathRef,
+      severity: f.severity,
+      evidenceSummary,
+    });
+  }
+
+  for (const exp of experiments) {
+    if (exp.status === 'draft') continue;
+    entries.push({
+      kind: 'deployment',
+      date: exp.startedAt ?? exp.createdAt,
+      experimentId: exp.id,
+      findingId: exp.findingId,
+      hypothesis: exp.hypothesis,
+      controlPct: exp.audienceControlPct,
+      variantPct: exp.audienceVariantPct,
+    });
+
+    const outcome = outcomeByExperiment.get(exp.id);
+    if (outcome) {
+      const controlRate =
+        outcome.controlParticipants && outcome.controlParticipants > 0
+          ? (outcome.controlConversions ?? 0) / outcome.controlParticipants
+          : null;
+      const variantRate =
+        outcome.variantParticipants && outcome.variantParticipants > 0
+          ? (outcome.variantConversions ?? 0) / outcome.variantParticipants
+          : null;
+      entries.push({
+        kind: 'result',
+        date: outcome.concludedAt,
+        experimentId: exp.id,
+        result: outcome.result,
+        liftPct: outcome.liftPct,
+        confidence: outcome.confidence,
+        controlRate,
+        variantRate,
+        guardrailBreached: outcome.guardrailBreached,
+        participants:
+          (outcome.controlParticipants ?? 0) + (outcome.variantParticipants ?? 0),
+      });
+    }
+  }
+
+  entries.sort((a, b) => a.date.getTime() - b.date.getTime());
+  return entries;
 }
 
 // ---------------------------------------------------------------------------
@@ -124,9 +205,11 @@ async function loadSites(
   db: ReturnType<typeof getDb>,
   orgId: string,
 ): Promise<{ id: string; name: string }[]> {
-  // TODO: query phase1_sites where organizationId = orgId
-  void db; void orgId;
-  return []; // TODO
+  const rows = await db
+    .select({ id: phase1Sites.id, name: phase1Sites.name })
+    .from(phase1Sites)
+    .where(eq(phase1Sites.organizationId, orgId));
+  return rows;
 }
 
 // ---------------------------------------------------------------------------

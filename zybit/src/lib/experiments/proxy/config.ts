@@ -7,6 +7,7 @@ export interface ProxyExperiment {
   modifications: VariantModification[];
   controlPct: number;
   durationDays: number;
+  status: 'running' | 'stopped' | 'completed';
 }
 
 export interface ProxyConfig {

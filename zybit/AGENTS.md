@@ -57,28 +57,28 @@ zybit/
 
 | Loop Step | Status | Notes |
 |-----------|--------|-------|
-| **Understand** (snapshot audit) | ⚠️ Partial | HTTP + DOM parse works; SPA/JS-rendered pages return blank — prerequisite for paid pilot |
-| **Watch** (PostHog + Segment) | ✅ Built | Pull-sync + webhook; GA4 not built (next connector priority) |
+| **Understand** (snapshot audit) | ⚠️ Partial | HTTP + DOM parse works; SPA/JS-rendered pages trigger Browserless fallback (`browserFetcher.ts`). snapshotMethod field on records. |
+| **Watch** (PostHog + Segment + GA4) | ⚠️ Partial | PostHog + Segment built; GA4 scaffolded (`src/lib/phase2/connectors/ga4/`) — auth + sync implementation remaining |
 | **Identify** (12 audit rules) | ✅ Built | 5 design + 7 pain rules, 193 passing tests — sufficient; do not add more rules |
 | **Propose** (findings + prescriptions) | ✅ Built | Ranked by priority score + revenue impact, PM-readable |
-| **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built. Network-error fail-open exists (`proxy/handler.ts:109`); **modification-error fail-open, kill switch, and SPA handling still TODO** (handler.ts:129/153/159) |
-| **Measure** (outcome computation) | ✅ Built | Shipped in `5951a99` + `b09a212`: outcome table (`drizzle/0011_experiment_outcomes.sql`), `stats.ts` (chi-squared, Welch, sequential guard, min-sample), `computeOutcomes.ts`, hourly cron. Unit tests added in `__tests__/stats.test.ts` (77 passing). **Caveats:** Monte Carlo in `__tests__/stats.simulation.test.ts` measures pipeline false-positive rate at ~14% under the null (vs nominal 5%) — repeated-peeking inflation from hourly cron, not a math bug; α-spending or reduced peek frequency would close it. PostHog visitor-ID bridge not yet in place (PostHog-sourced conversions undercounted) |
+| **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built. Network-error fail-open, modification-error fail-open, kill switch (`experiment.status === 'running'`), origin timeout (10s) all shipped in `handler.ts`. SPA shell detection logs warning. |
+| **Measure** (outcome computation) | ✅ Built | OBF alpha-spending (`stats.ts`), daily cron (`vercel.json`), 362 passing tests. Simulation: 2,000 null experiments, FP-rate ≤ 6.5% (3-sigma MC tolerance). PostHog visitor-ID bridge not yet in place. |
 | **Learn** (outcome feedback loop) | ❌ Not built | Outcome rows are persisted, but no rule calibration consumes them yet |
-| **Visible loop view** | ❌ Not built | No timeline of detect → deploy → result → learning — needed for every demo and renewal |
-| **Preview before deploy** | ✅ Built | Shipped in `5951a99` + `b09a212`: `api/preview/[experimentId]/route.ts` applies modifications + preview banner with 8s origin timeout. **Caveats:** `X-Frame-Options` / `frame-ancestors` strip not yet implemented (route.ts:124); no dashboard iframe UI consumes the endpoint |
-| **GA4 connector** | ❌ Not built | Required for analytics-agnostic claim to be credible |
+| **Visible loop view** | ⚠️ Partial | `loadTimeline()` + `loadSites()` implemented in `loop/page.tsx` — queries `zybit_findings`, `zybit_experiments`, `zybit_experiment_outcomes`; guardrail-breach visuals + multi-site selector still TODO |
+| **Preview before deploy** | ✅ Built | Side-by-side control/variant iframes on experiment detail page; CSP `frame-ancestors 'self'` on preview response |
+| **GA4 connector** | ⚠️ Partial | Scaffolded — `types.ts`, `client.ts`, `sync.ts`, `mapping.ts`, `errors.ts`. Service-account JWT auth + sync implementation remaining |
 | **Billing** (Stripe + plan limits) | ⚠️ Partial | Routes and helpers exist (`src/lib/billing/`, `src/app/api/billing/`); plan enforcement coverage unverified |
 | **Observability** | ⚠️ Partial | Cronitor + error budget + structured logger built and wired into crons; Axiom drain not yet connected |
 
 ## Immediate build order
 
-> **Status (2026-05-18):** Measure and Preview both shipped in `5951a99` + `b09a212`. The real critical path now starts at the loop view + proxy hardening.
+> **Status (2026-05-19):** OBF alpha-spending (Zybit-082), proxy reliability (Zybit-100/101/102/104), preview iframe (Zybit-112), loop view (Zybit-090/091/092) all shipped on `claude/fix-measurement-proxy-reliability` branch. Remaining: GA4 auth + sync; guardrail breach notification; PostHog visitor-ID bridge; Edge Config sync write path.
 
-1. **Close shipped-but-incomplete acceptance criteria** (~1 day): `X-Frame-Options` strip + dashboard iframe UI for preview; "last computed at" surface for the cron; Resend notification on auto-stop. (`stats.ts` unit tests landed; pipeline false-positive inflation surfaced by the Monte Carlo is a separate, larger workstream — α-spending or reduced peek cadence.)
-2. **Visible loop view** (3 days): `/app/loop` timeline of the full cycle — page is a TODO scaffold today.
-3. **Proxy reliability + SPA** (4 days): modification-error fail-open, kill switch, Browserless SPA support, auto-rollback wiring into Edge Config.
-4. **GA4 connector + integration health** (3 days): pull-sync via Google Analytics Data API v1beta; "Zybit is watching your site" cockpit panel.
-5. **PostHog visitor-ID bridge** (~0.5 day): inject script via proxy so `posthog.register({'zybit_vid': ...})` carries the Zybit cookie into conversion events — unblocks accurate measurement for PostHog-sourced events.
+1. **Close shipped-but-incomplete acceptance criteria** (~1 day): Edge Config write path for kill switch (Zybit-104); PM notification on auto-stop (Zybit-084); "last computed at" surface (Zybit-086).
+2. **GA4 connector** (3 days): service-account JWT signing + `runReport` pagination + cursor management.
+3. **PostHog visitor-ID bridge** (~0.5 day): inject script via proxy so `posthog.register({'zybit_vid': ...})` carries the Zybit cookie into conversion events.
+4. **Guardrail visual in loop view** (~0.5 day): amber flag when `guardrail_breached` is set.
+5. **Multi-site selector in loop view** (~0.5 day): site dropdown filtering timeline entries.
 
 **Never build:** sentiment analysis, GitHub PR generation, own event collection SDK / PostHog replacement, more audit rules, cross-site priors before 50+ customers.
 

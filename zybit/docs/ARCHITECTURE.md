@@ -61,7 +61,7 @@ Static HTML analysis. Fetches pages via HTTP, parses DOM structure.
 | Visual weight | `visualWeight.ts` | Scores element prominence from Tailwind class tokens (text-2xl, bg-primary, font-bold) |
 | Fold guess | `foldGuess.ts` | Estimates above/below fold from DOM position + landmark proximity |
 
-**Limitation:** No JavaScript execution. SPAs render blank. Visual weight is heuristic (class token matching), not measured pixel positions. **SPA support is a prerequisite for any paid pilot** — the majority of B2B SaaS products are React/Vue/Next.js apps. The Browserless upgrade path is documented in "What Needs to Be Built" below.
+**Limitation:** SPA pages return blank HTTP responses. `fetcher.ts` checks `isSpaHtml()` and falls back to `runBrowserSnapshot()` via Browserless.io when a shell is detected (`snapshotMethod: 'browser'`). HTTP-only fallback when `BROWSERLESS_TOKEN` is absent. Visual weight is heuristic (class token matching), not measured pixel positions.
 
 ### Watch — Data Collection (`src/lib/phase2/connectors/`)
 
@@ -71,7 +71,7 @@ Event ingestion from customer analytics tools.
 |-----------|--------|--------|
 | PostHog | API pull (paginated, cursor-tracked, retry/backoff) | Working |
 | Segment | Webhook receiver | Working |
-| GA4 | — | Not built |
+| GA4 | API pull (Google Analytics Data API v1beta) | Scaffolded — service-account JWT auth + sync remaining |
 | Direct JS SDK | — | Not built |
 
 Events are normalized to a canonical schema (`CanonicalEvent v2`) with deduplication on `(siteId, source, sourceEventId)`.
@@ -216,7 +216,7 @@ The analysis engine is production-ready. The proxy bucketing and HTML modificati
 
 **Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
 
-> **Status:** Priority 1 was shipped in `5951a99` + `b09a212` and is now described in the "Measure — Outcome Computation" subsection under "What Exists." `stats.ts` unit tests landed (`__tests__/stats.test.ts`, 77 passing) and a Monte Carlo pipeline simulation (`__tests__/stats.simulation.test.ts`) surfaced an empirical ~14% false-positive rate (vs nominal 5%) caused by repeated peeking — fix requires α-spending or reduced peek cadence and is a larger workstream than the original priority assumed. Other outstanding follow-ups: PostHog visitor-ID bridge for accurate matching of PostHog-sourced conversions, Resend notification on auto-stop, "last computed at" surface in the dashboard. The original specification is retained below for reference.
+> **Status:** OBF alpha-spending shipped on `claude/fix-measurement-proxy-reliability`. `stats.ts` has `obfConfidenceThreshold(elapsedDays, durationDays, alpha)` computing per-look thresholds; `isReadyToStop` uses day-number information fraction (t = lookNumber / totalLooks). Simulation: 2,000 null experiments, empirical FP-rate ≤ 6.5% (3-sigma MC tolerance). Cron cadence: daily (`vercel.json`). Remaining: PostHog visitor-ID bridge, auto-stop PM notification, "last computed at" surface.
 
 #### Outcome Storage
 
@@ -297,7 +297,7 @@ Implementation:
 
 ### Priority 2: Preview Before Deploy
 
-> **Status:** The server endpoint was shipped in `5951a99` + `b09a212` and is now described in the "Preview Before Deploy" subsection under "What Exists." Outstanding: strip `X-Frame-Options` / `frame-ancestors` from the response so iframes render in the dashboard (`route.ts:124` TODO), and build the side-by-side iframe UI on the experiment detail page. Original specification retained below.
+> **Status:** Server endpoint shipped in `5951a99` + `b09a212`. CSP `frame-ancestors 'self'` set on response (`route.ts:131`). Side-by-side control/variant iframes added to experiment detail page (`experiments/[id]/page.tsx`). SPA-rendered content note shown under iframe.
 
 **What:** PM sees the modified page in an iframe before activating on real traffic.
 
@@ -332,6 +332,8 @@ Dashboard: side-by-side iframe toggle (control | variant) on experiment detail p
 ### Priority 4: Proxy Reliability + SPA Support
 
 **Must be in place before any paid pilot routes real production traffic.**
+
+> **Status:** All items shipped on `claude/fix-measurement-proxy-reliability`. `handler.ts` — `fetchOrigin` with 10s `AbortSignal.timeout`; modification errors caught → serve unmodified HTML; `experiment.status === 'running'` kill switch check; `looksLikeSpaShell()` warning log. `browserFetcher.ts` — `runBrowserSnapshot` via playwright-core CDP over Browserless.io. `fetcher.ts` — SPA shell → Browserless fallback with `snapshotMethod` field. `config.ts` — `status` field on `ProxyExperiment`. `route.ts` — `status` selected from DB. Vercel Domains API auto-provisioning (`vercelDomains.ts`) — `addCustomerDomain(customerSubdomain)` called after DNS verify passes, falls back to manual email if env vars absent.
 
 #### Fail-Open Behavior
 

@@ -121,10 +121,14 @@ export async function GET(
   `;
   outputHtml = outputHtml.replace(/(<body[^>]*>)/i, `$1${banner}`);
 
-  // TODO: strip X-Frame-Options so the iframe can render inside the dashboard
+  // Origin headers are NOT forwarded here — we build fresh headers from scratch.
+  // X-Frame-Options from the origin is therefore already stripped.
+  // Explicitly set frame-ancestors 'self' so the dashboard iframe can embed this response
+  // even if the browser defaults change in the future.
   const headers = new Headers({
     'content-type': 'text/html; charset=utf-8',
     'x-robots-tag': 'noindex',
+    'content-security-policy': "frame-ancestors 'self'",
   });
 
   return new NextResponse(outputHtml, { status: 200, headers });
