@@ -21,7 +21,7 @@ Zybit is a conversion intelligence platform for product managers. It runs a six-
 - **Deterministic over generative.** Audit rules are pure functions — same input, same output. No LLM-generated numbers or invented evidence.
 - **PM-first at every layer.** Every output (finding title, evidence summary, UI label) is for a product manager, not an engineer.
 - **Every file has a purpose.** No scaffolding, no placeholders, no "we might need this later."
-- **Third-party where it's better.** Auth = Clerk. Email = Resend. Billing = Stripe. Headless browser = Browserless.io. Cron monitoring = Cronitor. Observability = Axiom. Do not rebuild what third parties do well.
+- **Third-party where it's better.** Email = Resend. Billing = Stripe. Headless browser = Browserless.io. Cron monitoring = Cronitor. Observability = Axiom. Do not rebuild what third parties do well. (Auth is owned: invite-only magic-link system, no Clerk.)
 - **`npm run verify` must pass** before any commit: lint + TypeScript + build.
 
 ---
@@ -35,7 +35,7 @@ zybit/
   src/lib/phase2/snapshots/   — Static HTML parse + visual-weight analysis
   src/lib/phase2/rollups/     — Event → InsightInput aggregation pipeline
   src/lib/phase1/             — Readiness scoring + legacy insights engine
-  src/lib/auth/               — Clerk auth + M2M API keys
+  src/lib/auth/               — Invite-only magic-link auth + M2M API keys
   src/lib/billing/            — Stripe integration (plans, limits, usage metering)
   src/lib/experiments/        — Bucketing, HTML modifier, edge proxy (partial)
   src/lib/observability/      — Cronitor, error budget, structured logger

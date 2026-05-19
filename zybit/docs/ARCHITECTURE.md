@@ -14,7 +14,7 @@ Zybit is a single Next.js application deployed on Vercel. All domain logic runs 
 │                                                         │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  │
 │  │ Dashboard │  │ API      │  │ Cron     │  │ Auth   │  │
-│  │ (React)  │  │ Routes   │  │ Jobs     │  │ (Clerk)│  │
+│  │ (React)  │  │ Routes   │  │ Jobs     │  │(Magic) │  │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┘  │
 │       │              │              │                    │
 │  ┌────┴──────────────┴──────────────┴──────────────┐    │
@@ -117,7 +117,7 @@ Single Postgres database (Neon serverless) via Drizzle ORM.
 
 ### Auth
 
-Clerk for user auth. M2M API keys for programmatic access. Tenant scoping on `(organizationId, siteId)`.
+Invite-only magic-link auth (email → 15-min token → 30-day session cookie). M2M API keys for programmatic access. Tenant scoping on `(organizationId, siteId)`. No Clerk.
 
 ---
 

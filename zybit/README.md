@@ -52,7 +52,7 @@ zybit/
     lib/
       phase1/         — Readiness scoring + insights engine
       phase2/         — Audit pipeline: canonical events, rules, connectors, snapshots
-      auth/           — Clerk + M2M API keys
+      auth/           — Invite-only magic-link auth + M2M API keys
       db/             — Drizzle schema + client
   drizzle/            — SQL migrations (apply before first run with Postgres)
   docs/               — Technical reference
