@@ -163,7 +163,7 @@ Sentiment analysis, GitHub PR generation, PostHog replacement / direct SDK, more
 
 **The loop, not the feature.** We don't build analytics features or dashboard charts for their own sake. We build what advances the cycle: understand → propose → test → learn.
 
-**Third-party where it's better.** We own the conversion intelligence layer. We don't own auth (Clerk), email (Resend), analytics ingestion (PostHog/Segment), or hosting (Vercel/edge infrastructure). Integrate the rest; build only what's differentiated.
+**Third-party where it's better.** We own the conversion intelligence layer. We also own auth (invite-only magic-link; no Clerk). We don't own email (Resend), analytics ingestion (PostHog/Segment), or hosting (Vercel/edge infrastructure). Integrate the rest; build only what's differentiated.
 
 **PM-first at every layer.** The PM is the user. Engineering integrates Zybit; PMs run it. Every output — finding title, evidence summary, export format — is written for someone who owns a product, not someone who reads curl responses.
 
@@ -180,7 +180,7 @@ zybit/
     rules/                — 12 audit rules (design + pain) with 193 tests
     snapshots/            — Static HTML parse + visual-weight analysis
     rollups/              — Event → InsightInput aggregation pipeline
-  src/lib/auth/           — Clerk auth + M2M API keys
+  src/lib/auth/           — Invite-only magic-link auth + M2M API keys
   src/lib/db/             — Drizzle schema + Postgres migrations
   src/app/api/phase1/     — Readiness + insights HTTP API
   src/app/api/phase2/     — Canonical events, insights run, connectors, snapshots
