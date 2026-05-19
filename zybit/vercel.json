@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/phase2/cron/compute-outcomes",
-      "schedule": "0 * * * *"
+      "schedule": "0 9 * * *"
     },
     {
       "path": "/api/phase2/cron/sync-posthog",

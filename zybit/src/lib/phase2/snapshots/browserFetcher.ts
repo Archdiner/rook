@@ -67,9 +67,6 @@ export interface BrowserSnapshotResult {
  * (nearly empty body, no readable content).
  */
 export function isSpaHtml(html: string): boolean {
-  // TODO: implement heuristic
-  // Strip script/style tags, check remaining body content length
-  // Check for common SPA root patterns
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   if (!bodyMatch) return false;
   const bodyContent = bodyMatch[1]
@@ -77,7 +74,8 @@ export function isSpaHtml(html: string): boolean {
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]+>/g, '')
     .trim();
-  return bodyContent.length < 200;
+  if (bodyContent.length >= 200) return false;
+  return /<div\s+id=["']?(root|app|main|content|mount)["']?/i.test(html);
 }
 
 /**
@@ -93,30 +91,26 @@ export async function runBrowserSnapshot(
   const token = process.env.BROWSERLESS_TOKEN;
   if (!token) return null;
 
-  // TODO: implement Browserless CDP connection
-  //
-  // const { chromium } = await import('playwright');
-  // const { timeoutMs = 10_000, viewportWidth = 1280, viewportHeight = 900 } = options;
-  // const wssUrl = `wss://chrome.browserless.io?token=${encodeURIComponent(token)}`;
-  //
-  // let client: import('playwright').Browser | null = null;
-  // try {
-  //   client = await chromium.connectOverCDP(wssUrl);
-  //   const context = await client.newContext({ viewport: { width: viewportWidth, height: viewportHeight } });
-  //   const page = await context.newPage();
-  //   await page.goto(url, { waitUntil: 'networkidle', timeout: timeoutMs });
-  //   const html = await page.content();
-  //   const finalUrl = page.url();
-  //   await context.close();
-  //   return { html, finalUrl, snapshotMethod: 'browser' };
-  // } catch (err) {
-  //   // Log warning but never throw — caller falls back to HTTP result
-  //   console.warn('[browserFetcher] Browserless fetch failed', { url, error: String(err) });
-  //   return null;
-  // } finally {
-  //   await client?.close().catch(() => {});
-  // }
+  const { chromium } = await import('playwright-core');
+  const { timeoutMs = 10_000, viewportWidth = 1280, viewportHeight = 900 } = options;
+  const wssUrl = `wss://chrome.browserless.io?token=${encodeURIComponent(token)}`;
 
-  void url; void options; // remove once implemented
-  return null; // TODO: replace with implementation above
+  let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | null = null;
+  try {
+    browser = await chromium.connectOverCDP(wssUrl);
+    const context = await browser.newContext({
+      viewport: { width: viewportWidth, height: viewportHeight },
+    });
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'networkidle', timeout: timeoutMs });
+    const html = await page.content();
+    const finalUrl = page.url();
+    await context.close();
+    return { html, finalUrl, snapshotMethod: 'browser' };
+  } catch (err) {
+    console.warn('[browserFetcher] Browserless fetch failed', { url, error: String(err) });
+    return null;
+  } finally {
+    await browser?.close().catch(() => {});
+  }
 }

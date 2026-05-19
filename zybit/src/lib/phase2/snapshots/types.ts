@@ -172,6 +172,8 @@ export interface SnapshotFetchResult {
   contentType: string | null;
   html: string;
   byteSize: number;
+  /** 'browser' when Browserless was used; 'http-only' otherwise. */
+  snapshotMethod: 'http-only' | 'browser';
 }
 
 export type SnapshotErrorCode =

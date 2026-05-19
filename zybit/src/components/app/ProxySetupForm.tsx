@@ -271,9 +271,6 @@ export default function ProxySetupForm({
                 {variant === "wizard" ? "Save & continue" : "Save"}
               </PrimaryButton>
               {variant === "wizard" && onSkip && <SkipLink onClick={onSkip} />}
-              {variant === "wizard" && onSaved && (
-                <SkipLink onClick={onSaved} label="" />
-              )}
             </>
           )}
 

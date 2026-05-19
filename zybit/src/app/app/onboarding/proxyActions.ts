@@ -10,6 +10,7 @@ import { getDb } from "@/lib/db/client";
 import { phase1Sites } from "@/lib/db/schema";
 import { logger } from "@/lib/observability/logger";
 import { isValidSlug, suggestAlternativeSlug } from "@/lib/experiments/proxy/slug";
+import { addCustomerDomain } from "@/lib/experiments/proxy/vercelDomains";
 
 const SERVICE = "proxy" as const;
 
@@ -58,6 +59,20 @@ export async function saveProxySetupAction(
 
     if (updated.length === 0) {
       return { ok: false, error: "not_found" };
+    }
+
+    const vercelResult = await addCustomerDomain(subdomain);
+    if (!vercelResult.ok) {
+      logger.warn("Vercel domain auto-provision failed — falling back to manual email", {
+        service: SERVICE,
+        customerSubdomain: subdomain,
+        error: vercelResult.error,
+      });
+    } else {
+      logger.info("Vercel domain auto-provision succeeded", {
+        service: SERVICE,
+        customerSubdomain: subdomain,
+      });
     }
 
     await sendProxySetupAlert({
@@ -190,7 +205,7 @@ async function sendProxySetupAlert(args: ProxyAlertArgs): Promise<void> {
   try {
     const resend = new Resend(apiKey);
     await resend.emails.send({
-      from: "Zybit Alerts <onboarding@resend.dev>",
+      from: "Asad at Zybit <asad@getzybit.com>",
       to: alertTo,
       subject: `[Zybit] Add Vercel domain: ${args.customerSubdomain}`,
       text: [

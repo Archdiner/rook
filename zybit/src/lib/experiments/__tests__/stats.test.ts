@@ -461,6 +461,7 @@ describe('isReadyToStop', () => {
         participants: 1500,
         elapsedDays: 8,
         minimumParticipants: 1000,
+        confidenceThreshold: 0.95, // flat threshold — tests three-condition AND logic, not OBF
       }),
     ).toBe(true);
   });
@@ -510,12 +511,17 @@ describe('isReadyToStop', () => {
   });
 
   it('uses exact equality for thresholds (>=, not >)', () => {
+    // Tests the >= vs > boundary using an explicit flat threshold. The erfc
+    // approximation shifts the OBF value by ~4e-5 at t=1, so use confidenceThreshold
+    // here to isolate the >= semantics from the numerical precision artifact.
     expect(
       isReadyToStop({
         confidence: 0.95,
         participants: 1000,
-        elapsedDays: 7,
+        elapsedDays: 14,
         minimumParticipants: 1000,
+        minimumDays: 7,
+        confidenceThreshold: 0.95,
       }),
     ).toBe(true);
   });
@@ -564,6 +570,7 @@ describe('isReadyToStop', () => {
         participants: 1000,
         elapsedDays: 10,
         minimumParticipants: 1000,
+        confidenceThreshold: 0.95, // flat threshold — tests participant comparison, not OBF
       }),
     ).toBe(true);
 
@@ -575,6 +582,7 @@ describe('isReadyToStop', () => {
         participants: 999,
         elapsedDays: 10,
         minimumParticipants: 1000,
+        confidenceThreshold: 0.95,
       }),
     ).toBe(false);
   });
@@ -632,6 +640,7 @@ describe('isReadyToStop', () => {
         participants: 1000,
         elapsedDays: 7.001,
         minimumParticipants: 1000,
+        confidenceThreshold: 0.95, // flat threshold — tests fractional day handling, not OBF
       }),
     ).toBe(true);
   });
@@ -669,6 +678,7 @@ describe('isReadyToStop', () => {
       participants: 1500,
       elapsedDays: 8,
       minimumParticipants: 1000,
+      confidenceThreshold: 0.95 as const, // flat threshold — tests purity, not OBF
     };
     for (let i = 0; i < 50; i++) {
       expect(isReadyToStop(params)).toBe(true);

@@ -25,6 +25,7 @@ function makeExperiment(overrides: Partial<ProxyExperiment> = {}): ProxyExperime
     ],
     controlPct: 50,
     durationDays: 14,
+    status: 'running',
     ...overrides,
   };
 }
