@@ -1,6 +1,6 @@
 # Zybit — Product Gap Analysis & Roadmap
 
-> **Status (updated 2026-05-18):** The analysis engine (Understand → Watch → Identify → Propose) is production-ready. The Test → Measure half is now mostly in place: variant delivery via proxy (partial), outcome computation (shipped — `5951a99` + `b09a212`), and preview before deploy (shipped — same commits). Gap 2 (Billing) and Gap 3 (Measurement Rigor) are now largely closed; the remaining critical-path gaps are proxy reliability hardening, the visible loop view, and the GA4 connector. The original gap analysis is preserved below for reference; refer to `zybit/docs/BACKLOG.md` for current sequencing.
+> **Status (updated 2026-05-19):** Analysis engine (Understand → Watch → Identify → Propose) production-ready. Test → Measure in place: outcome computation, preview, proxy reliability, PostHog visitor-ID bridge, auto-stop PM email, and "results last refreshed" cockpit surface. **GA4 connector shipped** (aggregate-grain, Identify/Propose only). **Visible loop view shipped** (timeline + guardrail badge + multi-site selector). Gap 2 (Billing) — metering + enforcement shipped; round-trip code bugs fixed; only live stripe-cli verification remains. Gap 6 (Onboarding) — integration-health cockpit + required MRR/AOV shipped. Remaining critical-path: live Stripe verification, then the Learn rule-calibration loop. Refer to `zybit/docs/BACKLOG.md` for sequencing.
 
 ---
 
@@ -9,13 +9,13 @@
 | Loop Step | Status | What Works |
 |-----------|--------|-----------|
 | **Understand** | ✅ Built | HTTP snapshot → DOM parse → visual-weight scoring. SPA support still missing. |
-| **Watch** | ✅ Built | PostHog pull-sync + Segment webhook, canonical event schema. GA4 not built. |
+| **Watch** | ✅ Built | PostHog pull-sync + Segment webhook + GA4 Data API pull-sync, canonical event schema. PostHog visitor-ID bridge. GA4 is aggregate-grain (Identify/Propose only). |
 | **Identify** | ✅ Built | 12 audit rules, 193 passing tests, deterministic findings |
 | **Propose** | ✅ Built | Findings ranked by priority score + revenue impact, PM-readable |
 | **Test** | ⚠️ Partial | Bucketing, HTML modifier, and edge proxy routes built. Network-error fail-open in place. Modification-error fail-open, kill switch, SPA handling, and auto-rollback wiring all still TODO in `src/lib/experiments/proxy/handler.ts`. |
-| **Measure** | ✅ Built | Outcome storage, conversion join (`DISTINCT ON` dedup), chi-squared + Welch, sequential guard (confidence + per-arm min sample + min days), guardrail eval, auto-stop, hourly cron with Cronitor heartbeat — all shipped in `5951a99` + `b09a212`. Caveats: no `stats.ts` unit tests yet; PostHog-sourced conversions undercount until the visitor-ID bridge ships. |
+| **Measure** | ✅ Built | Outcome storage, conversion join (`DISTINCT ON` dedup), chi-squared + Welch, sequential guard, guardrail eval, auto-stop, cron with Cronitor heartbeat. PostHog visitor-ID bridge now shipped (`proxy/bridgeScript.ts` + `posthog/mapping.ts` prefers `zybit_vid`) — PostHog-sourced conversions are now matched. Auto-stop/guardrail PM email shipped. |
 | **Learn** | ❌ Missing | Outcome rows are persisted; no rule calibration yet consumes them |
-| **Pay** | ⚠️ Partial | Stripe checkout/portal/webhook routes + plan/usage helpers exist in `src/lib/billing/` and `src/app/api/billing/`. End-to-end plan-limit enforcement coverage not yet verified. |
+| **Pay** | ⚠️ Partial | Metering at the persistence layer; plan limits enforced — sites + concurrent experiments hard (402), events soft-capped. Round-trip code bugs fixed (post-checkout redirect target; cross-instance-stale plan cache removed; webhook validates planId). Live stripe-cli verification of checkout→webhook→plan-write→enforcement still pending (needs Stripe test keys). |
 | **Operate** | ⚠️ Partial | Cronitor heartbeats, error-budget tracker, and structured logger built and wired into crons. No staging environment, no E2E harness, no Axiom log drain. |
 
 ---

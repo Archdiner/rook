@@ -10,6 +10,7 @@ import {
 } from '../bucketing';
 import { isSpaHtml } from '@/lib/phase2/snapshots/browserFetcher';
 import { applyModifications } from '../htmlModifier';
+import { injectBridgeScript } from './bridgeScript';
 import { loadProxyConfig, type ProxyExperiment } from './config';
 import { logAssignment } from './assignmentLog';
 import { extractSlug } from './host';
@@ -50,7 +51,7 @@ export async function handleProxyRequest(
       ? existingBucket
       : await assignBucket(visitorId, experiment.id, experiment.controlPct);
 
-  const response = await fetchAndMaybeModify(originUrl, userAgent, bucket, experiment);
+  const response = await fetchAndMaybeModify(originUrl, userAgent, bucket, experiment, visitorId);
 
   if (isNewVisitor) {
     response.cookies.set(VISITOR_COOKIE, visitorId, {
@@ -111,6 +112,7 @@ async function fetchAndMaybeModify(
   userAgent: string,
   bucket: Bucket,
   experiment: ProxyExperiment,
+  visitorId: string,
 ): Promise<NextResponse> {
   let originRes: Response;
   try {
@@ -122,15 +124,9 @@ async function fetchAndMaybeModify(
 
   const contentType = originRes.headers.get('content-type') || '';
 
-  // Kill switch: if the experiment was stopped after this config was cached,
-  // serve unmodified origin rather than stale variant HTML.
-  const shouldModify =
-    bucket === 'variant' &&
-    experiment.status === 'running' &&
-    experiment.modifications.length > 0 &&
-    contentType.includes('text/html');
-
-  if (!shouldModify) {
+  // Only HTML responses can carry variant modifications or the PostHog
+  // bridge script. Stream anything else (assets, JSON, redirects) untouched.
+  if (!contentType.includes('text/html')) {
     return new NextResponse(originRes.body, {
       status: originRes.status,
       headers: originRes.headers,
@@ -147,34 +143,45 @@ async function fetchAndMaybeModify(
     return new NextResponse(fallback.body, { status: fallback.status, headers: fallback.headers });
   }
 
-  // Zybit-103: SPA shells won't have the target DOM nodes at request time.
-  // Log a warning so operators know HTML modifications won't apply.
-  if (isSpaHtml(html)) {
-    console.warn('[zybit-proxy] SPA shell detected — modifications may not apply', {
-      experimentId: experiment.id,
-      originUrl,
-    });
+  // Kill switch: if the experiment was stopped after this config was cached,
+  // serve unmodified origin rather than stale variant HTML.
+  const shouldModify =
+    bucket === 'variant' &&
+    experiment.status === 'running' &&
+    experiment.modifications.length > 0;
+
+  let body = html;
+
+  if (shouldModify) {
+    // Zybit-103: SPA shells won't have the target DOM nodes at request time.
+    // Log a warning so operators know HTML modifications won't apply.
+    if (isSpaHtml(html)) {
+      console.warn('[zybit-proxy] SPA shell detected — modifications may not apply', {
+        experimentId: experiment.id,
+        originUrl,
+      });
+    }
+    try {
+      body = applyModifications(html, experiment.modifications);
+    } catch {
+      // Modification failed — fail-open by serving the original unmodified HTML.
+      body = html;
+    }
   }
 
-  let modified: string;
-  try {
-    modified = applyModifications(html, experiment.modifications);
-  } catch {
-    // Modification failed — fail-open by serving the original unmodified HTML.
-    const headers = new Headers(originRes.headers);
-    headers.delete('content-encoding');
-    headers.delete('content-length');
-    return new NextResponse(html, { status: originRes.status, headers });
-  }
+  // PostHog visitor-ID bridge: inject for BOTH control and variant so
+  // conversions from either bucket carry the Zybit visitor ID and the
+  // outcome-computation join can match them. Never throws.
+  body = injectBridgeScript(body, visitorId);
 
   // Preserve origin headers (Set-Cookie, Cache-Control, CSP, etc.) but drop
-  // the encoding/length headers that no longer match the modified body.
+  // the encoding/length headers that no longer match the rewritten body.
   const responseHeaders = new Headers(originRes.headers);
   responseHeaders.set('content-type', contentType);
   responseHeaders.delete('content-encoding');
   responseHeaders.delete('content-length');
 
-  return new NextResponse(modified, {
+  return new NextResponse(body, {
     status: originRes.status,
     headers: responseHeaders,
   });

@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
 import { createPhase1Repository } from '@/lib/phase1';
@@ -28,6 +28,8 @@ export interface CockpitData {
     integrations: CockpitIntegration[];
     lastSync: string | null;
     healthy: boolean;
+    /** Canonical events ingested for this site in the last 7 days. */
+    eventCount7d: number;
   } | null;
   gate: {
     trustworthy: boolean;
@@ -41,6 +43,12 @@ export interface CockpitData {
   experiments: {
     runningCount: number;
     totalCount: number;
+    /**
+     * When experiment results were last refreshed. The compute-outcomes
+     * cron bumps `updatedAt` on every running/concluded experiment each
+     * pass, so MAX(updatedAt) is the measurement-freshness signal (Zybit-086).
+     */
+    lastComputedAt: string | null;
   };
   lastInsightAt: string | null;
 }
@@ -48,6 +56,47 @@ export interface CockpitData {
 const SESSION_DISPLAY_THRESHOLD = 100;
 
 export { SESSION_DISPLAY_THRESHOLD };
+
+export type IntegrationHealthState = 'watching' | 'no-data' | 'degraded' | 'disconnected';
+
+export interface IntegrationHealth {
+  state: IntegrationHealthState;
+  label: string;
+  tone: 'green' | 'amber' | 'red' | 'gray';
+}
+
+/** Sync older than this is treated as stale (connector cron runs hourly). */
+const STALE_SYNC_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Pure: classify a connected integration into a PM-readable health state.
+ * "Zybit is watching" vs "No data yet" vs "Degraded" vs "Disconnected".
+ */
+export function deriveIntegrationHealth(
+  integration: { status: string; lastSyncedAt: string | null; lastErrorCode: string | null },
+  now: number = Date.now(),
+): IntegrationHealth {
+  if (integration.status === 'disabled') {
+    return { state: 'disconnected', label: 'Disconnected', tone: 'gray' };
+  }
+  if (integration.lastErrorCode || integration.status === 'error') {
+    return {
+      state: 'degraded',
+      label: integration.lastErrorCode
+        ? `Degraded — ${integration.lastErrorCode}`
+        : 'Degraded',
+      tone: 'red',
+    };
+  }
+  if (!integration.lastSyncedAt) {
+    return { state: 'no-data', label: 'No data yet', tone: 'amber' };
+  }
+  const age = now - new Date(integration.lastSyncedAt).getTime();
+  if (Number.isFinite(age) && age > STALE_SYNC_MS) {
+    return { state: 'degraded', label: 'Degraded — sync stale', tone: 'amber' };
+  }
+  return { state: 'watching', label: 'Zybit is watching', tone: 'green' };
+}
 
 export async function getCockpitData(organizationId: string): Promise<CockpitData> {
   const repository = createPhase1Repository();
@@ -60,7 +109,7 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
       pipeline: null,
       gate: null,
       findings: { openCount: 0, topFinding: null },
-      experiments: { runningCount: 0, totalCount: 0 },
+      experiments: { runningCount: 0, totalCount: 0, lastComputedAt: null },
       lastInsightAt: null,
     };
   }
@@ -71,8 +120,15 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
     end: new Date(now).toISOString(),
   };
 
-  const [integrations, events, config, openFindingRows, topFindingRows, experimentRows] =
-    await Promise.all([
+  const [
+    integrations,
+    events,
+    config,
+    openFindingRows,
+    topFindingRows,
+    experimentRows,
+    experimentComputedRows,
+  ] = await Promise.all([
       repository.listIntegrations({ organizationId, siteId: site.id }),
       repository.listEventsInWindow({ organizationId, siteId: site.id, window: window7d }),
       repository.getPhase2SiteConfig({ organizationId, siteId: site.id }),
@@ -98,6 +154,15 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
         .from(zybitExperiments)
         .where(eq(zybitExperiments.siteId, site.id))
         .groupBy(zybitExperiments.status),
+      getDb()
+        .select({ lastComputedAt: max(zybitExperiments.updatedAt) })
+        .from(zybitExperiments)
+        .where(
+          and(
+            eq(zybitExperiments.siteId, site.id),
+            inArray(zybitExperiments.status, ['running', 'completed', 'stopped']),
+          ),
+        ),
     ]);
 
   const resolvedConfig = config ?? {
@@ -134,6 +199,14 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
   );
   const totalCount = experimentRows.reduce((sum, r) => sum + Number(r.n), 0);
 
+  const rawLastComputed = experimentComputedRows[0]?.lastComputedAt ?? null;
+  const lastComputedAt =
+    rawLastComputed instanceof Date
+      ? rawLastComputed.toISOString()
+      : rawLastComputed
+        ? new Date(rawLastComputed).toISOString()
+        : null;
+
   const lastInsightAt =
     topFinding
       ? (
@@ -158,6 +231,7 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
       })),
       lastSync,
       healthy: integrations.length > 0 && integrations.every((i) => !i.lastErrorCode),
+      eventCount7d: events.length,
     },
     gate: {
       trustworthy: gate.ok,
@@ -169,7 +243,7 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
       })),
     },
     findings: { openCount, topFinding },
-    experiments: { runningCount, totalCount },
+    experiments: { runningCount, totalCount, lastComputedAt },
     lastInsightAt,
   };
 }

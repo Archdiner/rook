@@ -71,7 +71,7 @@ Event ingestion from customer analytics tools.
 |-----------|--------|--------|
 | PostHog | API pull (paginated, cursor-tracked, retry/backoff) | Working |
 | Segment | Webhook receiver | Working |
-| GA4 | API pull (Google Analytics Data API v1beta) | Scaffolded — service-account JWT auth + sync remaining |
+| GA4 | API pull (Google Analytics Data API v1beta) | Built — service-account JWT + `runReport` pagination + cron. Aggregate-grain (Identify/Propose only, not joinable to assignments) |
 | Direct JS SDK | — | Not built |
 
 Events are normalized to a canonical schema (`CanonicalEvent v2`) with deduplication on `(siteId, source, sourceEventId)`.
@@ -216,7 +216,7 @@ The analysis engine is production-ready. The proxy bucketing and HTML modificati
 
 **Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
 
-> **Status:** OBF alpha-spending shipped on `claude/fix-measurement-proxy-reliability`. `stats.ts` has `obfConfidenceThreshold(elapsedDays, durationDays, alpha)` computing per-look thresholds; `isReadyToStop` uses day-number information fraction (t = lookNumber / totalLooks). Simulation: 2,000 null experiments, empirical FP-rate ≤ 6.5% (3-sigma MC tolerance). Cron cadence: daily (`vercel.json`). Remaining: PostHog visitor-ID bridge, auto-stop PM notification, "last computed at" surface.
+> **Status:** OBF alpha-spending shipped on `claude/fix-measurement-proxy-reliability`. `stats.ts` has `obfConfidenceThreshold(elapsedDays, durationDays, alpha)` computing per-look thresholds; `isReadyToStop` uses day-number information fraction (t = lookNumber / totalLooks). Simulation: 2,000 null experiments, empirical FP-rate ≤ 6.5% (3-sigma MC tolerance). Cron cadence: daily (`vercel.json`). PostHog visitor-ID bridge shipped — the proxy injects a `zybit_vid` PostHog super-property (`proxy/bridgeScript.ts`, both buckets) and `posthog/mapping.ts` prefers it in `deriveSessionId`, so the conversion join matches PostHog-sourced events with no SQL change. Auto-stop/guardrail PM email shipped (`email/experimentConcludedEmail.ts`, `notifyConcluded` in `computeOutcomes.ts`, best-effort). Remaining: "last computed at" surface.
 
 #### Outcome Storage
 
@@ -402,17 +402,17 @@ When an experiment completes, its outcome informs future rule runs for the same 
 
 ---
 
-### GA4 Connector (after Priority 1-4)
+### GA4 Connector (shipped)
 
-GA4 is in the `source` enum. No implementation exists. Required for analytics-agnostic claim to be credible in the field.
+Built at `src/lib/phase2/connectors/ga4/`, same shape as the PostHog pull-sync adapter.
+- GA4 Data API v1beta `runReport`; service-account RS256 JWT signed via Web Crypto (zero extra deps), exchanged for an OAuth2 access token (in-memory cached per service account).
+- `eventName` → canonical `type`; `eventCount` + `sessions` → canonical `metrics`. Each aggregated `(date, hour, minute, pagePath, eventName)` row → one canonical event; the deterministic grain key is the `(siteId, source, sourceEventId)` dedupe id, so re-syncs are idempotent.
+- Cursor: `(synthetic timestamp, grain key)` in `phase2_integrations.cursor`; `runReport` `startDate` derived from it, with strictly-after filtering.
+- `runGA4PullSyncJob` + `/api/phase2/cron/sync-ga4` (every 30m). The session-volume insights trigger is the shared `jobs/insightsTrigger.ts`, also used by the PostHog cron.
 
-**Pattern:** Same as PostHog pull-sync at `src/lib/phase2/connectors/posthog/`. 
-- GA4 Data API (Google Analytics Data API v1beta)
-- Auth: service account JSON or OAuth
-- Map GA4 `eventName` to canonical event `type`; map `eventCount`, `sessions` to canonical `metrics`
-- Cursor: GA4 date-range pagination, store last-synced date in `phase2_integrations.cursor`
+**Caveat (deliberate):** `runReport` is aggregated — GA4 exposes no per-visitor/session id without a BigQuery export. GA4 is therefore an **Identify/Propose** source only; it is NOT joined to proxy assignments for outcome computation (PostHog/Segment are the measurement-grade sources). A future BigQuery-export path could lift this.
 
-**Do not build:** Amplitude or Mixpanel connectors until GA4 ships and proves the pattern. Add them one at a time.
+**Do not build:** Amplitude or Mixpanel connectors yet. Add them one at a time, same pattern.
 
 ---
 

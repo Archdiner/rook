@@ -21,15 +21,11 @@
  *   - zybit_experiments (deployment, hypothesis, dates)
  *   - zybit_experiment_outcomes (results, lift, confidence)
  *
- * TODO: This page is scaffolded. Implement data fetching and rendering below.
- *
- * Implementation checklist:
- *   [ ] 1. Load all findings + linked experiments + outcomes for the current site
- *   [ ] 2. Build a chronological timeline merging detections, deployments, results
- *   [ ] 3. Render each entry type with the correct icon + color (see TODO sections below)
- *   [ ] 4. Add empty state for sites with no completed experiments yet
- *   [ ] 5. Link each entry to the finding/experiment detail page
- *   [ ] 6. Add site selector if org has multiple sites
+ * Built: timeline merge (detections/deployments/results), per-entry
+ * rendering, empty state, detail links, guardrail-breach amber flag
+ * (Zybit-091), and the multi-site selector (Zybit-092).
+ * Not built: the LEARNED entry — depends on the Phase-2 rule-calibration
+ * feedback loop, which does not exist yet.
  */
 
 export const dynamic = 'force-dynamic';
@@ -42,7 +38,7 @@ import { getDb } from '@/lib/db/client';
 import { phase1Sites, zybitFindings, zybitExperiments, zybitExperimentOutcomes } from '@/lib/db/schema';
 
 // ---------------------------------------------------------------------------
-// TODO: Timeline entry types
+// Timeline entry types
 // ---------------------------------------------------------------------------
 
 type DetectionEntry = {
@@ -81,7 +77,7 @@ type ResultEntry = {
 type TimelineEntry = DetectionEntry | DeploymentEntry | ResultEntry;
 
 // ---------------------------------------------------------------------------
-// TODO: Data fetching
+// Data fetching
 // ---------------------------------------------------------------------------
 
 async function loadTimeline(
@@ -198,7 +194,7 @@ async function loadTimeline(
 }
 
 // ---------------------------------------------------------------------------
-// TODO: Site selection (if org has multiple sites)
+// Site selection
 // ---------------------------------------------------------------------------
 
 async function loadSites(
@@ -213,11 +209,10 @@ async function loadSites(
 }
 
 // ---------------------------------------------------------------------------
-// TODO: Rendering helpers
+// Rendering helpers
 // ---------------------------------------------------------------------------
 
 function EntryIcon({ kind }: { kind: TimelineEntry['kind'] }) {
-  // TODO: distinct icon per entry type
   // detection: magnifying glass (search)
   // deployment: rocket / play button
   // result: chart bar / checkmark (positive) / x (negative) / dash (inconclusive)
@@ -230,8 +225,6 @@ function EntryIcon({ kind }: { kind: TimelineEntry['kind'] }) {
 }
 
 function EntryLabel({ entry }: { entry: TimelineEntry }) {
-  // TODO: render the entry's primary line of text
-
   if (entry.kind === 'detection') {
     return (
       <div>
@@ -260,11 +253,7 @@ function EntryLabel({ entry }: { entry: TimelineEntry }) {
   }
 
   if (entry.kind === 'result') {
-    // TODO: render positive/negative/inconclusive differently
-    // positive: green lift badge
-    // negative: red lift badge
-    // inconclusive: grey badge
-    // guardrail breach: orange warning
+    const breached = Boolean(entry.guardrailBreached);
     const resultColor =
       entry.result === 'positive'
         ? 'text-emerald-700'
@@ -276,20 +265,26 @@ function EntryLabel({ entry }: { entry: TimelineEntry }) {
       <div>
         <Link href={`/app/experiments/${entry.experimentId}`} className="font-medium hover:underline">
           Experiment{' '}
-          <span className={resultColor}>
-            {entry.result === 'positive'
-              ? `+${entry.liftPct?.toFixed(1)}pp`
-              : entry.result === 'negative'
-                ? `${entry.liftPct?.toFixed(1)}pp`
-                : 'inconclusive'}
-          </span>
+          {breached ? (
+            <span className="inline-flex items-center gap-1 align-middle rounded-full bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5">
+              ⚠ Guardrail breached
+            </span>
+          ) : (
+            <span className={resultColor}>
+              {entry.result === 'positive'
+                ? `+${entry.liftPct?.toFixed(1)}pp`
+                : entry.result === 'negative'
+                  ? `${entry.liftPct?.toFixed(1)}pp`
+                  : 'inconclusive'}
+            </span>
+          )}
         </Link>
-        {entry.guardrailBreached && (
+        {breached && (
           <p className="text-sm text-amber-700 mt-0.5">
-            ⚠ Guardrail breached: {entry.guardrailBreached}
+            Stopped early — {entry.guardrailBreached}
           </p>
         )}
-        {!entry.guardrailBreached && entry.controlRate !== null && entry.variantRate !== null && (
+        {!breached && entry.controlRate !== null && entry.variantRate !== null && (
           <p className="text-sm text-[#6B6B6B] mt-0.5">
             Variant {(entry.variantRate * 100).toFixed(2)}% vs Control{' '}
             {(entry.controlRate * 100).toFixed(2)}%
@@ -322,12 +317,10 @@ export default async function LoopPage({
 
   const db = getDb();
 
-  // TODO: replace stub with real site loading and selection
   const sites = await loadSites(db, orgId);
   const sp = await searchParams;
   const siteId = sp.site ?? sites[0]?.id ?? '';
 
-  // TODO: remove this placeholder once loadTimeline is implemented
   const timeline = siteId ? await loadTimeline(db, orgId, siteId) : [];
 
   const kindLabel: Record<TimelineEntry['kind'], string> = {
@@ -345,16 +338,30 @@ export default async function LoopPage({
         </p>
       </div>
 
-      {/* TODO: site selector if sites.length > 1 */}
       {sites.length > 1 && (
-        <div className="mb-6">
-          {/* TODO: render site selector tabs */}
-          <p className="text-sm text-[#6B6B6B]">TODO: site selector</p>
+        <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Site">
+          {sites.map((s) => {
+            const active = s.id === siteId;
+            return (
+              <Link
+                key={s.id}
+                href={`/app/loop?site=${encodeURIComponent(s.id)}`}
+                role="tab"
+                aria-selected={active}
+                className={
+                  active
+                    ? 'px-3 py-1.5 rounded-full text-sm font-medium bg-[#111] text-white'
+                    : 'px-3 py-1.5 rounded-full text-sm font-medium bg-[#F2F2F2] text-[#6B6B6B] hover:bg-[#E8E8E8] transition-colors'
+                }
+              >
+                {s.name}
+              </Link>
+            );
+          })}
         </div>
       )}
 
       {timeline.length === 0 ? (
-        /* TODO: better empty state — explain what will appear here once experiments run */
         <div className="border border-dashed border-[#E0E0E0] rounded-xl p-12 text-center">
           <p className="text-[#6B6B6B] text-sm">
             {siteId
@@ -371,7 +378,6 @@ export default async function LoopPage({
           )}
         </div>
       ) : (
-        /* TODO: render actual timeline */
         <ol className="relative border-l border-[#E8E8E8] ml-3 space-y-8">
           {timeline.map((entry, i) => (
             <li key={i} className="ml-6">

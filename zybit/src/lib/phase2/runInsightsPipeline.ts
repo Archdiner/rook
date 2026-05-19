@@ -1,3 +1,4 @@
+import { incrementUsage } from '@/lib/billing/usage';
 import { createPhase1Repository, generateFindings } from '@/lib/phase1';
 import { buildInsightInputFromEvents, runInsightInputGate } from '@/lib/phase2';
 import type { Phase2SiteConfig, RollupContext, RunInsightsResponse, TimeWindow } from '@/lib/phase2/types';
@@ -91,6 +92,9 @@ export async function runPhase2InsightsPipeline(
     pageSnapshotsByPath,
     ...(pageCapturesByPath ? { pageCapturesByPath } : {}),
   });
+
+  // Best-effort: never block or fail an insights run on a usage write.
+  incrementUsage(organizationId, 'insightsRuns', 1).catch(() => {});
 
   return {
     siteId,

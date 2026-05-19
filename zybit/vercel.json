@@ -9,6 +9,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/phase2/cron/sync-ga4",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/health/alert",
       "schedule": "*/30 * * * *"
     },
