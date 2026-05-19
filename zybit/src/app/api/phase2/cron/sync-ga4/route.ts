@@ -1,21 +1,21 @@
 /**
- * FORGE-020 — PostHog pull-sync cron + volume-triggered insights
+ * Zybit-110 — GA4 pull-sync cron + volume-triggered insights
  *
  * Runs every 30 minutes (configured in vercel.json).
  *
- * For each active PostHog integration:
- *   1. Pull new events from PostHog into phase1_events.
+ * For each active GA4 integration:
+ *   1. Pull new aggregated events from the GA4 Data API into phase1_events.
  *   2. If new-session volume since the last run crosses the per-site
  *      threshold, re-run the Phase 2 insights pipeline and upsert findings.
  *
- * The session-threshold logic lives in `jobs/insightsTrigger.ts` and is
- * shared verbatim with the GA4 cron.
+ * Identical shape to the PostHog cron; the session-threshold logic is the
+ * shared `maybeRunInsightsForSite` helper.
  */
 
 import { NextResponse } from 'next/server';
 import { createPhase1Repository } from '@/lib/phase1';
 import { mapRouteError, unauthorized } from '@/app/api/phase1/_shared';
-import { runPostHogPullSyncJob } from '@/lib/phase2/jobs/runPostHogPullSyncJob';
+import { runGA4PullSyncJob } from '@/lib/phase2/jobs/runGA4PullSyncJob';
 import { maybeRunInsightsForSite } from '@/lib/phase2/jobs/insightsTrigger';
 import { logger, cronitorPing, trackSyncResult } from '@/lib/observability';
 
@@ -30,7 +30,7 @@ function assertCronAuth(request: Request): NextResponse | null {
         success: false,
         error: {
           code: 'CRON_DISABLED',
-          message: 'Set FORGE_CRON_SECRET to enable scheduled PostHog sync.',
+          message: 'Set FORGE_CRON_SECRET to enable scheduled GA4 sync.',
         },
       },
       { status: 503 },
@@ -44,7 +44,7 @@ function assertCronAuth(request: Request): NextResponse | null {
 
 async function runHandler(request: Request) {
   const cronService = 'cron-sync' as const;
-  const monitorKey = 'sync-posthog';
+  const monitorKey = 'sync-ga4';
 
   await cronitorPing(monitorKey, 'run');
   logger.info('started', { service: cronService });
@@ -69,7 +69,7 @@ async function runHandler(request: Request) {
     }
 
     const integrations = await repository.listIntegrationsByProvider({
-      provider: 'posthog',
+      provider: 'ga4',
       limit: 50,
     });
 
@@ -91,7 +91,7 @@ async function runHandler(request: Request) {
     ): Promise<IntegrationResult> {
       const { siteId, organizationId } = integration;
 
-      const syncOutcome = await runPostHogPullSyncJob({
+      const syncOutcome = await runGA4PullSyncJob({
         repository,
         integration,
         maxEvents: 5000,
