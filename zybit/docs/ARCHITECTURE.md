@@ -71,7 +71,7 @@ Event ingestion from customer analytics tools.
 |-----------|--------|--------|
 | PostHog | API pull (paginated, cursor-tracked, retry/backoff) | Working |
 | Segment | Webhook receiver | Working |
-| GA4 | API pull (Google Analytics Data API v1beta) | Scaffolded — service-account JWT auth + sync remaining |
+| GA4 | API pull (Google Analytics Data API v1beta) | Built — service-account JWT + `runReport` pagination + cron. Aggregate-grain (Identify/Propose only, not joinable to assignments) |
 | Direct JS SDK | — | Not built |
 
 Events are normalized to a canonical schema (`CanonicalEvent v2`) with deduplication on `(siteId, source, sourceEventId)`.
@@ -402,17 +402,17 @@ When an experiment completes, its outcome informs future rule runs for the same 
 
 ---
 
-### GA4 Connector (after Priority 1-4)
+### GA4 Connector (shipped)
 
-GA4 is in the `source` enum. No implementation exists. Required for analytics-agnostic claim to be credible in the field.
+Built at `src/lib/phase2/connectors/ga4/`, same shape as the PostHog pull-sync adapter.
+- GA4 Data API v1beta `runReport`; service-account RS256 JWT signed via Web Crypto (zero extra deps), exchanged for an OAuth2 access token (in-memory cached per service account).
+- `eventName` → canonical `type`; `eventCount` + `sessions` → canonical `metrics`. Each aggregated `(date, hour, minute, pagePath, eventName)` row → one canonical event; the deterministic grain key is the `(siteId, source, sourceEventId)` dedupe id, so re-syncs are idempotent.
+- Cursor: `(synthetic timestamp, grain key)` in `phase2_integrations.cursor`; `runReport` `startDate` derived from it, with strictly-after filtering.
+- `runGA4PullSyncJob` + `/api/phase2/cron/sync-ga4` (every 30m). The session-volume insights trigger is the shared `jobs/insightsTrigger.ts`, also used by the PostHog cron.
 
-**Pattern:** Same as PostHog pull-sync at `src/lib/phase2/connectors/posthog/`. 
-- GA4 Data API (Google Analytics Data API v1beta)
-- Auth: service account JSON or OAuth
-- Map GA4 `eventName` to canonical event `type`; map `eventCount`, `sessions` to canonical `metrics`
-- Cursor: GA4 date-range pagination, store last-synced date in `phase2_integrations.cursor`
+**Caveat (deliberate):** `runReport` is aggregated — GA4 exposes no per-visitor/session id without a BigQuery export. GA4 is therefore an **Identify/Propose** source only; it is NOT joined to proxy assignments for outcome computation (PostHog/Segment are the measurement-grade sources). A future BigQuery-export path could lift this.
 
-**Do not build:** Amplitude or Mixpanel connectors until GA4 ships and proves the pattern. Add them one at a time.
+**Do not build:** Amplitude or Mixpanel connectors yet. Add them one at a time, same pattern.
 
 ---
 

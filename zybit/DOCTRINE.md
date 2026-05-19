@@ -131,7 +131,7 @@ Zybit's long-term moat is outcome-labeled data, not raw event collection. Models
 The analysis engine and PM dashboard are complete. Zybit can:
 
 - Audit any product's visual hierarchy via static page snapshots (HTTP fetch + DOM parse; SPA/JS-rendered sites not yet supported)
-- Ingest behavioral data from PostHog (pull-sync) and Segment (webhook)
+- Ingest behavioral data from PostHog (pull-sync), Segment (webhook), and GA4 (Data API v1beta pull-sync — aggregate-grain, Identify/Propose only)
 - Run 12 deterministic audit rules (5 design + 7 pain) across combined behavioral and design signals
 - Surface specific findings with A/B prescriptions, evidence arrays, and revenue impact estimates
 - Display findings, experiments, and lifecycle status in a wired PM dashboard
@@ -143,15 +143,16 @@ The analysis engine and PM dashboard are complete. Zybit can:
 - Authenticate PMs via invite-only magic-link sessions and authenticate machines via hashed M2M API keys
 - Bill customers and enforce plan limits via Stripe — usage metering wired (events/snapshots/insights), sites and concurrent experiments hard-enforced (402), events soft-capped (metered + surfaced, never dropped)
 - Show per-integration health in the cockpit ("Zybit is watching" / "No data yet" / "Degraded") with last-sync and 7-day event count
+- Show the visible loop timeline per site — detections, deployments, results — with a guardrail-breach amber flag and a multi-site selector
+- Surface measurement freshness ("results last refreshed") on the cockpit
 - Observe cron and pipeline health via Cronitor heartbeats, an error-budget tracker, and a structured logger
 
 **What is not yet complete (immediate priorities, in order):**
 
-1. **Visible loop view** — No timeline showing the full detect → deploy → result → learn cycle. The renewal story and the demo depend on this. `/app/loop/page.tsx` is a TODO scaffold today.
-2. **Proxy reliability** — Modification-error fail-open, kill switch, and SPA handling are all still TODOs in `src/lib/experiments/proxy/handler.ts`. Auto-rollback on guardrail breach is not wired into Edge Config.
-3. **GA4 connector** — GA4 is in the source enum but has no implementation. Required to credibly claim analytics-agnostic.
-4. **Measurement follow-ups** — PostHog visitor-ID bridge and auto-stop PM notification are now shipped. Remaining: "last computed at" surface for the outcomes cron, and the GA4 connector so PostHog is not the only first-class source.
-5. **Learn — rule calibration** — Outcome rows are persisted but no rule weighting yet consumes them.
+1. **Live Stripe round-trip verification** — The checkout → webhook → plan-write → enforcement code path is implemented and its round-trip bugs fixed (redirect target, cross-instance plan-cache staleness), but it has not been exercised end-to-end with stripe-cli + test keys.
+2. **Learn — rule calibration** — Outcome rows are persisted but no rule weighting consumes them yet. This is what closes the loop (and unblocks the loop view's LEARNED entry).
+3. **Proxy SPA handling** — JS-rendered targets are detected and logged but modifications won't apply; `browserFetcher.ts` fallback is unimplemented.
+4. **Observability** — Axiom drain not yet connected.
 
 **What is deliberately not being built:**
 Sentiment analysis, GitHub PR generation, PostHog replacement / direct SDK, more audit rules, cross-site priors (before 50 customers with outcomes). See "What Zybit is not."
