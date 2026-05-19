@@ -41,8 +41,8 @@ export async function saveProxySetupAction(
   if (!validation.ok) {
     return { ok: false, error: "invalid_slug", reason: validation.reason };
   }
-  if (!subdomain || !subdomain.includes(".")) {
-    return { ok: false, error: "invalid_slug", reason: "Enter the full customer subdomain (e.g. experiments.acme.com)." };
+  if (!subdomain || !/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/.test(subdomain)) {
+    return { ok: false, error: "invalid_slug", reason: "Enter a valid subdomain (e.g. experiments.acme.com)." };
   }
 
   const db = getDb();

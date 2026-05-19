@@ -14,7 +14,7 @@ describe('deriveSlugFromDomain', () => {
 
   it('strips protocol and trailing path', () => {
     expect(deriveSlugFromDomain('https://acme.com/pricing')).toBe('acme');
-    expect(deriveSlugFromDomain('http://www.example.org')).toBe('www');
+    expect(deriveSlugFromDomain('http://www.example.org')).toBe('example');
   });
 
   it('replaces non-slug characters with hyphens and trims them', () => {

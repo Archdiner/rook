@@ -112,7 +112,9 @@ export default function ProxySetupForm({
     setError(null);
   }
 
-  const cnameHost = customerSubdomain.split(".")[0] || "experiments";
+  const cnameHost = customerSubdomain.endsWith(`.${domain}`)
+    ? customerSubdomain.slice(0, -(domain.length + 1))
+    : customerSubdomain.split(".")[0] || "experiments";
   const cnameValue = `${slug || "<slug>"}.zybit.run`;
   const cnameSnippet =
     `Type: CNAME    Host: ${cnameHost}    Value: ${cnameValue}`;

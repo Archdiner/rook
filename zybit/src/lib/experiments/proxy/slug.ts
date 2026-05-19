@@ -37,8 +37,10 @@ export type SlugValidation = { ok: true } | { ok: false; reason: string };
  */
 export function deriveSlugFromDomain(domain: string): string {
   const cleaned = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-  const firstLabel = cleaned.split('.')[0] ?? '';
-  return firstLabel
+  const labels = cleaned.split('.');
+  // Skip bare 'www' so www.acme.com → 'acme', not the reserved 'www'.
+  const label = (labels[0] === 'www' && labels.length > 1 ? labels[1] : labels[0]) ?? '';
+  return label
     .replace(/[^a-z0-9-]+/g, '-')
     .replace(/^-+|-+$/g, '');
 }
