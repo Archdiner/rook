@@ -1,6 +1,6 @@
 # Zybit — Product Gap Analysis & Roadmap
 
-> **Status:** The analysis engine (Understand → Watch → Identify → Propose) is production-ready with 12 deterministic audit rules, two connectors, and a wired PM dashboard. The "Test → Learn" half does not exist. This document maps every gap between current state and a real, paid startup — and proposes the exact build path for each.
+> **Status (updated 2026-05-18):** The analysis engine (Understand → Watch → Identify → Propose) is production-ready. The Test → Measure half is now mostly in place: variant delivery via proxy (partial), outcome computation (shipped — `5951a99` + `b09a212`), and preview before deploy (shipped — same commits). Gap 2 (Billing) and Gap 3 (Measurement Rigor) are now largely closed; the remaining critical-path gaps are proxy reliability hardening, the visible loop view, and the GA4 connector. The original gap analysis is preserved below for reference; refer to `zybit/docs/BACKLOG.md` for current sequencing.
 
 ---
 
@@ -8,14 +8,15 @@
 
 | Loop Step | Status | What Works |
 |-----------|--------|-----------|
-| **Understand** | ✅ Built | HTTP snapshot → DOM parse → visual-weight scoring |
-| **Watch** | ✅ Built | PostHog pull-sync + Segment webhook, canonical event schema |
+| **Understand** | ✅ Built | HTTP snapshot → DOM parse → visual-weight scoring. SPA support still missing. |
+| **Watch** | ✅ Built | PostHog pull-sync + Segment webhook, canonical event schema. GA4 not built. |
 | **Identify** | ✅ Built | 12 audit rules, 193 passing tests, deterministic findings |
 | **Propose** | ✅ Built | Findings ranked by priority score + revenue impact, PM-readable |
-| **Test** | ❌ Missing | Experiment record is metadata only — no traffic, no variant |
-| **Learn** | ❌ Missing | No outcome ingestion, no rule calibration, no feedback |
-| **Pay** | ❌ Missing | No Stripe, no plan limits, no usage metering |
-| **Operate** | ⚠️ Partial | No staging env, no E2E harness, no observability |
+| **Test** | ⚠️ Partial | Bucketing, HTML modifier, and edge proxy routes built. Network-error fail-open in place. Modification-error fail-open, kill switch, SPA handling, and auto-rollback wiring all still TODO in `src/lib/experiments/proxy/handler.ts`. |
+| **Measure** | ✅ Built | Outcome storage, conversion join (`DISTINCT ON` dedup), chi-squared + Welch, sequential guard (confidence + per-arm min sample + min days), guardrail eval, auto-stop, hourly cron with Cronitor heartbeat — all shipped in `5951a99` + `b09a212`. Caveats: no `stats.ts` unit tests yet; PostHog-sourced conversions undercount until the visitor-ID bridge ships. |
+| **Learn** | ❌ Missing | Outcome rows are persisted; no rule calibration yet consumes them |
+| **Pay** | ⚠️ Partial | Stripe checkout/portal/webhook routes + plan/usage helpers exist in `src/lib/billing/` and `src/app/api/billing/`. End-to-end plan-limit enforcement coverage not yet verified. |
+| **Operate** | ⚠️ Partial | Cronitor heartbeats, error-budget tracker, and structured logger built and wired into crons. No staging environment, no E2E harness, no Axiom log drain. |
 
 ---
 
@@ -144,7 +145,9 @@ The wildcard approach (`*.zybit.run → Vercel`) avoids per-customer DNS calls. 
 ### Problem
 There is no payment flow, no subscription, no plan enforcement. Zybit cannot charge money. It also cannot enforce limits, meaning a free user could run unlimited experiments and ingest unlimited events.
 
-### Architecture Decision: Use Stripe + Clerk Organizations
+### Architecture Decision: Use Stripe + magic-link sessions (was: Clerk Organizations)
+
+> Clerk was removed in `a786d37`; org scoping now hangs off magic-link sessions in `src/lib/auth/` rather than Clerk Organizations. The Stripe integration described below shipped against this model.
 
 Clerk is already integrated and handles multi-org. Stripe is the clear choice for SaaS billing — no alternatives evaluated (Paddle adds complexity without benefit at this stage). Billing is keyed to Clerk Organization, not individual user.
 

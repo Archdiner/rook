@@ -186,6 +186,8 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         domain: created.domain,
         createdAt: created.createdAt.toISOString(),
         ...(created.analyticsProvider ? { analyticsProvider: created.analyticsProvider } : {}),
+        ...(created.proxySlug ? { proxySlug: created.proxySlug } : {}),
+        ...(created.customerSubdomain ? { customerSubdomain: created.customerSubdomain } : {}),
       };
     },
     async listSites(input: ListPhase1SitesInput): Promise<Phase1SiteRecord[]> {
@@ -204,6 +206,8 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         domain: site.domain,
         createdAt: site.createdAt.toISOString(),
         ...(site.analyticsProvider ? { analyticsProvider: site.analyticsProvider } : {}),
+        ...(site.proxySlug ? { proxySlug: site.proxySlug } : {}),
+        ...(site.customerSubdomain ? { customerSubdomain: site.customerSubdomain } : {}),
       }));
     },
     async getSite(input: GetPhase1SiteInput): Promise<Phase1SiteRecord | null> {
@@ -223,6 +227,8 @@ export function createPostgresPhase1Repository(): Phase1Repository {
         domain: site.domain,
         createdAt: site.createdAt.toISOString(),
         ...(site.analyticsProvider ? { analyticsProvider: site.analyticsProvider } : {}),
+        ...(site.proxySlug ? { proxySlug: site.proxySlug } : {}),
+        ...(site.customerSubdomain ? { customerSubdomain: site.customerSubdomain } : {}),
       };
     },
     async createEvent(input: CreatePhase1EventInput): Promise<Phase1EventRecord> {

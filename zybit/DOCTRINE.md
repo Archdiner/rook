@@ -136,15 +136,19 @@ The analysis engine and PM dashboard are complete. Zybit can:
 - Surface specific findings with A/B prescriptions, evidence arrays, and revenue impact estimates
 - Display findings, experiments, and lifecycle status in a wired PM dashboard
 - Assign visitors to control/variant via deterministic bucketing and apply HTML modifications via the proxy layer
-- Bill customers and enforce plan limits via Stripe
+- Compute experiment outcomes automatically — chi-squared significance, sequential-testing guard (confidence + per-arm min sample + min days), guardrail evaluation, auto-stop, hourly cron (shipped in `5951a99` + `b09a212`)
+- Render a server-side preview of variant modifications before deploy (`api/preview/[experimentId]`)
+- Authenticate PMs via invite-only magic-link sessions and authenticate machines via hashed M2M API keys
+- Bill customers and enforce plan limits via Stripe (routes + helpers in place; enforcement coverage still being verified)
+- Observe cron and pipeline health via Cronitor heartbeats, an error-budget tracker, and a structured logger
 
 **What is not yet complete (immediate priorities, in order):**
 
-1. **Measurement rigor** — Experiment results are manually entered. No outcome storage table, no chi-squared computation, no sequential testing, no guardrail metrics. This is the largest gap.
-2. **Visible loop view** — No timeline showing the full detect → deploy → result → learn cycle. The renewal story and the demo depend on this.
-3. **Proxy reliability** — No SPA support (JS-rendered sites serve blank HTML to the audit engine and may break under proxy), no fail-open behavior, no kill switch per experiment.
-4. **Preview before deploy** — No way for a PM to see the modified page before it goes live on real traffic.
-5. **GA4 connector** — GA4 is in the source enum but has no implementation. Required to credibly claim analytics-agnostic.
+1. **Visible loop view** — No timeline showing the full detect → deploy → result → learn cycle. The renewal story and the demo depend on this. `/app/loop/page.tsx` is a TODO scaffold today.
+2. **Proxy reliability** — Modification-error fail-open, kill switch, and SPA handling are all still TODOs in `src/lib/experiments/proxy/handler.ts`. Auto-rollback on guardrail breach is not wired into Edge Config.
+3. **GA4 connector** — GA4 is in the source enum but has no implementation. Required to credibly claim analytics-agnostic.
+4. **Measurement follow-ups** — Pipeline false-positive inflation (~14% measured vs nominal 5% — repeated-peeking from hourly cron; α-spending or reduced cadence would close it), PostHog visitor-ID bridge (so PostHog-sourced conversions are correctly matched), `X-Frame-Options` strip on the preview endpoint, dashboard iframe UI for preview, and "last computed at" surface for the outcomes cron.
+5. **Learn — rule calibration** — Outcome rows are persisted but no rule weighting yet consumes them.
 
 **What is deliberately not being built:**
 Sentiment analysis, GitHub PR generation, PostHog replacement / direct SDK, more audit rules, cross-site priors (before 50 customers with outcomes). See "What Zybit is not."

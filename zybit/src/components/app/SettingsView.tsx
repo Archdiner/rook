@@ -6,7 +6,7 @@ import Link from "next/link";
 import type { Phase1SiteRecord } from "@/lib/phase1";
 import type { IntegrationRecord } from "@/lib/phase2/connectors/types";
 import { saveSiteMetaAction } from "@/app/app/onboarding/actions";
-import InstallVerifier from "./InstallVerifier";
+import ProxySetupForm from "./ProxySetupForm";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,50 +35,6 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
     <div className={`bg-white border border-black/[0.05] rounded-2xl p-6 ${className}`}>
       {children}
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Script tag section
-// ---------------------------------------------------------------------------
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="absolute top-3 right-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B] hover:text-[#111] transition-colors px-2 py-1 rounded bg-white border border-black/[0.08]"
-    >
-      {copied ? "Copied!" : "Copy"}
-    </button>
-  );
-}
-
-function ScriptTagSection({ siteId }: { siteId: string }) {
-  const snippet = `<script src="https://js.zybit.run/v1.js?siteId=${siteId}" async></script>`;
-
-  return (
-    <Card>
-      <SectionHeading>Script installation</SectionHeading>
-      <p className="text-sm text-[#6B6B6B] mb-4 max-w-lg leading-relaxed">
-        Paste this into the{" "}
-        <code className="text-xs font-mono bg-black/[0.04] px-1 py-0.5 rounded">&lt;head&gt;</code>{" "}
-        of every page you want to track. Zybit begins collecting data immediately.
-      </p>
-      <div className="relative bg-[#F5F5F3] border border-black/[0.08] rounded-xl p-4 font-mono text-xs text-[#333] overflow-x-auto mb-5">
-        <CopyButton text={snippet} />
-        <pre className="whitespace-pre-wrap break-all pr-16">{snippet}</pre>
-      </div>
-      <InstallVerifier siteId={siteId} />
-    </Card>
   );
 }
 
@@ -247,8 +203,17 @@ export default function SettingsView({
         <p className="text-xs text-[#9B9B9B] mt-1 font-mono">site ID: {site.id}</p>
       </div>
 
-      {/* Script installation + verify */}
-      <ScriptTagSection siteId={site.id} />
+      {/* Proxy & DNS */}
+      <Card>
+        <SectionHeading>Proxy & DNS</SectionHeading>
+        <ProxySetupForm
+          siteId={site.id}
+          domain={site.domain}
+          initialSlug={site.proxySlug ?? null}
+          initialSubdomain={site.customerSubdomain ?? null}
+          variant="settings"
+        />
+      </Card>
 
       {/* Integrations */}
       <Card>

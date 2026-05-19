@@ -5,7 +5,7 @@ import Link from "next/link";
 import { eq, and } from "drizzle-orm";
 import { getServerAuth } from "@/lib/auth/serverAuth";
 import { getDb } from "@/lib/db/client";
-import { zybitExperiments, zybitFindings } from "@/lib/db/schema";
+import { phase1Sites, zybitExperiments, zybitFindings } from "@/lib/db/schema";
 import ExperimentControls from "@/components/app/ExperimentControls";
 import type { VariantModification } from "@/lib/experiments/types";
 
@@ -60,6 +60,16 @@ export default async function ExperimentDetailPage({
   const exp = rows[0];
   if (!exp) notFound();
 
+  // Load the experiment's site to surface a "complete DNS setup" banner if the
+  // proxy isn't wired yet. Without proxy_slug, this experiment can't actually
+  // serve modified traffic — we want the PM to know that.
+  const siteRows = await db
+    .select({ proxySlug: phase1Sites.proxySlug })
+    .from(phase1Sites)
+    .where(eq(phase1Sites.id, exp.siteId))
+    .limit(1);
+  const siteProxySlug = siteRows[0]?.proxySlug ?? null;
+
   // Load linked finding for context
   let findingTitle: string | null = null;
   if (exp.findingId) {
@@ -81,9 +91,6 @@ export default async function ExperimentDetailPage({
   const name = notes?.name ?? exp.hypothesis;
   const modifications = (exp.modifications ?? []) as VariantModification[];
   const hasResults = exp.resultVariantRate !== null && exp.resultControlRate !== null;
-
-  // Script snippet for client-side injection
-  const snippet = `<script src="/zybit-experiments.js" data-site-id="YOUR_SITE_ID" async></script>`;
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
@@ -137,6 +144,22 @@ export default async function ExperimentDetailPage({
       </div>
 
       <div className="space-y-4">
+        {/* Proxy / DNS gating — experiments need proxy_slug to actually serve traffic */}
+        {!siteProxySlug && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between gap-4">
+            <div className="text-sm text-amber-900">
+              <span className="font-bold">Complete DNS setup to deploy this experiment.</span>{" "}
+              Zybit needs a proxy slug + CNAME before variant traffic can route through us.
+            </div>
+            <Link
+              href="/app/onboarding?step=2"
+              className="shrink-0 text-sm font-bold text-amber-900 hover:text-amber-700 underline underline-offset-2"
+            >
+              Set up →
+            </Link>
+          </div>
+        )}
+
         {/* Config card */}
         <div className="bg-white border border-black/[0.05] rounded-2xl p-6">
           <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-5">
@@ -199,19 +222,9 @@ export default async function ExperimentDetailPage({
           )}
         </div>
 
-        {/* Client-side script card */}
-        <div className="bg-white border border-black/[0.05] rounded-2xl p-6">
-          <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-[#6B6B6B] mb-3">
-            Script injection (no DNS change required)
-          </div>
-          <p className="text-sm text-[#6B6B6B] mb-4 leading-relaxed">
-            Add this tag once to your site&rsquo;s <code className="font-mono text-xs bg-black/[0.04] px-1 rounded">&lt;head&gt;</code>.
-            It loads the experiment manifest and applies the variant automatically — no code changes, no deploys.
-          </p>
-          <div className="bg-[#F5F5F3] rounded-xl px-4 py-3 font-mono text-xs text-[#333] leading-relaxed break-all">
-            {snippet}
-          </div>
-        </div>
+        {/* Deployment via the reverse proxy is gated on proxy_slug being set
+            (see banner above). A real "Deploy" CTA wired to the proxy will land
+            in a future PR. */}
 
         {/* Results card */}
         {hasResults ? (

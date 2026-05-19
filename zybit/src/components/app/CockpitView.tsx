@@ -106,10 +106,18 @@ function PipelineHealth({ integrations }: { integrations: NonNullable<CockpitDat
           </div>
         ))}
         {integrations.integrations.length === 0 && (
-          <div className="bg-white border border-black/[0.05] rounded-xl px-4 py-3 text-sm text-[#6B6B6B]">
-            No integrations connected.{" "}
-            <Link href="/app/settings" className="text-[#111] font-medium underline underline-offset-2">
-              Add one →
+          <div className="bg-white border border-black/[0.05] rounded-xl px-5 py-5 flex items-center justify-between gap-4">
+            <div className="text-sm text-[#6B6B6B]">
+              No integrations connected. Zybit needs analytics data to generate findings.
+            </div>
+            <Link
+              href="/app/onboarding?step=3"
+              className="shrink-0 inline-flex items-center gap-2 bg-[#111] text-[#FAFAF8] px-4 py-2.5 font-bold text-xs uppercase tracking-[0.08em] hover:opacity-80 transition-opacity"
+            >
+              Connect PostHog
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+                <path d="M2 6h8M6 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </Link>
           </div>
         )}

@@ -29,8 +29,8 @@ Zybit is a single Next.js application deployed on Vercel. All domain logic runs 
 │  │  ┌───────────┐  ┌────────────┐  ┌────────────┐  │    │
 │  │  │ Variant   │  │ Experiment │  │ Outcome    │  │    │
 │  │  │ Engine    │  │ Deployer   │  │ Tracker    │  │    │
-│  │  │ (Propose) │  │ (Test)     │  │ (Learn)    │  │    │
-│  │  │ NOT BUILT │  │ NOT BUILT  │  │ NOT BUILT  │  │    │
+│  │  │ (Propose) │  │ (Test)     │  │ (Measure)  │  │    │
+│  │  │   BUILT   │  │  PARTIAL   │  │   BUILT    │  │    │
 │  │  └───────────┘  └────────────┘  └────────────┘  │    │
 │  └──────────────────────────────────────────────────┘    │
 │                          │                               │
@@ -115,7 +115,7 @@ Single Postgres database (Neon serverless) via Drizzle ORM.
 | `zybit_site_meta` | Site operational metadata (MRR, AOV, session counts) |
 | `zybit_api_keys` | M2M API keys (hashed) |
 
-### Auth
+### Test — Variant Delivery (`src/lib/experiments/`)
 
 Invite-only magic-link auth (email → 15-min token → 30-day session cookie). M2M API keys for programmatic access. Tenant scoping on `(organizationId, siteId)`. No Clerk.
 
@@ -216,6 +216,8 @@ The analysis engine is production-ready. The proxy bucketing and HTML modificati
 
 **Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
 
+> **Status:** Priority 1 was shipped in `5951a99` + `b09a212` and is now described in the "Measure — Outcome Computation" subsection under "What Exists." `stats.ts` unit tests landed (`__tests__/stats.test.ts`, 77 passing) and a Monte Carlo pipeline simulation (`__tests__/stats.simulation.test.ts`) surfaced an empirical ~14% false-positive rate (vs nominal 5%) caused by repeated peeking — fix requires α-spending or reduced peek cadence and is a larger workstream than the original priority assumed. Other outstanding follow-ups: PostHog visitor-ID bridge for accurate matching of PostHog-sourced conversions, Resend notification on auto-stop, "last computed at" surface in the dashboard. The original specification is retained below for reference.
+
 #### Outcome Storage
 
 New table `zybit_experiment_outcomes`:
@@ -295,6 +297,8 @@ Implementation:
 
 ### Priority 2: Preview Before Deploy
 
+> **Status:** The server endpoint was shipped in `5951a99` + `b09a212` and is now described in the "Preview Before Deploy" subsection under "What Exists." Outstanding: strip `X-Frame-Options` / `frame-ancestors` from the response so iframes render in the dashboard (`route.ts:124` TODO), and build the side-by-side iframe UI on the experiment detail page. Original specification retained below.
+
 **What:** PM sees the modified page in an iframe before activating on real traffic.
 
 **Why:** Removes the single biggest trust blocker in every demo. A PM who cannot see the change before it goes live will not approve it.
@@ -303,8 +307,6 @@ Implementation:
 `GET /api/preview/[experimentId]` — fetch origin HTML, apply `VariantModification[]` as `<style>` injections and DOM mutations, return modified HTML for iframe embed. No external dependency.
 
 Dashboard: side-by-side iframe toggle (control | variant) on experiment detail page.
-
-**Timeline:** 2 days. Can be built in parallel with measurement work (different surface).
 
 ---
 

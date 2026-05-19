@@ -8,7 +8,7 @@ import {
   createIntegrationAction,
   saveSiteMetaAction,
 } from "@/app/app/onboarding/actions";
-import InstallVerifier from "./InstallVerifier";
+import ProxySetupForm from "./ProxySetupForm";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -221,71 +221,9 @@ function Step1({
 }
 
 // ---------------------------------------------------------------------------
-// Step 2: Script install + verification
+// Step 2 is now ProxySetupForm (proxy slug + customer subdomain + DNS verify).
+// See src/components/app/ProxySetupForm.tsx
 // ---------------------------------------------------------------------------
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    await navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="absolute top-3 right-3 text-[11px] font-bold uppercase tracking-[0.1em] text-[#6B6B6B] hover:text-[#111] transition-colors px-2 py-1 rounded bg-white border border-black/[0.08]"
-    >
-      {copied ? "Copied!" : "Copy"}
-    </button>
-  );
-}
-
-function Step2({
-  siteId,
-  domain,
-  onComplete,
-  onSkip,
-}: {
-  siteId: string;
-  domain: string;
-  onComplete: () => void;
-  onSkip: () => void;
-}) {
-  const snippet = `<script src="https://js.zybit.run/v1.js?siteId=${siteId}" async></script>`;
-
-  return (
-    <div>
-      <StepLabel>Step 2 of 4</StepLabel>
-      <h1 className="text-4xl font-bold tracking-tighter text-[#111] mb-2 leading-[0.95]">
-        Add the<br />script tag.
-      </h1>
-      <p className="text-[#6B6B6B] text-sm mb-8 leading-relaxed max-w-sm">
-        Paste this into the <code className="text-xs font-mono bg-black/[0.05] px-1 py-0.5 rounded">&lt;head&gt;</code> of{" "}
-        <strong>{domain}</strong>. One line, 30 seconds.
-      </p>
-
-      <div className="max-w-lg mb-6">
-        <div className="relative bg-[#F5F5F3] border border-black/[0.08] rounded-xl p-4 font-mono text-xs text-[#333] leading-relaxed overflow-x-auto">
-          <CopyButton text={snippet} />
-          <pre className="whitespace-pre-wrap break-all pr-16">{snippet}</pre>
-        </div>
-      </div>
-
-      <div className="mb-5">
-        <InstallVerifier
-          siteId={siteId}
-          onDetected={() => setTimeout(onComplete, 1200)}
-        />
-      </div>
-
-      <SkipLink onClick={onSkip} />
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Step 3: Connect analytics
@@ -529,15 +467,27 @@ function Step4({
 export default function OnboardingWizard({
   existingSite,
   hasIntegration,
+  initialStep = null,
 }: {
   existingSite: Phase1SiteRecord | null;
   hasIntegration: boolean;
+  initialStep?: Step | null;
 }) {
-  const startStep: Step = existingSite
-    ? hasIntegration
-      ? 4
-      : 2
-    : 1;
+  // Default step inferred from current state; explicit ?step= overrides it when
+  // the prerequisites are satisfied (e.g. can't deep-link to step 2/3/4 without a site).
+  // Step 2 = proxy slug + DNS. Skippable, so PMs with no slug yet still land here.
+  let inferredStep: Step;
+  if (!existingSite) {
+    inferredStep = 1;
+  } else if (!existingSite.proxySlug) {
+    inferredStep = 2;
+  } else if (!hasIntegration) {
+    inferredStep = 3;
+  } else {
+    inferredStep = 4;
+  }
+  const startStep: Step =
+    initialStep && (initialStep === 1 || existingSite) ? initialStep : inferredStep;
 
   const [state, setState] = useState<WizardState>({
     step: startStep,
@@ -564,10 +514,13 @@ export default function OnboardingWizard({
         )}
 
         {state.step === 2 && state.siteId && state.siteDomain && (
-          <Step2
+          <ProxySetupForm
             siteId={state.siteId}
             domain={state.siteDomain}
-            onComplete={() => advance(3)}
+            initialSlug={existingSite?.proxySlug ?? null}
+            initialSubdomain={existingSite?.customerSubdomain ?? null}
+            variant="wizard"
+            onSaved={() => advance(3)}
             onSkip={() => advance(3)}
           />
         )}
