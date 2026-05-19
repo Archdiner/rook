@@ -288,19 +288,23 @@ async function notifyConcluded(
         ? counts.variant.conversions / counts.variant.participants
         : null;
 
-    for (const to of approved) {
-      await sendExperimentConcludedEmail({
-        to,
-        hypothesis: experiment.hypothesis,
-        domain,
-        result,
-        controlRate,
-        variantRate,
-        liftPct,
-        confidence,
-        guardrailBreached,
-      });
-    }
+    // Concurrent + isolated: one recipient's failure must not block the
+    // others or stall the cron when an org has many users.
+    await Promise.allSettled(
+      approved.map((to) =>
+        sendExperimentConcludedEmail({
+          to,
+          hypothesis: experiment.hypothesis,
+          domain,
+          result,
+          controlRate,
+          variantRate,
+          liftPct,
+          confidence,
+          guardrailBreached,
+        }),
+      ),
+    );
   } catch (err) {
     console.error('[compute-outcomes] PM notification failed (non-fatal):', err);
   }

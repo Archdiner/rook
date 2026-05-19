@@ -407,6 +407,7 @@ When an experiment completes, its outcome informs future rule runs for the same 
 Built at `src/lib/phase2/connectors/ga4/`, same shape as the PostHog pull-sync adapter.
 - GA4 Data API v1beta `runReport`; service-account RS256 JWT signed via Web Crypto (zero extra deps), exchanged for an OAuth2 access token (in-memory cached per service account).
 - `eventName` → canonical `type`; `eventCount` + `sessions` → canonical `metrics`. Each aggregated `(date, hour, minute, pagePath, eventName)` row → one canonical event; the deterministic grain key is the `(siteId, source, sourceEventId)` dedupe id, so re-syncs are idempotent.
+- Timestamps: GA4 reports wall-clock dimensions in the property's reporting timezone (echoed in `metadata.timeZone`); each row's `(date,hour,minute)` is converted to a correct UTC instant (Intl, DST-aware, one offset refinement) so events line up with PostHog/Segment and time-windowed insights. `orderBys` includes pagePath + eventName so offset pagination is fully deterministic.
 - Cursor: `(synthetic timestamp, grain key)` in `phase2_integrations.cursor`; `runReport` `startDate` derived from it, with strictly-after filtering.
 - `runGA4PullSyncJob` + `/api/phase2/cron/sync-ga4` (every 30m). The session-volume insights trigger is the shared `jobs/insightsTrigger.ts`, also used by the PostHog cron.
 

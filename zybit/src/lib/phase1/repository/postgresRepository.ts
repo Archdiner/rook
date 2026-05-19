@@ -400,13 +400,21 @@ export function createPostgresPhase1Repository(): Phase1Repository {
       // single-org in practice; group defensively in case it is not.
       // Best-effort: never block or fail ingestion on a usage write.
       if (inserted > 0) {
-        const orgIds = [...new Set(inputs.map((i) => i.organizationId))];
-        if (orgIds.length === 1) {
-          incrementUsage(orgIds[0], 'eventsIngested', inserted).catch(() => {});
+        // Single O(N) pass — batches can be up to 25k events, so avoid
+        // re-filtering inputs per org.
+        const countsByOrg = new Map<string, number>();
+        for (const input of inputs) {
+          countsByOrg.set(
+            input.organizationId,
+            (countsByOrg.get(input.organizationId) ?? 0) + 1,
+          );
+        }
+        if (countsByOrg.size === 1) {
+          const [orgId] = countsByOrg.keys();
+          incrementUsage(orgId, 'eventsIngested', inserted).catch(() => {});
         } else {
           // Mixed-org batch (unexpected): attribute proportionally by share.
-          for (const orgId of orgIds) {
-            const share = inputs.filter((i) => i.organizationId === orgId).length;
+          for (const [orgId, share] of countsByOrg) {
             const attributed = Math.round((share / inputs.length) * inserted);
             if (attributed > 0) incrementUsage(orgId, 'eventsIngested', attributed).catch(() => {});
           }

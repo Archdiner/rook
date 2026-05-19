@@ -232,17 +232,75 @@ interface RunReportRow {
 interface RunReportResponse {
   rows?: RunReportRow[];
   rowCount?: number;
+  /** GA4 reports wall-clock dimensions in the property's reporting timezone. */
+  metadata?: { timeZone?: string };
 }
 
-/** GA4 `date` is YYYYMMDD, `hour` is HH (00-23), `minute` is MM (00-59). */
-function buildTimestamp(date: string, hour: string, minute: string): string | null {
+/**
+ * Offset (ms) to add to a UTC instant to get the wall-clock reading in
+ * `timeZone` — i.e. `wallAsIfUtc - utcMs`. Uses Intl, no deps.
+ */
+function zoneOffsetMs(utcMs: number, timeZone: string): number {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const map: Record<string, number> = {};
+  for (const p of dtf.formatToParts(new Date(utcMs))) {
+    if (p.type !== 'literal') map[p.type] = Number(p.value);
+  }
+  const wallAsUtc = Date.UTC(
+    map.year,
+    (map.month ?? 1) - 1,
+    map.day ?? 1,
+    (map.hour ?? 0) % 24,
+    map.minute ?? 0,
+    map.second ?? 0,
+  );
+  return wallAsUtc - utcMs;
+}
+
+/**
+ * GA4 `date` is YYYYMMDD, `hour` is HH (00-23), `minute` is MM (00-59),
+ * expressed in the property's reporting `timeZone` (NOT UTC). Convert that
+ * wall-clock reading to a correct UTC ISO instant so events line up with
+ * PostHog/Segment in `phase1_events` and in time-windowed insights.
+ *
+ * DST-transition instants are inherently ambiguous; one offset refinement
+ * resolves the common case. Falls back to treating the reading as UTC when
+ * the timezone is missing/invalid.
+ */
+export function buildTimestamp(
+  date: string,
+  hour: string,
+  minute: string,
+  timeZone: string,
+): string | null {
   if (!/^\d{8}$/.test(date)) return null;
-  const y = date.slice(0, 4);
-  const m = date.slice(4, 6);
-  const d = date.slice(6, 8);
-  const hh = /^\d{1,2}$/.test(hour) ? hour.padStart(2, '0') : '00';
-  const mm = /^\d{1,2}$/.test(minute) ? minute.padStart(2, '0') : '00';
-  return `${y}-${m}-${d}T${hh}:${mm}:00.000Z`;
+  const y = Number(date.slice(0, 4));
+  const mo = Number(date.slice(4, 6));
+  const d = Number(date.slice(6, 8));
+  const h = /^\d{1,2}$/.test(hour) ? Number(hour) : 0;
+  const mi = /^\d{1,2}$/.test(minute) ? Number(minute) : 0;
+
+  const guess = Date.UTC(y, mo - 1, d, h, mi, 0);
+  if (!timeZone || timeZone.toUpperCase() === 'UTC') {
+    return new Date(guess).toISOString();
+  }
+  try {
+    // Refine once so the offset is sampled near the true instant (DST edges).
+    const offset1 = zoneOffsetMs(guess, timeZone);
+    const offset2 = zoneOffsetMs(guess - offset1, timeZone);
+    return new Date(guess - offset2).toISOString();
+  } catch {
+    return new Date(guess).toISOString();
+  }
 }
 
 /** Cursor `afterTimestamp` (ISO) → GA4 `startDate` (YYYY-MM-DD). */
@@ -306,10 +364,15 @@ export async function fetchGA4EventsPage(
     ],
     metrics: [{ name: 'eventCount' }, { name: 'sessions' }],
     dateRanges: [{ startDate, endDate: 'today' }],
+    // Offset pagination requires a fully deterministic order — rows can
+    // share a minute, so include pagePath + eventName or pages may skip
+    // or double-count across requests.
     orderBys: [
       { dimension: { dimensionName: 'date' } },
       { dimension: { dimensionName: 'hour' } },
       { dimension: { dimensionName: 'minute' } },
+      { dimension: { dimensionName: 'pagePath' } },
+      { dimension: { dimensionName: 'eventName' } },
     ],
     limit: String(limit),
     offset: String(offset),
@@ -345,6 +408,9 @@ export async function fetchGA4EventsPage(
         } catch (err) {
           throw new GA4ConnectorError('GA4_PARSE', 'GA4 response was not JSON.', { cause: err });
         }
+        // GA4 reports wall-clock dimensions in the property's reporting
+        // timezone; the API echoes it back in metadata.
+        const reportTimeZone = json.metadata?.timeZone || 'UTC';
         const rows: GA4EventRow[] = [];
         for (const r of json.rows ?? []) {
           const dv = r.dimensionValues ?? [];
@@ -354,7 +420,7 @@ export async function fetchGA4EventsPage(
           const minute = dv[2]?.value ?? '00';
           const pagePath = dv[3]?.value ?? null;
           const eventName = dv[4]?.value ?? '';
-          const ts = buildTimestamp(date, hour, minute);
+          const ts = buildTimestamp(date, hour, minute, reportTimeZone);
           if (ts === null || eventName.length === 0) continue;
           rows.push({
             eventName,
