@@ -40,10 +40,10 @@ export async function addCustomerDomain(customerSubdomain: string): Promise<AddD
     if (!res.ok) {
       const code = data.error?.code ?? 'UNKNOWN';
       const message = data.error?.message ?? res.statusText;
-      if (code === 'DOMAIN_ALREADY_EXISTS' || code === 'DOMAIN_NOT_FOUND') {
-        return { ok: true, domain: customerSubdomain };
-      }
-      return { ok: false, error: `[${code}] ${message}` };
+if (code === 'DOMAIN_ALREADY_EXISTS') {
+         return { ok: true, domain: customerSubdomain };
+       }
+       return { ok: false, error: `[${code}] ${message}` };
     }
 
     return { ok: true, domain: customerSubdomain };

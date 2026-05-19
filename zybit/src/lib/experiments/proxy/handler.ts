@@ -8,6 +8,7 @@ import {
   VISITOR_COOKIE_MAX_AGE,
   type Bucket,
 } from '../bucketing';
+import { isSpaHtml } from '@/lib/phase2/snapshots/browserFetcher';
 import { applyModifications } from '../htmlModifier';
 import { loadProxyConfig, type ProxyExperiment } from './config';
 import { logAssignment } from './assignmentLog';
@@ -102,14 +103,8 @@ async function passthrough(originUrl: string, userAgent: string): Promise<NextRe
   }
 }
 
-// Minimal SPA shell detector: a page with no meaningful text content but a
-// single root div is almost certainly client-rendered. See Zybit-103.
-function looksLikeSpaShell(html: string): boolean {
-  const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  if (!bodyMatch) return false;
-  const bodyText = bodyMatch[1].replace(/<[^>]+>/g, '').trim();
-  return bodyText.length < 50 && /<div\s+id=/i.test(html);
-}
+// Zybit-103: SPA shells won't have the target DOM nodes at request time.
+// Log a warning so operators know HTML modifications may not apply.
 
 async function fetchAndMaybeModify(
   originUrl: string,
@@ -154,7 +149,7 @@ async function fetchAndMaybeModify(
 
   // Zybit-103: SPA shells won't have the target DOM nodes at request time.
   // Log a warning so operators know HTML modifications won't apply.
-  if (looksLikeSpaShell(html)) {
+  if (isSpaHtml(html)) {
     console.warn('[zybit-proxy] SPA shell detected — modifications may not apply', {
       experimentId: experiment.id,
       originUrl,

@@ -67,9 +67,6 @@ export interface BrowserSnapshotResult {
  * (nearly empty body, no readable content).
  */
 export function isSpaHtml(html: string): boolean {
-  // TODO: implement heuristic
-  // Strip script/style tags, check remaining body content length
-  // Check for common SPA root patterns
   const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
   if (!bodyMatch) return false;
   const bodyContent = bodyMatch[1]
@@ -77,7 +74,8 @@ export function isSpaHtml(html: string): boolean {
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<[^>]+>/g, '')
     .trim();
-  return bodyContent.length < 200;
+  if (bodyContent.length >= 200) return false;
+  return /<div\s+id=["']?(root|app|main|content|mount)["']?/i.test(html);
 }
 
 /**

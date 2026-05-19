@@ -170,11 +170,11 @@ async function loadTimeline(
     const outcome = outcomeByExperiment.get(exp.id);
     if (outcome) {
       const controlRate =
-        outcome.controlParticipants && outcome.controlParticipants > 0
+        outcome.controlParticipants != null && outcome.controlParticipants > 0
           ? (outcome.controlConversions ?? 0) / outcome.controlParticipants
           : null;
       const variantRate =
-        outcome.variantParticipants && outcome.variantParticipants > 0
+        outcome.variantParticipants != null && outcome.variantParticipants > 0
           ? (outcome.variantConversions ?? 0) / outcome.variantParticipants
           : null;
       entries.push({
