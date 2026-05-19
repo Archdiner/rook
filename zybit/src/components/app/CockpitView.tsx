@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { CockpitData } from "@/lib/dashboard/cockpit";
-import { SESSION_DISPLAY_THRESHOLD } from "@/lib/dashboard/cockpit";
+import { SESSION_DISPLAY_THRESHOLD, deriveIntegrationHealth } from "@/lib/dashboard/cockpit";
 import WelcomeState from "@/components/dashboard/WelcomeState";
 import EmptyFindings from "@/components/dashboard/EmptyFindings";
 import RunInsightsButton from "./RunInsightsButton";
@@ -79,32 +79,49 @@ function PipelineHealth({ integrations }: { integrations: NonNullable<CockpitDat
         Pipeline health
       </div>
       <div className="space-y-2">
-        {integrations.integrations.map((integration) => (
-          <div
-            key={integration.id}
-            className="flex items-center justify-between bg-white border border-black/[0.05] rounded-xl px-4 py-3"
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 ${
-                  integration.lastErrorCode ? "bg-red-400" : "bg-emerald-400"
-                }`}
-              />
-              <span className="text-sm font-medium text-[#111] capitalize">
-                {integration.provider}
-              </span>
+        {integrations.integrations.map((integration) => {
+          const health = deriveIntegrationHealth(integration);
+          const dotClass =
+            health.tone === "green"
+              ? "bg-emerald-400"
+              : health.tone === "amber"
+                ? "bg-amber-400"
+                : health.tone === "red"
+                  ? "bg-red-400"
+                  : "bg-gray-300";
+          const labelClass =
+            health.tone === "red"
+              ? "text-red-600 font-medium"
+              : health.tone === "amber"
+                ? "text-amber-600 font-medium"
+                : "text-[#6B6B6B]";
+          return (
+            <div
+              key={integration.id}
+              className="flex items-center justify-between bg-white border border-black/[0.05] rounded-xl px-4 py-3"
+            >
+              <div className="flex items-center gap-3">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${dotClass}`} />
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium text-[#111] capitalize">
+                    {integration.provider}
+                  </span>
+                  <span className={`text-xs ${labelClass}`}>{health.label}</span>
+                </div>
+              </div>
+              <div className="text-right text-xs text-[#6B6B6B]">
+                <div>
+                  {integration.lastSyncedAt
+                    ? `Synced ${timeAgo(integration.lastSyncedAt)}`
+                    : "Never synced"}
+                </div>
+                <div className="text-[#9B9B9B]">
+                  {integrations.eventCount7d.toLocaleString()} events · 7d
+                </div>
+              </div>
             </div>
-            <div className="text-xs text-[#6B6B6B]">
-              {integration.lastErrorCode ? (
-                <span className="text-red-600 font-medium">{integration.lastErrorCode}</span>
-              ) : integration.lastSyncedAt ? (
-                `Synced ${timeAgo(integration.lastSyncedAt)}`
-              ) : (
-                "Never synced"
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         {integrations.integrations.length === 0 && (
           <div className="bg-white border border-black/[0.05] rounded-xl px-5 py-5 flex items-center justify-between gap-4">
             <div className="text-sm text-[#6B6B6B]">

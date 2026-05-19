@@ -138,8 +138,11 @@ The analysis engine and PM dashboard are complete. Zybit can:
 - Assign visitors to control/variant via deterministic bucketing and apply HTML modifications via the proxy layer
 - Compute experiment outcomes automatically — chi-squared significance, sequential-testing guard (confidence + per-arm min sample + min days), guardrail evaluation, auto-stop, hourly cron (shipped in `5951a99` + `b09a212`)
 - Render a server-side preview of variant modifications before deploy (`api/preview/[experimentId]`)
+- Bridge the Zybit proxy visitor ID into PostHog events (`zybit_vid` super-property) so PostHog-sourced conversions match the outcome-computation join across providers
+- Notify the PM by email (Resend) when an experiment auto-stops, concludes, or breaches a guardrail
 - Authenticate PMs via invite-only magic-link sessions and authenticate machines via hashed M2M API keys
-- Bill customers and enforce plan limits via Stripe (routes + helpers in place; enforcement coverage still being verified)
+- Bill customers and enforce plan limits via Stripe — usage metering wired (events/snapshots/insights), sites and concurrent experiments hard-enforced (402), events soft-capped (metered + surfaced, never dropped)
+- Show per-integration health in the cockpit ("Zybit is watching" / "No data yet" / "Degraded") with last-sync and 7-day event count
 - Observe cron and pipeline health via Cronitor heartbeats, an error-budget tracker, and a structured logger
 
 **What is not yet complete (immediate priorities, in order):**
@@ -147,7 +150,7 @@ The analysis engine and PM dashboard are complete. Zybit can:
 1. **Visible loop view** — No timeline showing the full detect → deploy → result → learn cycle. The renewal story and the demo depend on this. `/app/loop/page.tsx` is a TODO scaffold today.
 2. **Proxy reliability** — Modification-error fail-open, kill switch, and SPA handling are all still TODOs in `src/lib/experiments/proxy/handler.ts`. Auto-rollback on guardrail breach is not wired into Edge Config.
 3. **GA4 connector** — GA4 is in the source enum but has no implementation. Required to credibly claim analytics-agnostic.
-4. **Measurement follow-ups** — Pipeline false-positive inflation (~14% measured vs nominal 5% — repeated-peeking from hourly cron; α-spending or reduced cadence would close it), PostHog visitor-ID bridge (so PostHog-sourced conversions are correctly matched), `X-Frame-Options` strip on the preview endpoint, dashboard iframe UI for preview, and "last computed at" surface for the outcomes cron.
+4. **Measurement follow-ups** — PostHog visitor-ID bridge and auto-stop PM notification are now shipped. Remaining: "last computed at" surface for the outcomes cron, and the GA4 connector so PostHog is not the only first-class source.
 5. **Learn — rule calibration** — Outcome rows are persisted but no rule weighting yet consumes them.
 
 **What is deliberately not being built:**

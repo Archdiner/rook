@@ -28,6 +28,8 @@ export interface CockpitData {
     integrations: CockpitIntegration[];
     lastSync: string | null;
     healthy: boolean;
+    /** Canonical events ingested for this site in the last 7 days. */
+    eventCount7d: number;
   } | null;
   gate: {
     trustworthy: boolean;
@@ -48,6 +50,47 @@ export interface CockpitData {
 const SESSION_DISPLAY_THRESHOLD = 100;
 
 export { SESSION_DISPLAY_THRESHOLD };
+
+export type IntegrationHealthState = 'watching' | 'no-data' | 'degraded' | 'disconnected';
+
+export interface IntegrationHealth {
+  state: IntegrationHealthState;
+  label: string;
+  tone: 'green' | 'amber' | 'red' | 'gray';
+}
+
+/** Sync older than this is treated as stale (connector cron runs hourly). */
+const STALE_SYNC_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Pure: classify a connected integration into a PM-readable health state.
+ * "Zybit is watching" vs "No data yet" vs "Degraded" vs "Disconnected".
+ */
+export function deriveIntegrationHealth(
+  integration: { status: string; lastSyncedAt: string | null; lastErrorCode: string | null },
+  now: number = Date.now(),
+): IntegrationHealth {
+  if (integration.status === 'disabled') {
+    return { state: 'disconnected', label: 'Disconnected', tone: 'gray' };
+  }
+  if (integration.lastErrorCode || integration.status === 'error') {
+    return {
+      state: 'degraded',
+      label: integration.lastErrorCode
+        ? `Degraded — ${integration.lastErrorCode}`
+        : 'Degraded',
+      tone: 'red',
+    };
+  }
+  if (!integration.lastSyncedAt) {
+    return { state: 'no-data', label: 'No data yet', tone: 'amber' };
+  }
+  const age = now - new Date(integration.lastSyncedAt).getTime();
+  if (Number.isFinite(age) && age > STALE_SYNC_MS) {
+    return { state: 'degraded', label: 'Degraded — sync stale', tone: 'amber' };
+  }
+  return { state: 'watching', label: 'Zybit is watching', tone: 'green' };
+}
 
 export async function getCockpitData(organizationId: string): Promise<CockpitData> {
   const repository = createPhase1Repository();
@@ -158,6 +201,7 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
       })),
       lastSync,
       healthy: integrations.length > 0 && integrations.every((i) => !i.lastErrorCode),
+      eventCount7d: events.length,
     },
     gate: {
       trustworthy: gate.ok,

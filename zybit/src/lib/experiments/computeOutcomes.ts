@@ -31,7 +31,8 @@ const randomUUID = () => globalThis.crypto.randomUUID();
 import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '@/lib/db/schema';
-import { zybitExperiments, zybitFindings, zybitExperimentOutcomes, phase1Events } from '@/lib/db/schema';
+import { zybitExperiments, zybitFindings, zybitExperimentOutcomes, phase1Sites, appUsers } from '@/lib/db/schema';
+import { sendExperimentConcludedEmail } from '@/lib/email/experimentConcludedEmail';
 import {
   chiSquaredTwoProportions,
   guardrailOneSidedPValue,
@@ -248,6 +249,64 @@ async function concludeExperiment(
 }
 
 // ---------------------------------------------------------------------------
+// PM notification (Zybit-084) — best-effort, never blocks the cron
+// ---------------------------------------------------------------------------
+
+async function notifyConcluded(
+  db: DB,
+  experiment: typeof zybitExperiments.$inferSelect,
+  counts: ExperimentCounts,
+  result: ExperimentResult,
+  confidence: number,
+  liftPct: number,
+  guardrailBreached: string | null,
+): Promise<void> {
+  try {
+    if (!process.env.RESEND_API_KEY) return;
+
+    const sites = await db
+      .select({ domain: phase1Sites.domain })
+      .from(phase1Sites)
+      .where(eq(phase1Sites.id, experiment.siteId))
+      .limit(1);
+    const domain = sites[0]?.domain ?? experiment.siteId;
+
+    const recipients = await db
+      .select({ email: appUsers.email })
+      .from(appUsers)
+      .where(eq(appUsers.organizationId, experiment.organizationId));
+
+    const approved = recipients.map((r) => r.email).filter((e): e is string => Boolean(e));
+    if (approved.length === 0) return;
+
+    const controlRate =
+      counts.control.participants > 0
+        ? counts.control.conversions / counts.control.participants
+        : null;
+    const variantRate =
+      counts.variant.participants > 0
+        ? counts.variant.conversions / counts.variant.participants
+        : null;
+
+    for (const to of approved) {
+      await sendExperimentConcludedEmail({
+        to,
+        hypothesis: experiment.hypothesis,
+        domain,
+        result,
+        controlRate,
+        variantRate,
+        liftPct,
+        confidence,
+        guardrailBreached,
+      });
+    }
+  } catch (err) {
+    console.error('[compute-outcomes] PM notification failed (non-fatal):', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Process a single experiment
 // ---------------------------------------------------------------------------
 
@@ -322,6 +381,7 @@ export async function processExperiment(
     await concludeExperiment(
       db, experiment, counts, concludedResult, confidence, liftPct, guardrailBreached, now,
     );
+    await notifyConcluded(db, experiment, counts, concludedResult, confidence, liftPct, guardrailBreached);
     return {
       experimentId: experiment.id,
       action: 'stopped',
@@ -347,6 +407,7 @@ export async function processExperiment(
     await concludeExperiment(
       db, experiment, counts, concludedResult, confidence, liftPct, null, now,
     );
+    await notifyConcluded(db, experiment, counts, concludedResult, confidence, liftPct, null);
     return {
       experimentId: experiment.id,
       action: 'stopped',

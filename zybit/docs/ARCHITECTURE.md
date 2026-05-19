@@ -216,7 +216,7 @@ The analysis engine is production-ready. The proxy bucketing and HTML modificati
 
 **Why best-in-class matters:** If lift numbers are wrong, everything is poisoned: the calibration data, the renewal story, the dataset. "Adequate" measurement is not acceptable here.
 
-> **Status:** OBF alpha-spending shipped on `claude/fix-measurement-proxy-reliability`. `stats.ts` has `obfConfidenceThreshold(elapsedDays, durationDays, alpha)` computing per-look thresholds; `isReadyToStop` uses day-number information fraction (t = lookNumber / totalLooks). Simulation: 2,000 null experiments, empirical FP-rate ≤ 6.5% (3-sigma MC tolerance). Cron cadence: daily (`vercel.json`). Remaining: PostHog visitor-ID bridge, auto-stop PM notification, "last computed at" surface.
+> **Status:** OBF alpha-spending shipped on `claude/fix-measurement-proxy-reliability`. `stats.ts` has `obfConfidenceThreshold(elapsedDays, durationDays, alpha)` computing per-look thresholds; `isReadyToStop` uses day-number information fraction (t = lookNumber / totalLooks). Simulation: 2,000 null experiments, empirical FP-rate ≤ 6.5% (3-sigma MC tolerance). Cron cadence: daily (`vercel.json`). PostHog visitor-ID bridge shipped — the proxy injects a `zybit_vid` PostHog super-property (`proxy/bridgeScript.ts`, both buckets) and `posthog/mapping.ts` prefers it in `deriveSessionId`, so the conversion join matches PostHog-sourced events with no SQL change. Auto-stop/guardrail PM email shipped (`email/experimentConcludedEmail.ts`, `notifyConcluded` in `computeOutcomes.ts`, best-effort). Remaining: "last computed at" surface.
 
 #### Outcome Storage
 

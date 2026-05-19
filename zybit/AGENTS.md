@@ -58,27 +58,29 @@ zybit/
 | Loop Step | Status | Notes |
 |-----------|--------|-------|
 | **Understand** (snapshot audit) | ⚠️ Partial | HTTP + DOM parse works; SPA/JS-rendered pages trigger Browserless fallback (`browserFetcher.ts`). snapshotMethod field on records. |
-| **Watch** (PostHog + Segment + GA4) | ⚠️ Partial | PostHog + Segment built; GA4 scaffolded (`src/lib/phase2/connectors/ga4/`) — auth + sync implementation remaining |
+| **Watch** (PostHog + Segment + GA4) | ⚠️ Partial | PostHog + Segment built; PostHog visitor-ID bridge shipped (`zybit_vid` super-property → `deriveSessionId` prefers it); GA4 scaffolded (`src/lib/phase2/connectors/ga4/`) — auth + sync implementation remaining |
 | **Identify** (12 audit rules) | ✅ Built | 5 design + 7 pain rules, 193 passing tests — sufficient; do not add more rules |
 | **Propose** (findings + prescriptions) | ✅ Built | Ranked by priority score + revenue impact, PM-readable |
 | **Test** (variant deployment) | ⚠️ Partial | Bucketing + HTML modifier + proxy routes built. Network-error fail-open, modification-error fail-open, kill switch (`experiment.status === 'running'`), origin timeout (10s) all shipped in `handler.ts`. SPA shell detection logs warning. |
-| **Measure** (outcome computation) | ✅ Built | OBF alpha-spending (`stats.ts`), daily cron (`vercel.json`), 362 passing tests. Simulation: 2,000 null experiments, FP-rate ≤ 6.5% (3-sigma MC tolerance). PostHog visitor-ID bridge not yet in place. |
+| **Measure** (outcome computation) | ✅ Built | OBF alpha-spending (`stats.ts`), daily cron (`vercel.json`), 373 passing tests. PostHog visitor-ID bridge shipped (`proxy/bridgeScript.ts`); auto-stop/guardrail PM email shipped (`email/experimentConcludedEmail.ts`, wired in `computeOutcomes.ts`). Remaining: "last computed at" surface. |
 | **Learn** (outcome feedback loop) | ❌ Not built | Outcome rows are persisted, but no rule calibration consumes them yet |
 | **Visible loop view** | ⚠️ Partial | `loadTimeline()` + `loadSites()` implemented in `loop/page.tsx` — queries `zybit_findings`, `zybit_experiments`, `zybit_experiment_outcomes`; guardrail-breach visuals + multi-site selector still TODO |
 | **Preview before deploy** | ✅ Built | Side-by-side control/variant iframes on experiment detail page; CSP `frame-ancestors 'self'` on preview response |
 | **GA4 connector** | ⚠️ Partial | Scaffolded — `types.ts`, `client.ts`, `sync.ts`, `mapping.ts`, `errors.ts`. Service-account JWT auth + sync implementation remaining |
-| **Billing** (Stripe + plan limits) | ⚠️ Partial | Routes and helpers exist (`src/lib/billing/`, `src/app/api/billing/`); plan enforcement coverage unverified |
+| **Billing** (Stripe + plan limits) | ⚠️ Partial | Routes + helpers exist. Usage metering wired (`incrementUsage` on event insert / snapshot / insights run). Hard enforcement: sites + concurrent experiments (402 `PLAN_LIMIT_EXCEEDED`). Events soft-capped — metered + surfaced via `/api/billing/usage`, never dropped. Stripe checkout/portal end-to-end still unverified. |
 | **Observability** | ⚠️ Partial | Cronitor + error budget + structured logger built and wired into crons; Axiom drain not yet connected |
+| **Integration health (cockpit)** | ✅ Built | `deriveIntegrationHealth()` in `cockpit.ts`; `PipelineHealth` in `CockpitView.tsx` shows "Zybit is watching" / "No data yet" / "Degraded" + last-sync + 7-day event count (Zybit-111) |
+| **Activation (onboarding)** | ⚠️ Partial | MRR/AOV now required to finish onboarding (Zybit-113, no skip). First-insight email exists. |
 
 ## Immediate build order
 
-> **Status (2026-05-19):** OBF alpha-spending (Zybit-082), proxy reliability (Zybit-100/101/102/104), preview iframe (Zybit-112), loop view (Zybit-090/091/092) all shipped on `claude/fix-measurement-proxy-reliability` branch. Remaining: GA4 auth + sync; guardrail breach notification; PostHog visitor-ID bridge; Edge Config sync write path.
+> **Status (2026-05-19):** Sprint 1–2 of the first-customers plan shipped on `claude/review-and-plan-K1NJJ`: PostHog visitor-ID bridge (Zybit-081 join now matches PostHog conversions), auto-stop/guardrail PM email (Zybit-084), usage metering + plan-limit enforcement (Zybit-040/041/042 — sites/experiments hard, events soft-cap), integration-health cockpit (Zybit-111), required MRR/AOV in onboarding (Zybit-113).
 
-1. **Close shipped-but-incomplete acceptance criteria** (~1 day): Edge Config write path for kill switch (Zybit-104); PM notification on auto-stop (Zybit-084); "last computed at" surface (Zybit-086).
-2. **GA4 connector** (3 days): service-account JWT signing + `runReport` pagination + cursor management.
-3. **PostHog visitor-ID bridge** (~0.5 day): inject script via proxy so `posthog.register({'zybit_vid': ...})` carries the Zybit cookie into conversion events.
-4. **Guardrail visual in loop view** (~0.5 day): amber flag when `guardrail_breached` is set.
-5. **Multi-site selector in loop view** (~0.5 day): site dropdown filtering timeline entries.
+1. **GA4 connector** (3 days): service-account JWT signing + `runReport` pagination + cursor management — so PostHog is not the only first-class source.
+2. **"Last computed at" surface** (~0.5 day): expose outcomes-cron last-run timestamp in the cockpit (Zybit-086).
+3. **Guardrail visual in loop view** (~0.5 day): amber flag when `guardrail_breached` is set.
+4. **Multi-site selector in loop view** (~0.5 day): site dropdown filtering timeline entries.
+5. **Stripe checkout/portal end-to-end verification** (~1 day): confirm webhook → plan write → enforcement round-trip with stripe-cli.
 
 **Never build:** sentiment analysis, GitHub PR generation, own event collection SDK / PostHog replacement, more audit rules, cross-site priors before 50+ customers.
 

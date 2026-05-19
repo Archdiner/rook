@@ -385,16 +385,26 @@ function Step4({
   const [mrr, setMrr] = useState("");
   const [aov, setAov] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  async function handleFinish(skip: boolean) {
+  const mrrNum = mrr.trim() === "" ? null : parseFloat(mrr);
+  const aovNum = aov.trim() === "" ? null : parseFloat(aov);
+  const hasValidValue =
+    (mrrNum !== null && Number.isFinite(mrrNum) && mrrNum > 0) ||
+    (aovNum !== null && Number.isFinite(aovNum) && aovNum > 0);
+
+  async function handleFinish() {
+    if (!hasValidValue) {
+      setError("Enter your monthly revenue or average order value to continue.");
+      return;
+    }
+    setError(null);
     setLoading(true);
     try {
-      if (!skip && (mrr || aov)) {
-        const mrrCents = mrr ? Math.round(parseFloat(mrr) * 100) : null;
-        const aovCents = aov ? Math.round(parseFloat(aov) * 100) : null;
-        await saveSiteMetaAction(siteId, mrrCents, aovCents);
-      }
+      const mrrCents = mrrNum !== null && mrrNum > 0 ? Math.round(mrrNum * 100) : null;
+      const aovCents = aovNum !== null && aovNum > 0 ? Math.round(aovNum * 100) : null;
+      await saveSiteMetaAction(siteId, mrrCents, aovCents);
       onComplete();
       router.push("/app");
       router.refresh();
@@ -446,15 +456,22 @@ function Step4({
           </div>
         </div>
 
+        {error && (
+          <p className="text-xs text-[#B42318] -mt-1">{error}</p>
+        )}
+
         <div className="flex items-center gap-4 pt-1">
           <PrimaryButton
-            onClick={() => handleFinish(false)}
+            onClick={() => handleFinish()}
             loading={loading}
+            disabled={!hasValidValue}
           >
             Finish setup
           </PrimaryButton>
-          <SkipLink onClick={() => handleFinish(true)} label="I don't know these yet" />
         </div>
+        <p className="text-xs text-[#9B9B9B] max-w-sm">
+          A rough estimate is fine — you can refine it later in settings.
+        </p>
       </div>
     </div>
   );

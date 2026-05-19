@@ -7,7 +7,8 @@
 
 import { randomUUID } from 'crypto';
 import { and, desc, eq } from 'drizzle-orm';
-import { badRequest, mapRouteError, parseJsonObject, parseString, success } from '@/app/api/phase1/_shared';
+import { badRequest, mapRouteError, parseJsonObject, parseString, planLimitExceeded, success } from '@/app/api/phase1/_shared';
+import { checkPlanLimit } from '@/lib/billing/checkPlanLimit';
 import { resolveZybitActor } from '@/lib/auth/actor';
 import { getDb } from '@/lib/db/client';
 import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
@@ -123,6 +124,15 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const startNow = body.startImmediately === true;
+
+    // Concurrent-experiment plan limit only applies to experiments that
+    // start running immediately; drafts don't consume a running slot.
+    if (startNow) {
+      const limit = await checkPlanLimit(actorResult.actor.organizationId, 'experiments');
+      if (!limit.allowed) {
+        return planLimitExceeded('concurrent experiments', limit);
+      }
+    }
 
     const [experiment] = await db
       .insert(zybitExperiments)

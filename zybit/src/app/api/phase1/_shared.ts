@@ -60,6 +60,22 @@ export function forbidden(
   );
 }
 
+export function planLimitExceeded(
+  resource: string,
+  detail: { current: number; limit: number; plan: string }
+): NextResponse<ApiEnvelope<never>> {
+  return NextResponse.json(
+    {
+      success: false,
+      error: {
+        code: 'PLAN_LIMIT_EXCEEDED',
+        message: `Your ${detail.plan} plan allows ${detail.limit} ${resource} (currently ${detail.current}). Upgrade to add more.`,
+      },
+    },
+    { status: 402 }
+  );
+}
+
 export function serverError(message = 'Internal server error.'): NextResponse<ApiEnvelope<never>> {
   return NextResponse.json(
     {
