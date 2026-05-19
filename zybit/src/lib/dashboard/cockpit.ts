@@ -1,4 +1,4 @@
-import { and, count, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { zybitExperiments, zybitFindings } from '@/lib/db/schema';
 import { createPhase1Repository } from '@/lib/phase1';
@@ -43,6 +43,12 @@ export interface CockpitData {
   experiments: {
     runningCount: number;
     totalCount: number;
+    /**
+     * When experiment results were last refreshed. The compute-outcomes
+     * cron bumps `updatedAt` on every running/concluded experiment each
+     * pass, so MAX(updatedAt) is the measurement-freshness signal (Zybit-086).
+     */
+    lastComputedAt: string | null;
   };
   lastInsightAt: string | null;
 }
@@ -103,7 +109,7 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
       pipeline: null,
       gate: null,
       findings: { openCount: 0, topFinding: null },
-      experiments: { runningCount: 0, totalCount: 0 },
+      experiments: { runningCount: 0, totalCount: 0, lastComputedAt: null },
       lastInsightAt: null,
     };
   }
@@ -114,8 +120,15 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
     end: new Date(now).toISOString(),
   };
 
-  const [integrations, events, config, openFindingRows, topFindingRows, experimentRows] =
-    await Promise.all([
+  const [
+    integrations,
+    events,
+    config,
+    openFindingRows,
+    topFindingRows,
+    experimentRows,
+    experimentComputedRows,
+  ] = await Promise.all([
       repository.listIntegrations({ organizationId, siteId: site.id }),
       repository.listEventsInWindow({ organizationId, siteId: site.id, window: window7d }),
       repository.getPhase2SiteConfig({ organizationId, siteId: site.id }),
@@ -141,6 +154,15 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
         .from(zybitExperiments)
         .where(eq(zybitExperiments.siteId, site.id))
         .groupBy(zybitExperiments.status),
+      getDb()
+        .select({ lastComputedAt: max(zybitExperiments.updatedAt) })
+        .from(zybitExperiments)
+        .where(
+          and(
+            eq(zybitExperiments.siteId, site.id),
+            inArray(zybitExperiments.status, ['running', 'completed', 'stopped']),
+          ),
+        ),
     ]);
 
   const resolvedConfig = config ?? {
@@ -176,6 +198,14 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
     experimentRows.find((r) => r.status === 'running')?.n ?? 0
   );
   const totalCount = experimentRows.reduce((sum, r) => sum + Number(r.n), 0);
+
+  const rawLastComputed = experimentComputedRows[0]?.lastComputedAt ?? null;
+  const lastComputedAt =
+    rawLastComputed instanceof Date
+      ? rawLastComputed.toISOString()
+      : rawLastComputed
+        ? new Date(rawLastComputed).toISOString()
+        : null;
 
   const lastInsightAt =
     topFinding
@@ -213,7 +243,7 @@ export async function getCockpitData(organizationId: string): Promise<CockpitDat
       })),
     },
     findings: { openCount, topFinding },
-    experiments: { runningCount, totalCount },
+    experiments: { runningCount, totalCount, lastComputedAt },
     lastInsightAt,
   };
 }

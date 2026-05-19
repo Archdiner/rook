@@ -228,7 +228,13 @@ export default function CockpitView({ data, orgId }: CockpitViewProps) {
         <StatCard
           label="Running experiments"
           value={experiments.runningCount}
-          sub={experiments.totalCount > 0 ? `${experiments.totalCount} total` : "none started"}
+          sub={
+            experiments.totalCount === 0
+              ? "none started"
+              : experiments.lastComputedAt
+                ? `${experiments.totalCount} total · results ${timeAgo(experiments.lastComputedAt)}`
+                : `${experiments.totalCount} total · awaiting first compute`
+          }
           href={experiments.runningCount > 0 ? "/app/experiments" : undefined}
         />
         <StatCard
